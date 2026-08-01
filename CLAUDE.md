@@ -38,6 +38,11 @@ New API models are added as new typed clients (`OrdersApiClient`, `ReportsApiCli
 
 `client_id` / `client_secret` / `refresh_token` are never stored or logged in plain text. They're persisted encrypted at rest via Windows DPAPI (`System.Security.Cryptography.ProtectedData`), entered/edited through the Settings page, and exposed to `SpApiClient` only through the minimal `ICredentialStore` interface — `SpApiClient` has no knowledge of DPAPI or WPF, it just asks for credentials.
 
+## Known namespace collisions
+
+- **`Application`**: `AERai.Seller.Application` (our project) and `System.Windows.Application` (WPF's app class) share the `AERai.Seller` root from the `Wpf` project's point of view, so an unqualified `Application` in `Wpf` project C# code resolves to our namespace, not WPF's class, and fails to compile (`CS0118`). Always write `System.Windows.Application` fully qualified in the `Wpf` project (e.g. `class App : System.Windows.Application`, `System.Windows.Application.Current`) — this is not a bug to "fix" by renaming the Application layer, which is a standard Clean Architecture name.
+- **`Wpf`**: the `AERai.Seller.Wpf` *project/assembly* name would put all its code in a C# namespace ending in `...Wpf`, which collides with the third-party `Wpf.Ui` namespace (WPF-UI) the same way — any unqualified `Wpf.Ui.*` reference inside a namespace ending in `Wpf` resolves to our own namespace segment first and fails (`CS0234`), and this hits XAML-generated code too, not just hand-written C#. Fixed structurally: the project's `<RootNamespace>` is set to `AERai.Seller.Desktop` in the `.csproj`, so all C#/XAML in this project uses `AERai.Seller.Desktop` (and `AERai.Seller.Desktop.Views`, etc.) even though the project/folder/assembly is still named `AERai.Seller.Wpf`. When adding new files here, match the existing `AERai.Seller.Desktop` namespace, not the project name.
+
 ## MVVM conventions
 
 - ViewModels use `CommunityToolkit.Mvvm` (`[ObservableProperty]`, `[RelayCommand]`) and live in `AERai.Seller.Presentation`, never in the `Wpf` project.
@@ -58,6 +63,10 @@ New API models are added as new typed clients (`OrdersApiClient`, `ReportsApiCli
 ## Database
 
 SQLite via EF Core (single-machine app, no concurrent access needed). Migrations live in `Infrastructure`.
+
+**Known gotcha — `DateTimeOffset` filtering on Sqlite**: the current `Microsoft.EntityFrameworkCore.Sqlite` provider cannot translate range comparisons (`>=`/`<`), component access (`.Year`/`.Month`/`.Day`), or `MaxAsync` over a `DateTimeOffset` property — each throws `InvalidOperationException: ... could not be translated` at query execution time, not at compile time. Work around it by projecting/materializing first (`.Select(o => o.SomeDateTimeOffsetProp).ToListAsync()` or `.ToListAsync()` on the whole set) and filtering/aggregating with LINQ-to-Objects afterward — see `OrderRepository` in Infrastructure for the pattern. `DateOnly` columns (e.g. `InventorySnapshot.SnapshotDate`) don't appear to hit this.
+
+Repositories take `IDbContextFactory<SellerDbContext>` (registered via `AddDbContextFactory`, not `AddDbContext`) and create a short-lived `DbContext` per method call — Microsoft's recommended EF Core pattern for WPF/desktop apps. This means repositories, and everything that depends on them (Application services), can safely be registered as `Singleton` in DI without captive-dependency issues, avoiding an ASP.NET-style scope-per-operation ceremony that doesn't map naturally onto a desktop app.
 
 ## Postman
 

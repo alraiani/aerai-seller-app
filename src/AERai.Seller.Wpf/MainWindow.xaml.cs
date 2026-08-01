@@ -1,23 +1,21 @@
-﻿using System.Text;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using AERai.Seller.Desktop.Views;
+using Wpf.Ui.Controls;
 
-namespace AERai.Seller.Wpf;
+namespace AERai.Seller.Desktop;
 
 /// <summary>
 /// Interaction logic for MainWindow.xaml
 /// </summary>
-public partial class MainWindow : Window
+public partial class MainWindow : FluentWindow
 {
-    public MainWindow()
+    public MainWindow(IServiceProvider serviceProvider)
     {
         InitializeComponent();
+        RootNavigation.SetServiceProvider(serviceProvider);
+
+        // NavigationView's content-hosting template part isn't applied until the control has
+        // gone through layout, so the initial Navigate() must wait for Loaded rather than
+        // running directly in the constructor (throws NullReferenceException otherwise).
+        Loaded += (_, _) => RootNavigation.Navigate(typeof(DashboardPage));
     }
 }

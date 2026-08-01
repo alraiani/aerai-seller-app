@@ -1,0 +1,42 @@
+<Page x:Class="AERai.Seller.Desktop.Views.SettingsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:viewModels="clr-namespace:AERai.Seller.Presentation.ViewModels;assembly=AERai.Seller.Presentation"
+      d:DataContext="{d:DesignInstance Type=viewModels:SettingsViewModel}"
+      mc:Ignorable="d"
+      Title="Settings">
+    <ScrollViewer Padding="24" VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="600" HorizontalAlignment="Stretch">
+            <TextBlock Text="Settings" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
+
+            <TextBlock Text="SP-API Credentials" FontWeight="SemiBold" Margin="0,0,0,4"/>
+            <TextBlock Text="Stored encrypted at rest (Windows DPAPI). Never leaves this machine." Opacity="0.7" Margin="0,0,0,12" TextWrapping="Wrap"/>
+
+            <TextBlock Text="Client ID" Margin="0,0,0,4"/>
+            <ui:TextBox Text="{Binding ClientId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
+
+            <TextBlock Text="Client Secret" Margin="0,0,0,4"/>
+            <ui:PasswordBox Password="{Binding ClientSecret, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
+
+            <TextBlock Text="Refresh Token" Margin="0,0,0,4"/>
+            <ui:PasswordBox Password="{Binding RefreshToken, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
+
+            <TextBlock Text="SP-API Host" Margin="0,0,0,4"/>
+            <ui:TextBox Text="{Binding ApiHost, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
+
+            <TextBlock Text="Marketplace ID" Margin="0,0,0,4"/>
+            <ui:TextBox Text="{Binding MarketplaceId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20"/>
+
+            <TextBlock Text="Appearance" FontWeight="SemiBold" Margin="0,0,0,8"/>
+            <ComboBox ItemsSource="{Binding AvailableThemes}"
+                      SelectedItem="{Binding SelectedTheme}"
+                      Margin="0,0,0,20" Width="200" HorizontalAlignment="Left"/>
+
+            <ui:Button Content="Save" Appearance="Primary" Command="{Binding SaveCommand}" Margin="0,0,0,8"/>
+            <TextBlock Text="{Binding StatusMessage}" Opacity="0.8"/>
+        </StackPanel>
+    </ScrollViewer>
+</Page>
