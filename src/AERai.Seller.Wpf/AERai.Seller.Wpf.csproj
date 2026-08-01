@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\AERai.Seller.Presentation\AERai.Seller.Presentation.csproj" />
+    <ProjectReference Include="..\AERai.Seller.Infrastructure\AERai.Seller.Infrastructure.csproj" />
+    <ProjectReference Include="..\AERai.Seller.SpApiClient\AERai.Seller.SpApiClient.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>

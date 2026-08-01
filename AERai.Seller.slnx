@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AERai.Seller.Application/AERai.Seller.Application.csproj" />
+    <Project Path="src/AERai.Seller.Domain/AERai.Seller.Domain.csproj" />
+    <Project Path="src/AERai.Seller.Infrastructure/AERai.Seller.Infrastructure.csproj" />
+    <Project Path="src/AERai.Seller.Presentation/AERai.Seller.Presentation.csproj" />
+    <Project Path="src/AERai.Seller.SpApiClient/AERai.Seller.SpApiClient.csproj" />
+    <Project Path="src/AERai.Seller.Wpf/AERai.Seller.Wpf.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AERai.Seller.Application.Tests/AERai.Seller.Application.Tests.csproj" />
+    <Project Path="tests/AERai.Seller.SpApiClient.Tests/AERai.Seller.SpApiClient.Tests.csproj" />
+  </Folder>
+</Solution>
