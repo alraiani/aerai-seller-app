@@ -13,6 +13,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <ui:TitleBar Grid.Row="0" Title="AERai Seller App" />
@@ -38,5 +39,20 @@
                 </ui:NavigationViewItem>
             </ui:NavigationView.FooterMenuItems>
         </ui:NavigationView>
+
+        <!-- DataContext for this bar is the window's own DataContext (StatusBarViewModel, set in
+             code-behind) — pages inside RootNavigation set their own explicit DataContext, so this
+             inheritance never conflicts with them. -->
+        <StatusBar Grid.Row="2">
+            <StatusBarItem>
+                <ui:ProgressRing IsIndeterminate="True"
+                                 Width="14" Height="14"
+                                 Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock Text="{Binding Text}"
+                           Foreground="{Binding Severity, Converter={StaticResource StatusSeverityToBrushConverter}}"/>
+            </StatusBarItem>
+        </StatusBar>
     </Grid>
 </ui:FluentWindow>

@@ -8,20 +8,18 @@ public sealed record SyncStatusSummary(string SyncJobName, DateTimeOffset? LastS
 
 public interface IDashboardQueryService
 {
-    Task<IReadOnlyList<SkuOrderSummary>> GetTodaysOrdersBySkuAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SkuOrderSummary>> GetOrdersBySkuAsync(DateOnly date, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SyncStatusSummary>> GetSyncStatusAsync(CancellationToken cancellationToken = default);
 }
 
-/// <summary>Backs the Dashboard's top widget: today's orders summary grouped by SKU, plus last-sync status.</summary>
+/// <summary>Backs the Dashboard's top widget: a chosen day's orders summary grouped by SKU, plus last-sync status.</summary>
 public sealed class DashboardQueryService(
     IOrderRepository orderRepository,
-    ISyncMetadataRepository syncMetadataRepository,
-    TimeProvider timeProvider) : IDashboardQueryService
+    ISyncMetadataRepository syncMetadataRepository) : IDashboardQueryService
 {
-    public async Task<IReadOnlyList<SkuOrderSummary>> GetTodaysOrdersBySkuAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SkuOrderSummary>> GetOrdersBySkuAsync(DateOnly date, CancellationToken cancellationToken = default)
     {
-        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
-        var orders = await orderRepository.GetOrdersPurchasedOnAsync(today, cancellationToken);
+        var orders = await orderRepository.GetOrdersPurchasedOnAsync(date, cancellationToken);
 
         return orders
             .SelectMany(o => o.Items.Select(i => (Item: i, Order: o)))

@@ -7,55 +7,109 @@
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:viewModels="clr-namespace:AERai.Seller.Presentation.ViewModels;assembly=AERai.Seller.Presentation"
+      xmlns:behaviors="clr-namespace:AERai.Seller.Desktop.Behaviors"
       mc:Ignorable="d">
-    <ScrollViewer Padding="24" VerticalScrollBarVisibility="Auto">
-        <StackPanel MaxWidth="900" HorizontalAlignment="Stretch">
-            <TextBlock Text="Dashboard" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
+    <!-- No page-level ScrollViewer here: NavigationView's content host already wraps every
+         navigated page in its own DynamicScrollViewer (IsDynamicScrollViewerEnabled defaults to
+         true) — an inner ScrollViewer here would be nested inside that, receive unbounded
+         height, and never detect real overflow. Let the outer one do the scrolling. -->
+    <StackPanel MaxWidth="900" HorizontalAlignment="Stretch" Margin="24">
+        <TextBlock Text="Dashboard" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
 
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
             <ui:Button Content="Sync Now"
                        Icon="{ui:SymbolIcon ArrowSync24}"
                        Command="{Binding SyncNowCommand}"
-                       IsEnabled="{Binding IsSyncing, Converter={StaticResource InverseBooleanConverter}}"
-                       Margin="0,0,0,16"/>
+                       IsEnabled="{Binding IsSyncing, Converter={StaticResource InverseBooleanConverter}}"/>
+            <ui:ProgressRing IsIndeterminate="True"
+                             Width="20" Height="20"
+                             Margin="12,0,0,0"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding IsSyncing, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <TextBlock Text="{Binding SyncStatusText}"
+                       VerticalAlignment="Center"
+                       Margin="8,0,0,0"
+                       Opacity="0.75"/>
+        </StackPanel>
 
+        <TextBlock Text="{Binding LastOrderSyncLabel}"
+                   Opacity="0.7"
+                   Margin="0,0,0,16"/>
+
+        <Grid x:Name="ErrorPanel" Margin="0,0,0,16">
             <ui:InfoBar Title="Error"
                         Message="{Binding LastError}"
                         Severity="Error"
-                        IsOpen="{Binding LastError, Converter={StaticResource StringToBoolConverter}}"
-                        Margin="0,0,0,16"/>
+                        IsOpen="{Binding LastError, Converter={StaticResource StringToBoolConverter}}"/>
+            <ui:Button Icon="{ui:SymbolIcon Copy24}"
+                       ToolTip="Copy error message"
+                       Appearance="Transparent"
+                       Padding="6"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Top"
+                       Margin="0,6,44,0"
+                       Command="{Binding CopyErrorCommand}">
+                <ui:Button.Style>
+                    <Style TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsMouseOver, ElementName=ErrorPanel}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ui:Button.Style>
+            </ui:Button>
+        </Grid>
 
-            <TextBlock Text="Today's Orders by SKU" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
-            <ui:Card Margin="0,0,0,24">
-                <DataGrid ItemsSource="{Binding TodaysOrdersBySku}"
-                          AutoGenerateColumns="False"
-                          IsReadOnly="True"
-                          HeadersVisibility="Column"
-                          GridLinesVisibility="None">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="*"/>
-                        <DataGridTextColumn Header="Units Sold" Binding="{Binding UnitsSold}" Width="120"/>
-                        <DataGridTextColumn Header="Revenue" Binding="{Binding Revenue, StringFormat={}{0:C}}" Width="120"/>
-                        <DataGridTextColumn Header="Currency" Binding="{Binding Currency}" Width="90"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </ui:Card>
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Orders by SKU" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <ui:ProgressRing Grid.Column="1"
+                             IsIndeterminate="True"
+                             Width="16" Height="16"
+                             Margin="0,0,8,0"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <DatePicker Grid.Column="2"
+                        SelectedDate="{Binding SelectedDate, Converter={StaticResource DateOnlyToDateTimeConverter}, Mode=TwoWay}"
+                        Width="160"/>
+        </Grid>
+        <ui:Card Margin="0,0,0,24">
+            <DataGrid ItemsSource="{Binding OrdersBySku}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="None"
+                      behaviors:ScrollBehavior.BubbleScroll="True">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="*"/>
+                    <DataGridTextColumn Header="Units Sold" Binding="{Binding UnitsSold}" Width="120"/>
+                    <DataGridTextColumn Header="Revenue" Binding="{Binding Revenue, StringFormat={}{0:C}}" Width="120"/>
+                    <DataGridTextColumn Header="Currency" Binding="{Binding Currency}" Width="90"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </ui:Card>
 
-            <TextBlock Text="Sync Status" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
-            <ui:Card>
-                <ItemsControl ItemsSource="{Binding SyncStatuses}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Margin="0,4">
-                                <Run Text="{Binding SyncJobName, Mode=OneWay}" FontWeight="SemiBold"/>
-                                <Run Text=" — "/>
-                                <Run Text="{Binding LastSuccessfulSyncAt, Mode=OneWay}"/>
-                                <Run Text=" — "/>
-                                <Run Text="{Binding LastSyncSucceeded, Mode=OneWay}"/>
-                            </TextBlock>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ui:Card>
-        </StackPanel>
-    </ScrollViewer>
+        <TextBlock Text="Sync Status" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+        <ui:Card>
+            <ItemsControl ItemsSource="{Binding SyncStatuses}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Margin="0,4">
+                            <Run Text="{Binding SyncJobName, Mode=OneWay}" FontWeight="SemiBold"/>
+                            <Run Text=" — "/>
+                            <Run Text="{Binding LastSuccessfulSyncAt, Mode=OneWay}"/>
+                            <Run Text=" — "/>
+                            <Run Text="{Binding LastSyncSucceeded, Mode=OneWay}"/>
+                        </TextBlock>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ui:Card>
+    </StackPanel>
 </Page>

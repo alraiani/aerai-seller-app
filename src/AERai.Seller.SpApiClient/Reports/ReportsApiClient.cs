@@ -24,8 +24,8 @@ public sealed class ReportsApiClient(SpApiRequestPipeline pipeline, ICredentialS
             ["reportType"] = reportType,
             ["marketplaceIds"] = new[] { credentials.MarketplaceId },
         };
-        if (dataStartTime is not null) body["dataStartTime"] = dataStartTime.Value.ToString("O");
-        if (dataEndTime is not null) body["dataEndTime"] = dataEndTime.Value.ToString("O");
+        if (dataStartTime is not null) body["dataStartTime"] = SpApiDateTimeFormatter.ToIso8601Utc(dataStartTime.Value);
+        if (dataEndTime is not null) body["dataEndTime"] = SpApiDateTimeFormatter.ToIso8601Utc(dataEndTime.Value);
 
         using var response = await pipeline.SendAsync(
             "Reports.CreateReport",

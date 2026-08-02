@@ -36,6 +36,7 @@ public partial class App : System.Windows.Application
                 services.AddPresentation();
 
                 services.AddSingleton<IThemeService, WpfUiThemeService>();
+                services.AddSingleton<IClipboardService, WpfClipboardService>();
 
                 services.AddTransient<DashboardPage>();
                 services.AddTransient<InventoryPage>();

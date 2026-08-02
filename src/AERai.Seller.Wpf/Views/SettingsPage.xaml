@@ -8,35 +8,36 @@
       d:DataContext="{d:DesignInstance Type=viewModels:SettingsViewModel}"
       mc:Ignorable="d"
       Title="Settings">
-    <ScrollViewer Padding="24" VerticalScrollBarVisibility="Auto">
-        <StackPanel MaxWidth="600" HorizontalAlignment="Stretch">
-            <TextBlock Text="Settings" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
+    <!-- No page-level ScrollViewer here: NavigationView's content host already wraps every
+         navigated page in its own DynamicScrollViewer — see the matching comment in
+         DashboardPage.xaml for details. -->
+    <StackPanel MaxWidth="600" HorizontalAlignment="Stretch" Margin="24">
+        <TextBlock Text="Settings" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
 
-            <TextBlock Text="SP-API Credentials" FontWeight="SemiBold" Margin="0,0,0,4"/>
-            <TextBlock Text="Stored encrypted at rest (Windows DPAPI). Never leaves this machine." Opacity="0.7" Margin="0,0,0,12" TextWrapping="Wrap"/>
+        <TextBlock Text="SP-API Credentials" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <TextBlock Text="Stored encrypted at rest (Windows DPAPI). Never leaves this machine." Opacity="0.7" Margin="0,0,0,12" TextWrapping="Wrap"/>
 
-            <TextBlock Text="Client ID" Margin="0,0,0,4"/>
-            <ui:TextBox Text="{Binding ClientId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
+        <TextBlock Text="Client ID" Margin="0,0,0,4"/>
+        <ui:TextBox Text="{Binding ClientId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
 
-            <TextBlock Text="Client Secret" Margin="0,0,0,4"/>
-            <ui:PasswordBox Password="{Binding ClientSecret, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
+        <TextBlock Text="Client Secret" Margin="0,0,0,4"/>
+        <ui:PasswordBox Password="{Binding ClientSecret, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
 
-            <TextBlock Text="Refresh Token" Margin="0,0,0,4"/>
-            <ui:PasswordBox Password="{Binding RefreshToken, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
+        <TextBlock Text="Refresh Token" Margin="0,0,0,4"/>
+        <ui:PasswordBox Password="{Binding RefreshToken, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
 
-            <TextBlock Text="SP-API Host" Margin="0,0,0,4"/>
-            <ui:TextBox Text="{Binding ApiHost, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
+        <TextBlock Text="SP-API Host" Margin="0,0,0,4"/>
+        <ui:TextBox Text="{Binding ApiHost, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
 
-            <TextBlock Text="Marketplace ID" Margin="0,0,0,4"/>
-            <ui:TextBox Text="{Binding MarketplaceId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20"/>
+        <TextBlock Text="Marketplace ID" Margin="0,0,0,4"/>
+        <ui:TextBox Text="{Binding MarketplaceId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20"/>
 
-            <TextBlock Text="Appearance" FontWeight="SemiBold" Margin="0,0,0,8"/>
-            <ComboBox ItemsSource="{Binding AvailableThemes}"
-                      SelectedItem="{Binding SelectedTheme}"
-                      Margin="0,0,0,20" Width="200" HorizontalAlignment="Left"/>
+        <TextBlock Text="Appearance" FontWeight="SemiBold" Margin="0,0,0,8"/>
+        <ComboBox ItemsSource="{Binding AvailableThemes}"
+                  SelectedItem="{Binding SelectedTheme}"
+                  Margin="0,0,0,20" Width="200" HorizontalAlignment="Left"/>
 
-            <ui:Button Content="Save" Appearance="Primary" Command="{Binding SaveCommand}" Margin="0,0,0,8"/>
-            <TextBlock Text="{Binding StatusMessage}" Opacity="0.8"/>
-        </StackPanel>
-    </ScrollViewer>
+        <ui:Button Content="Save" Appearance="Primary" Command="{Binding SaveCommand}" Margin="0,0,0,8"/>
+        <TextBlock Text="{Binding SaveStatusMessage}" Opacity="0.8"/>
+    </StackPanel>
 </Page>

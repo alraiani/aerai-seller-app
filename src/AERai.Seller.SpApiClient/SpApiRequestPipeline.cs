@@ -37,6 +37,7 @@ public sealed class SpApiRequestPipeline(
             var accessToken = await tokenProvider.GetAccessTokenAsync(forceRefresh: false, cancellationToken);
             using var request = requestFactory(credentials.ApiHost);
             request.Headers.Add("x-amz-access-token", accessToken);
+            logger.LogInformation("SP-API {Operation} request URI: {RequestUri}", operationName, request.RequestUri);
 
             var client = httpClientFactory.CreateClient(nameof(SpApiRequestPipeline));
             var stopwatch = Stopwatch.StartNew();
@@ -66,6 +67,8 @@ public sealed class SpApiRequestPipeline(
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
                 response.Dispose();
+                logger.LogError(
+                    "SP-API {Operation} failed with {StatusCode}: {ResponseBody}", operationName, (int)statusCode, body);
                 throw new SpApiException(operationName, statusCode, body);
             }
 

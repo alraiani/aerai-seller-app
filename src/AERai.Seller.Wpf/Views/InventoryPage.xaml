@@ -14,7 +14,14 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="Inventory" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+            <TextBlock Text="Inventory" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <ui:ProgressRing IsIndeterminate="True"
+                             Width="18" Height="18"
+                             Margin="12,0,0,0"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+        </StackPanel>
 
         <DataGrid Grid.Row="1"
                   ItemsSource="{Binding Rows}"

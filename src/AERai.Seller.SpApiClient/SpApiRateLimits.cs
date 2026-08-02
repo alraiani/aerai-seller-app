@@ -12,7 +12,6 @@ public static class SpApiRateLimits
         ["Reports.CreateReport"] = new SpApiRateLimit(RequestsPerSecond: 0.0167, Burst: 15),
         ["Reports.GetReport"] = new SpApiRateLimit(RequestsPerSecond: 2.0, Burst: 15),
         ["Reports.GetReportDocument"] = new SpApiRateLimit(RequestsPerSecond: 0.0222, Burst: 10),
-        ["Orders.GetOrders"] = new SpApiRateLimit(RequestsPerSecond: 0.0167, Burst: 20),
-        ["Orders.GetOrderItems"] = new SpApiRateLimit(RequestsPerSecond: 0.5, Burst: 30),
+        ["Orders.SearchOrders"] = new SpApiRateLimit(RequestsPerSecond: 0.0056, Burst: 20),
     };
 }

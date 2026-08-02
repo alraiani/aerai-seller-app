@@ -1,4 +1,5 @@
 using AERai.Seller.Desktop.Views;
+using AERai.Seller.Presentation.ViewModels;
 using Wpf.Ui.Controls;
 
 namespace AERai.Seller.Desktop;
@@ -8,9 +9,10 @@ namespace AERai.Seller.Desktop;
 /// </summary>
 public partial class MainWindow : FluentWindow
 {
-    public MainWindow(IServiceProvider serviceProvider)
+    public MainWindow(IServiceProvider serviceProvider, StatusBarViewModel statusBarViewModel)
     {
         InitializeComponent();
+        DataContext = statusBarViewModel;
         RootNavigation.SetServiceProvider(serviceProvider);
 
         // NavigationView's content-hosting template part isn't applied until the control has

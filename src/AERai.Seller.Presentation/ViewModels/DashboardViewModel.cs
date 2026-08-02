@@ -1,40 +1,74 @@
 using System.Collections.ObjectModel;
 using AERai.Seller.Application.Dashboard;
 using AERai.Seller.Application.Sync;
+using AERai.Seller.Presentation.Abstractions;
+using AERai.Seller.Presentation.Messaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AERai.Seller.Presentation.ViewModels;
 
 /// <summary>
-/// Backs the Dashboard page. First widget shown is today's orders summary grouped by SKU;
-/// later phases add more tiles (replenishment alerts, financial summary) to this same page.
+/// Backs the Dashboard page. Top widget is an orders-by-SKU summary for a user-selectable day
+/// (defaults to today); later phases add more tiles (replenishment alerts, financial summary).
 /// </summary>
 public partial class DashboardViewModel : ObservableObject
 {
     private readonly IDashboardQueryService _dashboardQueryService;
     private readonly IInventorySyncService _inventorySyncService;
     private readonly IOrderSyncService _orderSyncService;
+    private readonly IClipboardService _clipboardService;
+    private readonly IMessenger _messenger;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<DashboardViewModel> _logger;
 
     public DashboardViewModel(
         IDashboardQueryService dashboardQueryService,
         IInventorySyncService inventorySyncService,
         IOrderSyncService orderSyncService,
+        IClipboardService clipboardService,
+        IMessenger messenger,
+        TimeProvider timeProvider,
         ILogger<DashboardViewModel> logger)
     {
         _dashboardQueryService = dashboardQueryService;
         _inventorySyncService = inventorySyncService;
         _orderSyncService = orderSyncService;
+        _clipboardService = clipboardService;
+        _messenger = messenger;
+        _timeProvider = timeProvider;
         _logger = logger;
+        _selectedDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
     }
 
-    public ObservableCollection<SkuOrderSummary> TodaysOrdersBySku { get; } = [];
+    public ObservableCollection<SkuOrderSummary> OrdersBySku { get; } = [];
     public ObservableCollection<SyncStatusSummary> SyncStatuses { get; } = [];
 
     [ObservableProperty]
+    private DateOnly _selectedDate;
+
+    [ObservableProperty]
+    private bool _isLoading;
+
+    [ObservableProperty]
     private bool _isSyncing;
+
+    /// <summary>Live step-by-step status while a sync is running (e.g. "Orders: fetching page 2..."), so a
+    /// multi-minute background operation never looks like the app has stalled.</summary>
+    [ObservableProperty]
+    private string? _syncStatusText;
+
+    /// <summary>When Sync Now last completed for the Orders job, shown as a standing label so it's
+    /// always visible — not just while a sync is actively running.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LastOrderSyncLabel))]
+    private DateTimeOffset? _lastOrderSyncAt;
+
+    public string LastOrderSyncLabel => LastOrderSyncAt is { } at
+        ? $"Last synced: {at.LocalDateTime:g}"
+        : "Never synced";
 
     [ObservableProperty]
     private string? _lastError;
@@ -42,14 +76,15 @@ public partial class DashboardViewModel : ObservableObject
     [RelayCommand]
     public async Task LoadAsync()
     {
+        IsLoading = true;
         try
         {
             LastError = null;
-            var summaries = await _dashboardQueryService.GetTodaysOrdersBySkuAsync();
-            TodaysOrdersBySku.Clear();
+            var summaries = await _dashboardQueryService.GetOrdersBySkuAsync(SelectedDate);
+            OrdersBySku.Clear();
             foreach (var summary in summaries)
             {
-                TodaysOrdersBySku.Add(summary);
+                OrdersBySku.Add(summary);
             }
 
             var statuses = await _dashboardQueryService.GetSyncStatusAsync();
@@ -58,11 +93,19 @@ public partial class DashboardViewModel : ObservableObject
             {
                 SyncStatuses.Add(status);
             }
+
+            LastOrderSyncAt = statuses
+                .FirstOrDefault(s => s.SyncJobName == OrderSyncService.SyncJobName)
+                ?.LastSuccessfulSyncAt;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load dashboard data");
             LastError = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
         }
     }
 
@@ -76,20 +119,40 @@ public partial class DashboardViewModel : ObservableObject
 
         IsSyncing = true;
         LastError = null;
+        // Progress<T> captures the current (UI) SynchronizationContext, so reports from the
+        // background sync work marshal back to the UI thread automatically.
+        var progress = new Progress<string>(status =>
+        {
+            SyncStatusText = status;
+            _messenger.Send(new StatusMessage(status, IsBusy: true));
+        });
         try
         {
-            await _orderSyncService.SyncAsync();
-            await _inventorySyncService.SyncAsync();
+            await _orderSyncService.SyncAsync(SelectedDate, progress);
+            await _inventorySyncService.SyncAsync(progress);
+            SyncStatusText = "Refreshing dashboard...";
             await LoadAsync();
+            _messenger.Send(new StatusMessage("Sync complete.", StatusSeverity.Success));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Manual sync failed");
             LastError = ex.Message;
+            _messenger.Send(new StatusMessage($"Sync failed: {ex.Message}", StatusSeverity.Error));
         }
         finally
         {
             IsSyncing = false;
+            SyncStatusText = null;
         }
     }
+
+    [RelayCommand(CanExecute = nameof(HasError))]
+    public void CopyError() => _clipboardService.SetText(LastError ?? string.Empty);
+
+    private bool HasError() => !string.IsNullOrEmpty(LastError);
+
+    partial void OnLastErrorChanged(string? value) => CopyErrorCommand.NotifyCanExecuteChanged();
+
+    partial void OnSelectedDateChanged(DateOnly value) => _ = LoadAsync();
 }

@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using AERai.Seller.Application.Abstractions;
 using AERai.Seller.Domain;
+using AERai.Seller.Presentation.Messaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AERai.Seller.Presentation.ViewModels;
@@ -14,15 +16,20 @@ public partial class InventoryViewModel : ObservableObject
     private const int LowStockThreshold = 10;
 
     private readonly IInventoryRepository _inventoryRepository;
+    private readonly IMessenger _messenger;
     private readonly ILogger<InventoryViewModel> _logger;
 
-    public InventoryViewModel(IInventoryRepository inventoryRepository, ILogger<InventoryViewModel> logger)
+    public InventoryViewModel(IInventoryRepository inventoryRepository, IMessenger messenger, ILogger<InventoryViewModel> logger)
     {
         _inventoryRepository = inventoryRepository;
+        _messenger = messenger;
         _logger = logger;
     }
 
     public ObservableCollection<InventoryRow> Rows { get; } = [];
+
+    [ObservableProperty]
+    private bool _isLoading;
 
     [ObservableProperty]
     private string? _lastError;
@@ -30,6 +37,7 @@ public partial class InventoryViewModel : ObservableObject
     [RelayCommand]
     public async Task LoadAsync()
     {
+        IsLoading = true;
         try
         {
             LastError = null;
@@ -61,6 +69,11 @@ public partial class InventoryViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to load inventory data");
             LastError = ex.Message;
+            _messenger.Send(new StatusMessage($"Failed to load inventory: {ex.Message}", StatusSeverity.Error));
+        }
+        finally
+        {
+            IsLoading = false;
         }
     }
 

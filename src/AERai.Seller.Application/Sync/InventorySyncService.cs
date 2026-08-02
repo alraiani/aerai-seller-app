@@ -7,7 +7,7 @@ namespace AERai.Seller.Application.Sync;
 
 public interface IInventorySyncService
 {
-    Task SyncAsync(CancellationToken cancellationToken = default);
+    Task SyncAsync(IProgress<string>? progress = null, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -28,22 +28,25 @@ public sealed class InventorySyncService(
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan PollTimeout = TimeSpan.FromMinutes(10);
 
-    public async Task SyncAsync(CancellationToken cancellationToken = default)
+    public async Task SyncAsync(IProgress<string>? progress = null, CancellationToken cancellationToken = default)
     {
         try
         {
+            progress?.Report("Inventory: requesting report...");
             var reportId = await reportsApiClient.CreateReportAsync(
                 ReportType, dataStartTime: null, dataEndTime: null, cancellationToken);
 
-            var status = await PollUntilDoneAsync(reportId, cancellationToken);
+            var status = await PollUntilDoneAsync(reportId, progress, cancellationToken);
             if (status.ReportDocumentId is null)
             {
                 throw new InvalidOperationException($"Report {reportId} finished as {status.ProcessingStatus} with no document.");
             }
 
+            progress?.Report("Inventory: downloading report...");
             var document = await reportsApiClient.GetReportDocumentAsync(status.ReportDocumentId, cancellationToken);
             var content = await reportsApiClient.DownloadReportDocumentAsync(document, cancellationToken);
 
+            progress?.Report("Inventory: parsing and saving...");
             var rows = TsvReportParser.Parse(content);
             var snapshotDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
             var snapshots = InventoryPlanningReportParser.Parse(rows, snapshotDate, timeProvider.GetUtcNow());
@@ -51,6 +54,7 @@ public sealed class InventorySyncService(
             await inventoryRepository.UpsertSnapshotsAsync(snapshots, cancellationToken);
             await syncMetadataRepository.RecordResultAsync(SyncJobName, succeeded: true, errorMessage: null, cancellationToken);
 
+            progress?.Report($"Inventory: done, {snapshots.Count} snapshots synced.");
             logger.LogInformation("Inventory sync completed: {Count} snapshots upserted", snapshots.Count);
         }
         catch (Exception ex)
@@ -61,12 +65,16 @@ public sealed class InventorySyncService(
         }
     }
 
-    private async Task<ReportsApiClient.ReportStatus> PollUntilDoneAsync(string reportId, CancellationToken cancellationToken)
+    private async Task<ReportsApiClient.ReportStatus> PollUntilDoneAsync(
+        string reportId, IProgress<string>? progress, CancellationToken cancellationToken)
     {
         var deadline = timeProvider.GetUtcNow() + PollTimeout;
+        var pollCount = 0;
 
         while (true)
         {
+            pollCount++;
+            progress?.Report($"Inventory: waiting for report to process (check {pollCount})...");
             var status = await reportsApiClient.GetReportAsync(reportId, cancellationToken);
 
             switch (status.ProcessingStatus)
