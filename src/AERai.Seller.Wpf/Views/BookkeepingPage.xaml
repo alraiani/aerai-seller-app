@@ -1,0 +1,130 @@
+<Page x:Class="AERai.Seller.Desktop.Views.BookkeepingPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:viewModels="clr-namespace:AERai.Seller.Presentation.ViewModels;assembly=AERai.Seller.Presentation"
+      xmlns:behaviors="clr-namespace:AERai.Seller.Desktop.Behaviors"
+      d:DataContext="{d:DesignInstance Type=viewModels:BookkeepingViewModel}"
+      mc:Ignorable="d"
+      Title="Bookkeeping">
+    <!-- No page-level ScrollViewer here: NavigationView's content host already wraps every
+         navigated page in its own DynamicScrollViewer — see CLAUDE.md gotcha. -->
+    <StackPanel MaxWidth="1200" HorizontalAlignment="Stretch" Margin="24">
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+            <TextBlock Text="Bookkeeping" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <ui:ProgressRing IsIndeterminate="True"
+                             Width="18" Height="18"
+                             Margin="12,0,0,0"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+        </StackPanel>
+
+        <Grid Margin="0,0,0,16">
+            <ui:InfoBar Title="Error"
+                        Message="{Binding LastError}"
+                        Severity="Error"
+                        IsOpen="{Binding LastError, Converter={StaticResource StringToBoolConverter}}"/>
+        </Grid>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+            <ui:Button Content="Sync Now"
+                       Icon="{ui:SymbolIcon ArrowSync24}"
+                       Command="{Binding SyncNowCommand}"
+                       IsEnabled="{Binding IsSyncing, Converter={StaticResource InverseBooleanConverter}}"/>
+            <ui:ProgressRing IsIndeterminate="True"
+                             Width="20" Height="20"
+                             Margin="12,0,0,0"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding IsSyncing, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <TextBlock Text="{Binding SyncStatusText}"
+                       VerticalAlignment="Center"
+                       Margin="8,0,0,0"
+                       Opacity="0.75"/>
+        </StackPanel>
+
+        <TextBlock Text="Settlements" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+        <ui:Card Margin="0,0,0,16">
+            <DataGrid ItemsSource="{Binding Settlements}"
+                      SelectedItem="{Binding SelectedSettlement, Mode=TwoWay}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="None"
+                      MaxHeight="260"
+                      behaviors:ScrollBehavior.BubbleScroll="True">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Settlement ID" Binding="{Binding SettlementId}" Width="140"/>
+                    <DataGridTextColumn Header="Period Start" Binding="{Binding PeriodStart, StringFormat={}{0:d}}" Width="110"/>
+                    <DataGridTextColumn Header="Period End" Binding="{Binding PeriodEnd, StringFormat={}{0:d}}" Width="110"/>
+                    <DataGridTextColumn Header="Deposit Date" Binding="{Binding DepositDate, StringFormat={}{0:d}}" Width="110"/>
+                    <DataGridTextColumn Header="Total Amount" Binding="{Binding TotalAmount, StringFormat={}{0:C}}" Width="120"/>
+                    <DataGridTextColumn Header="Currency" Binding="{Binding Currency}" Width="80"/>
+                    <DataGridCheckBoxColumn Header="Exported" Binding="{Binding IsExported}" Width="80"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </ui:Card>
+
+        <StackPanel Visibility="{Binding SelectedSettlement, Converter={StaticResource NullToVisibilityConverter}}">
+            <TextBlock Text="Settlement Preview" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+            <Grid Margin="0,0,0,12">
+                <ui:InfoBar Title="Unmapped categories"
+                            Message="Map every category below on the Account Mapping page before exporting."
+                            Severity="Warning"
+                            IsOpen="{Binding HasUnmappedCategories}"/>
+            </Grid>
+
+            <ui:Card Margin="0,0,0,12">
+                <DataGrid ItemsSource="{Binding PreviewRows}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          HeadersVisibility="Column"
+                          GridLinesVisibility="None"
+                          MaxHeight="260"
+                          behaviors:ScrollBehavior.BubbleScroll="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Amount Type" Binding="{Binding AmountType}" Width="160"/>
+                        <DataGridTextColumn Header="Amount Description" Binding="{Binding AmountDescription}" Width="180"/>
+                        <DataGridTextColumn Header="QuickBooks Account" Binding="{Binding QuickBooksAccountName, TargetNullValue='(unmapped)'}" Width="200"/>
+                        <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="120"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </ui:Card>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                <TextBlock Text="Net Total: " VerticalAlignment="Center" Opacity="0.7"/>
+                <TextBlock Text="{Binding PreviewNetTotal, StringFormat={}{0:C}}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                <ui:Button Content="Export IIF"
+                           Appearance="Primary"
+                           Icon="{ui:SymbolIcon ArrowDownload24}"
+                           Command="{Binding ExportCommand}"/>
+                <ui:ProgressRing IsIndeterminate="True"
+                                 Width="18" Height="18"
+                                 Margin="12,0,0,0"
+                                 VerticalAlignment="Center"
+                                 Visibility="{Binding IsExporting, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            </StackPanel>
+        </StackPanel>
+
+        <TextBlock Text="Generated Export Files" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+        <ui:Card>
+            <DataGrid ItemsSource="{Binding ExportedFiles}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="None"
+                      MaxHeight="260"
+                      behaviors:ScrollBehavior.BubbleScroll="True">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="File Name" Binding="{Binding FileName}" Width="*"/>
+                    <DataGridTextColumn Header="Generated At" Binding="{Binding GeneratedAt, StringFormat={}{0:g}}" Width="150"/>
+                    <DataGridTextColumn Header="Period Start" Binding="{Binding PeriodStart, StringFormat={}{0:d}}" Width="110"/>
+                    <DataGridTextColumn Header="Period End" Binding="{Binding PeriodEnd, StringFormat={}{0:d}}" Width="110"/>
+                    <DataGridTextColumn Header="Net Total" Binding="{Binding NetTotal, StringFormat={}{0:C}}" Width="120"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </ui:Card>
+    </StackPanel>
+</Page>

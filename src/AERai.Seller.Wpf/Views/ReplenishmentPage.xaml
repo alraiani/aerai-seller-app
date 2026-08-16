@@ -1,0 +1,153 @@
+<Page x:Class="AERai.Seller.Desktop.Views.ReplenishmentPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:viewModels="clr-namespace:AERai.Seller.Presentation.ViewModels;assembly=AERai.Seller.Presentation"
+      xmlns:behaviors="clr-namespace:AERai.Seller.Desktop.Behaviors"
+      xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+      d:DataContext="{d:DesignInstance Type=viewModels:ReplenishmentViewModel}"
+      mc:Ignorable="d"
+      Title="Replenishment">
+    <!-- No page-level ScrollViewer here: NavigationView's content host already wraps every
+         navigated page in its own DynamicScrollViewer — see CLAUDE.md gotcha. -->
+    <StackPanel MaxWidth="1200" HorizontalAlignment="Stretch" Margin="24">
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+            <TextBlock Text="Replenishment" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <ui:ProgressRing IsIndeterminate="True"
+                             Width="18" Height="18"
+                             Margin="12,0,0,0"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+        </StackPanel>
+
+        <Grid x:Name="ErrorPanel" Margin="0,0,0,16">
+            <ui:InfoBar Title="Error"
+                        Message="{Binding LastError}"
+                        Severity="Error"
+                        IsOpen="{Binding LastError, Converter={StaticResource StringToBoolConverter}}"/>
+        </Grid>
+
+        <Grid Margin="0,0,0,16">
+            <ui:InfoBar Title="Limited order history"
+                        Message="Local order history doesn't yet cover the last 90 days, so demand/reorder estimates may be inaccurate."
+                        Severity="Warning"
+                        IsOpen="{Binding IsCoverageSufficient, Converter={StaticResource InverseBooleanConverter}}"/>
+        </Grid>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+            <ui:Button Content="Fetch last 90 days of orders"
+                       Icon="{ui:SymbolIcon History24}"
+                       Command="{Binding BackfillLast90DaysCommand}"
+                       IsEnabled="{Binding IsBackfilling, Converter={StaticResource InverseBooleanConverter}}"/>
+            <ui:Button Content="Cancel"
+                       Margin="8,0,0,0"
+                       Command="{Binding CancelBackfillCommand}"
+                       Visibility="{Binding IsBackfilling, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <ui:ProgressRing IsIndeterminate="True"
+                             Width="20" Height="20"
+                             Margin="12,0,0,0"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding IsBackfilling, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <TextBlock Text="{Binding BackfillProgressText}"
+                       VerticalAlignment="Center"
+                       Margin="8,0,0,0"
+                       Opacity="0.75"/>
+        </StackPanel>
+
+        <Grid Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <ui:Card Grid.Column="0">
+                <StackPanel>
+                    <TextBlock Text="Needs Action Now" Opacity="0.7" Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding SkusNeedingActionCount}" FontSize="24" FontWeight="SemiBold"/>
+                </StackPanel>
+            </ui:Card>
+            <ui:Card Grid.Column="2">
+                <StackPanel>
+                    <TextBlock Text="Total Units To Reorder" Opacity="0.7" Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding TotalUnitsToReorder}" FontSize="24" FontWeight="SemiBold"/>
+                </StackPanel>
+            </ui:Card>
+            <ui:Card Grid.Column="4">
+                <StackPanel>
+                    <TextBlock Text="Estimated Reorder Cost" Opacity="0.7" Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding EstimatedReorderCost, StringFormat={}{0:C}}" FontSize="24" FontWeight="SemiBold"/>
+                </StackPanel>
+            </ui:Card>
+            <ui:Card Grid.Column="6">
+                <StackPanel>
+                    <TextBlock Text="Insufficient Data" Opacity="0.7" Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding InsufficientDataCount}" FontSize="24" FontWeight="SemiBold"/>
+                </StackPanel>
+            </ui:Card>
+        </Grid>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+            <ui:Button Content="Recalculate"
+                       Icon="{ui:SymbolIcon ArrowRepeatAll24}"
+                       Command="{Binding RecalculateCommand}"
+                       IsEnabled="{Binding IsRecalculating, Converter={StaticResource InverseBooleanConverter}}"/>
+            <ui:Button Content="Sync AWD Inventory"
+                       Margin="8,0,0,0"
+                       Command="{Binding SyncAwdInventoryCommand}"/>
+            <ui:ProgressRing IsIndeterminate="True"
+                             Width="20" Height="20"
+                             Margin="12,0,0,0"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding IsRecalculating, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+        </StackPanel>
+
+        <TextBlock Text="Reorder Recommendations" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+        <ui:Card Margin="0,0,0,16">
+            <DataGrid ItemsSource="{Binding Rows}"
+                      SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="None"
+                      behaviors:ScrollBehavior.BubbleScroll="True">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="*"/>
+                    <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="140"/>
+                    <DataGridTextColumn Header="FBA Available" Binding="{Binding FbaAvailable}" Width="110"/>
+                    <DataGridTextColumn Header="AWD Onhand" Binding="{Binding AwdOnhand}" Width="110"/>
+                    <DataGridTextColumn Header="Days of Supply" Binding="{Binding DaysOfSupply, StringFormat={}{0:N1}}" Width="120"/>
+                    <DataGridTextColumn Header="Order Qty" Binding="{Binding RecommendedOrderQuantity}" Width="100"/>
+                    <DataGridTextColumn Header="Order By" Binding="{Binding RecommendedOrderBy, Converter={StaticResource NullableDateOnlyToTextConverter}}" Width="130"/>
+                    <DataGridTextColumn Header="Days Until Action" Binding="{Binding DaysUntilActionNeeded, Converter={StaticResource DaysUntilActionConverter}}" Width="120"/>
+                    <DataGridCheckBoxColumn Header="No Lead Time Set" Binding="{Binding HasLeadTimeProfile, Converter={StaticResource InverseBooleanConverter}}" Width="120"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </ui:Card>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <ui:Card Grid.Column="0">
+                <StackPanel>
+                    <TextBlock Text="Location — FBA vs AWD (selected SKU)" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <lvc:CartesianChart x:Name="LocationChart" Height="220"/>
+                </StackPanel>
+            </ui:Card>
+            <ui:Card Grid.Column="2">
+                <StackPanel>
+                    <TextBlock Text="Sales Velocity — Last 90 Days (selected SKU)" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <lvc:CartesianChart x:Name="TrendChart" Height="220"/>
+                </StackPanel>
+            </ui:Card>
+        </Grid>
+    </StackPanel>
+</Page>

@@ -22,7 +22,17 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProductRepository, ProductRepository>();
         services.AddSingleton<IInventoryRepository, InventoryRepository>();
         services.AddSingleton<IOrderRepository, OrderRepository>();
+        services.AddSingleton<ICatalogRepository, CatalogRepository>();
         services.AddSingleton<ISyncMetadataRepository, SyncMetadataRepository>();
+        services.AddSingleton<IAwdInventoryRepository, AwdInventoryRepository>();
+        services.AddSingleton<ILeadTimeProfileRepository, LeadTimeProfileRepository>();
+        services.AddSingleton<IDemandForecastRepository, DemandForecastRepository>();
+        services.AddSingleton<IReplenishmentRecommendationRepository, ReplenishmentRecommendationRepository>();
+        services.AddSingleton<ISettlementRepository, SettlementRepository>();
+        services.AddSingleton<IBookkeepingAccountMappingRepository, BookkeepingAccountMappingRepository>();
+        services.AddSingleton<IBookkeepingSettingsRepository, BookkeepingSettingsRepository>();
+        services.AddSingleton<IBookkeepingExportRepository, BookkeepingExportRepository>();
+        services.AddSingleton<IExportFileStore, FileExportStore>();
 
         return services;
     }

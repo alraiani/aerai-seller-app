@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 using AERai.Seller.Application.Abstractions;
-using AERai.Seller.Domain;
+using AERai.Seller.Domain.Staging;
 using AERai.Seller.Presentation.Messaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;

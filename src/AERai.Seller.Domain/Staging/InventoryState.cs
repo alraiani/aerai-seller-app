@@ -1,4 +1,4 @@
-namespace AERai.Seller.Domain;
+namespace AERai.Seller.Domain.Staging;
 
 /// <summary>
 /// Amazon-side states come from the FBA Inventory Ledger/Planning reports.

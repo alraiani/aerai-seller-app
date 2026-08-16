@@ -8,6 +8,7 @@
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:viewModels="clr-namespace:AERai.Seller.Presentation.ViewModels;assembly=AERai.Seller.Presentation"
       xmlns:behaviors="clr-namespace:AERai.Seller.Desktop.Behaviors"
+      xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
       mc:Ignorable="d">
     <!-- No page-level ScrollViewer here: NavigationView's content host already wraps every
          navigated page in its own DynamicScrollViewer (IsDynamicScrollViewerEnabled defaults to
@@ -79,6 +80,47 @@
                         SelectedDate="{Binding SelectedDate, Converter={StaticResource DateOnlyToDateTimeConverter}, Mode=TwoWay}"
                         Width="160"/>
         </Grid>
+
+        <Grid Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <ui:Card Grid.Column="0">
+                <StackPanel>
+                    <TextBlock Text="Units Sold" Opacity="0.7" Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding TotalUnitsSold}" FontSize="28" FontWeight="SemiBold"/>
+                </StackPanel>
+            </ui:Card>
+            <ui:Card Grid.Column="2">
+                <StackPanel>
+                    <TextBlock Text="Revenue" Opacity="0.7" Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding TotalRevenue, StringFormat={}{0:C}}" FontSize="28" FontWeight="SemiBold"/>
+                </StackPanel>
+            </ui:Card>
+        </Grid>
+
+        <Grid Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <ui:Card Grid.Column="0">
+                <StackPanel>
+                    <TextBlock Text="Units — Last 7 Days" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <lvc:CartesianChart x:Name="UnitsChart" Height="220"/>
+                </StackPanel>
+            </ui:Card>
+            <ui:Card Grid.Column="2">
+                <StackPanel>
+                    <TextBlock Text="Revenue — Last 7 Days" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <lvc:CartesianChart x:Name="RevenueChart" Height="220"/>
+                </StackPanel>
+            </ui:Card>
+        </Grid>
+
         <ui:Card Margin="0,0,0,24">
             <DataGrid ItemsSource="{Binding OrdersBySku}"
                       AutoGenerateColumns="False"

@@ -17,7 +17,304 @@ namespace AERai.Seller.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
 
-            modelBuilder.Entity("AERai.Seller.Domain.FinancialEvent", b =>
+            modelBuilder.Entity("AERai.Seller.Domain.Ai.DemandForecast", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("ComputedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("DailySalesVelocity")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("DaysOfSupply")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("ProjectedStockoutDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SellThroughEligibleStock")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Sku", "ComputedAt");
+
+                    b.ToTable("DemandForecasts");
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.Ai.LeadTimeProfile", b =>
+                {
+                    b.Property<string>("Sku")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("FbaTransitDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PrepTimeDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SafetyStockDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SupplierLeadTimeDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TargetStockDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Sku");
+
+                    b.ToTable("LeadTimeProfiles");
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.Ai.ReplenishmentRecommendation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("ComputedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DaysUntilActionNeeded")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly>("PrepDueBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("RecommendedOrderBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("RecommendedOrderQuantity")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly>("ShipToFbaBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UnitsDueOutOfPrep")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UnitsToShipToFba")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Sku", "ComputedAt");
+
+                    b.ToTable("ReplenishmentRecommendations");
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.BookkeepingAccountMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AmountDescription")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AmountType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("QuickBooksAccountName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AmountType", "AmountDescription")
+                        .IsUnique();
+
+                    b.ToTable("BookkeepingAccountMappings");
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.BookkeepingExportRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("DepositDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("GeneratedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("NetTotal")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("PeriodEnd")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("PeriodStart")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SettlementId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettlementId");
+
+                    b.ToTable("BookkeepingExportRecords");
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.BookkeepingSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DepositAccountName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExportFolderPath")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("BookkeepingSettings");
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.Product", b =>
+                {
+                    b.Property<string>("Sku")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Asin")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("CostOfGoods")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Sku");
+
+                    b.ToTable("Products");
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.AwdInventorySnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AvailableDistributableQuantity")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ReplenishmentQuantity")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ReservedDistributableQuantity")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("SnapshotDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TotalInboundQuantity")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalOnhandQuantity")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Sku", "SnapshotDate")
+                        .IsUnique();
+
+                    b.ToTable("AwdInventorySnapshots");
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.CatalogItem", b =>
+                {
+                    b.Property<string>("Asin")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Brand")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ParentAsin")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Sku")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Asin");
+
+                    b.HasIndex("ParentAsin");
+
+                    b.ToTable("CatalogItems");
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.CatalogParent", b =>
+                {
+                    b.Property<string>("ParentAsin")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ParentAsin");
+
+                    b.ToTable("CatalogParents");
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.FinancialEvent", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -56,7 +353,7 @@ namespace AERai.Seller.Infrastructure.Migrations
                     b.ToTable("FinancialEvents");
                 });
 
-            modelBuilder.Entity("AERai.Seller.Domain.InventorySnapshot", b =>
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.InventorySnapshot", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -86,7 +383,7 @@ namespace AERai.Seller.Infrastructure.Migrations
                     b.ToTable("InventorySnapshots");
                 });
 
-            modelBuilder.Entity("AERai.Seller.Domain.Order", b =>
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.Order", b =>
                 {
                     b.Property<string>("AmazonOrderId")
                         .HasColumnType("TEXT");
@@ -116,7 +413,7 @@ namespace AERai.Seller.Infrastructure.Migrations
                     b.ToTable("Orders");
                 });
 
-            modelBuilder.Entity("AERai.Seller.Domain.OrderItem", b =>
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.OrderItem", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -152,29 +449,48 @@ namespace AERai.Seller.Infrastructure.Migrations
                     b.ToTable("OrderItems");
                 });
 
-            modelBuilder.Entity("AERai.Seller.Domain.Product", b =>
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.SettlementLineItem", b =>
                 {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AmazonOrderId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AmountDescription")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AmountType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("PostedDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SettlementId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Sku")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Asin")
-                        .HasColumnType("TEXT");
+                    b.HasKey("Id");
 
-                    b.Property<decimal?>("CostOfGoods")
-                        .HasColumnType("TEXT");
+                    b.HasIndex("SettlementId");
 
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Title")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Sku");
-
-                    b.ToTable("Products");
+                    b.ToTable("SettlementLineItems");
                 });
 
-            modelBuilder.Entity("AERai.Seller.Domain.SettlementReport", b =>
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.SettlementReport", b =>
                 {
                     b.Property<string>("SettlementId")
                         .HasColumnType("TEXT");
@@ -223,16 +539,29 @@ namespace AERai.Seller.Infrastructure.Migrations
                     b.ToTable("SyncMetadata");
                 });
 
-            modelBuilder.Entity("AERai.Seller.Domain.OrderItem", b =>
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.CatalogItem", b =>
                 {
-                    b.HasOne("AERai.Seller.Domain.Order", null)
+                    b.HasOne("AERai.Seller.Domain.Staging.CatalogParent", null)
+                        .WithMany("Items")
+                        .HasForeignKey("ParentAsin")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.OrderItem", b =>
+                {
+                    b.HasOne("AERai.Seller.Domain.Staging.Order", null)
                         .WithMany("Items")
                         .HasForeignKey("AmazonOrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("AERai.Seller.Domain.Order", b =>
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.CatalogParent", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("AERai.Seller.Domain.Staging.Order", b =>
                 {
                     b.Navigation("Items");
                 });

@@ -45,6 +45,10 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private AppTheme _selectedTheme;
 
+    /// <summary>Default target days of stock to keep on hand, used by replenishment planning for any SKU without its own per-SKU override.</summary>
+    [ObservableProperty]
+    private int _defaultTargetStockDays = 45;
+
     [ObservableProperty]
     private string? _saveStatusMessage;
 
@@ -58,6 +62,7 @@ public partial class SettingsViewModel : ObservableObject
         ApiHost = settings.ApiHost;
         MarketplaceId = settings.MarketplaceId;
         SelectedTheme = Enum.TryParse<AppTheme>(settings.Theme, out var theme) ? theme : AppTheme.System;
+        DefaultTargetStockDays = settings.DefaultTargetStockDays;
     }
 
     [RelayCommand]
@@ -66,7 +71,7 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             await _settingsStore.SaveAsync(new AppSettings(
-                ClientId, ClientSecret, RefreshToken, ApiHost, MarketplaceId, SelectedTheme.ToString()));
+                ClientId, ClientSecret, RefreshToken, ApiHost, MarketplaceId, SelectedTheme.ToString(), DefaultTargetStockDays));
             _themeService.SetTheme(SelectedTheme);
             SaveStatusMessage = "Saved.";
             _messenger.Send(new StatusMessage("Settings saved.", StatusSeverity.Success));

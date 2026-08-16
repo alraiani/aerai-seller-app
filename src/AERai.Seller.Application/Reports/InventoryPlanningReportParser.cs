@@ -1,12 +1,13 @@
-using AERai.Seller.Domain;
+using AERai.Seller.Domain.Staging;
 
 namespace AERai.Seller.Application.Reports;
 
 /// <summary>
 /// Maps parsed GET_FBA_INVENTORY_PLANNING_DATA rows into per-state InventorySnapshot entities.
-/// Column names below match Amazon's documented flat-file report as of this writing — verify against
-/// a real report pulled via the "Reports" folder in the AERai Seller App Postman collection before
-/// relying on this in production; report schemas do occasionally change column names/casing.
+/// Column names below were confirmed against a real report pull (not the older "afn-*"-prefixed
+/// names used by other/deprecated FBA inventory reports, which this report does not use at all).
+/// The report has no "researching" quantity column, so InventoryState.Researching is never
+/// populated from this parser — that state has no source in this particular report.
 /// </summary>
 public static class InventoryPlanningReportParser
 {
@@ -22,12 +23,13 @@ public static class InventoryPlanningReportParser
                 continue;
             }
 
-            AddIfPresent(snapshots, row, sku, "afn-fulfillable-quantity", InventoryState.Available, snapshotDate, syncedAt);
-            AddIfPresent(snapshots, row, sku, "afn-reserved-quantity", InventoryState.Reserved, snapshotDate, syncedAt);
-            AddIfPresent(snapshots, row, sku, "afn-unsellable-quantity", InventoryState.Unfulfillable, snapshotDate, syncedAt);
-            AddIfPresent(snapshots, row, sku, "afn-researching-quantity", InventoryState.Researching, snapshotDate, syncedAt);
+            AddIfPresent(snapshots, row, sku, "available", InventoryState.Available, snapshotDate, syncedAt);
+            AddIfPresent(snapshots, row, sku, "Total Reserved Quantity", InventoryState.Reserved, snapshotDate, syncedAt);
+            AddIfPresent(snapshots, row, sku, "unfulfillable-quantity", InventoryState.Unfulfillable, snapshotDate, syncedAt);
+            AddIfPresent(snapshots, row, sku, "fc-transfer", InventoryState.FcTransfer, snapshotDate, syncedAt);
+            AddIfPresent(snapshots, row, sku, "Reserved FC Processing", InventoryState.FcProcessing, snapshotDate, syncedAt);
 
-            var inbound = SumIfPresent(row, "afn-inbound-working-quantity", "afn-inbound-shipped-quantity", "afn-inbound-receiving-quantity");
+            var inbound = SumIfPresent(row, "inbound-working", "inbound-shipped", "inbound-received");
             if (inbound is > 0)
             {
                 snapshots.Add(new InventorySnapshot

@@ -22,7 +22,12 @@ public static class ServiceCollectionExtensions
         // Transient: a new ViewModel instance per navigation to the corresponding page.
         services.AddTransient<DashboardViewModel>();
         services.AddTransient<InventoryViewModel>();
+        services.AddTransient<CatalogViewModel>();
         services.AddTransient<SettingsViewModel>();
+        services.AddTransient<ReplenishmentViewModel>();
+        services.AddTransient<CatalogItemSettingsViewModel>();
+        services.AddTransient<BookkeepingViewModel>();
+        services.AddTransient<BookkeepingAccountMappingViewModel>();
 
         return services;
     }

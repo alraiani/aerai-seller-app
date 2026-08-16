@@ -1,4 +1,4 @@
-namespace AERai.Seller.Domain;
+namespace AERai.Seller.Domain.Staging;
 
 public class SettlementReport
 {

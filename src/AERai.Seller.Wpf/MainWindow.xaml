@@ -30,6 +30,31 @@
                         <ui:SymbolIcon Symbol="Box24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Replenishment" TargetPageType="{x:Type views:ReplenishmentPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="ArrowRepeatAll24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Catalog" TargetPageType="{x:Type views:CatalogPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Tag24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Catalog Item Settings" TargetPageType="{x:Type views:CatalogItemSettingsPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Edit24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Bookkeeping" TargetPageType="{x:Type views:BookkeepingPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Money24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Account Mapping" TargetPageType="{x:Type views:BookkeepingAccountMappingPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="ArrowSwap24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
             </ui:NavigationView.MenuItems>
             <ui:NavigationView.FooterMenuItems>
                 <ui:NavigationViewItem Content="Settings" TargetPageType="{x:Type views:SettingsPage}">

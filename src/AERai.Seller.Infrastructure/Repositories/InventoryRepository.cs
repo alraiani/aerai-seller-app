@@ -1,5 +1,5 @@
 using AERai.Seller.Application.Abstractions;
-using AERai.Seller.Domain;
+using AERai.Seller.Domain.Staging;
 using Microsoft.EntityFrameworkCore;
 
 namespace AERai.Seller.Infrastructure.Repositories;

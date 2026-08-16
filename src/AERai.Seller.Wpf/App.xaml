@@ -14,6 +14,9 @@
             <converters:StringToBoolConverter x:Key="StringToBoolConverter" />
             <converters:DateOnlyToDateTimeConverter x:Key="DateOnlyToDateTimeConverter" />
             <converters:StatusSeverityToBrushConverter x:Key="StatusSeverityToBrushConverter" />
+            <converters:NullableDateOnlyToTextConverter x:Key="NullableDateOnlyToTextConverter" />
+            <converters:DaysUntilActionConverter x:Key="DaysUntilActionConverter" />
+            <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         </ResourceDictionary>
     </Application.Resources>

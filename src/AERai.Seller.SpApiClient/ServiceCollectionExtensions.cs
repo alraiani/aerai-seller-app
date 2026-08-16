@@ -1,3 +1,5 @@
+using AERai.Seller.SpApiClient.Awd;
+using AERai.Seller.SpApiClient.CatalogItems;
 using AERai.Seller.SpApiClient.Orders;
 using AERai.Seller.SpApiClient.Reports;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +23,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SpApiRequestPipeline>();
         services.AddSingleton<ReportsApiClient>();
         services.AddSingleton<OrdersApiClient>();
+        services.AddSingleton<CatalogItemsApiClient>();
+        services.AddSingleton<AwdApiClient>();
 
         return services;
     }

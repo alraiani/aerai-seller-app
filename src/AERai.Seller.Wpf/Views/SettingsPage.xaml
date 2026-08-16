@@ -37,6 +37,11 @@
                   SelectedItem="{Binding SelectedTheme}"
                   Margin="0,0,0,20" Width="200" HorizontalAlignment="Left"/>
 
+        <TextBlock Text="Replenishment" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <TextBlock Text="Default number of days of stock to keep on hand, used for any SKU without its own override on the Catalog Item Settings page." Opacity="0.7" Margin="0,0,0,12" TextWrapping="Wrap"/>
+        <TextBlock Text="Default Target Stock Days" Margin="0,0,0,4"/>
+        <ui:NumberBox Value="{Binding DefaultTargetStockDays, UpdateSourceTrigger=PropertyChanged}" Width="200" HorizontalAlignment="Left" Margin="0,0,0,20"/>
+
         <ui:Button Content="Save" Appearance="Primary" Command="{Binding SaveCommand}" Margin="0,0,0,8"/>
         <TextBlock Text="{Binding SaveStatusMessage}" Opacity="0.8"/>
     </StackPanel>

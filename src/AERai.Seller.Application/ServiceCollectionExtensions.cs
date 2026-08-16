@@ -1,4 +1,6 @@
+using AERai.Seller.Application.Bookkeeping;
 using AERai.Seller.Application.Dashboard;
+using AERai.Seller.Application.Replenishment;
 using AERai.Seller.Application.Sync;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,7 +20,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IInventorySyncService, InventorySyncService>();
         services.AddSingleton<IOrderSyncService, OrderSyncService>();
+        services.AddSingleton<ICatalogSyncService, CatalogSyncService>();
+        services.AddSingleton<IAwdInventorySyncService, AwdInventorySyncService>();
+        services.AddSingleton<ISettlementSyncService, SettlementSyncService>();
         services.AddSingleton<IDashboardQueryService, DashboardQueryService>();
+        services.AddSingleton<IReplenishmentPlanningService, ReplenishmentPlanningService>();
+        services.AddSingleton<IReplenishmentQueryService, ReplenishmentQueryService>();
+        services.AddSingleton<IBookkeepingExportService, BookkeepingExportService>();
 
         return services;
     }

@@ -19,6 +19,16 @@ tests/
 
 Dependencies only point downward: `Wpf → Presentation → Application → Domain`, with `SpApiClient` sitting beside `Domain` (referenced by `Application`/`Infrastructure`, never the reverse). A reference pointing the wrong way (e.g. `Domain` referencing `Infrastructure`, or `Presentation` referencing a WPF/WPF-UI type) is an architecture violation — this is exactly what the `architecture-reviewer` agent checks for.
 
+### Domain namespace split: root vs `.Staging` vs `.Ai`
+
+`AERai.Seller.Domain` is one project/assembly, but its types are split across three namespaces (mirrored by subfolders) to keep raw imports, curated master data, and AI-facing schema logically separate:
+
+- **`AERai.Seller.Domain.Staging`** (`src/AERai.Seller.Domain/Staging/`): entities that are (near-)verbatim mirrors of data imported from SP-API — `Order`, `OrderItem`, `InventorySnapshot`/`InventoryState`, `CatalogItem`/`CatalogParent`, `SettlementReport`, `FinancialEvent`/`FinancialEventType`. When a new report/API sync is added (via `add-report-sync-job` or `add-sp-api-endpoint`), its entities belong here.
+- **`AERai.Seller.Domain.Ai`** (`src/AERai.Seller.Domain/Ai/`): schema that supports AI-driven features — currently `LeadTimeProfile`, `DemandForecast`, `ReplenishmentRecommendation` for Phase 2 demand forecasting/replenishment. These are computed from staged data, not imports themselves.
+- **Root `AERai.Seller.Domain`**: everything else — curated/master data that mixes manual input with denormalized references (`Product`, whose `CostOfGoods` is user-entered) and cross-cutting concerns that aren't business data (`SyncMetadata`, `AmazonBusinessDay`).
+
+Files needing both a staged/AI type and a root type (e.g. `OrderRepository` uses `Order`/`OrderItem` from `.Staging` plus `AmazonBusinessDay` from root) simply add both `using` statements — this is a namespace-only split within one assembly, not a project boundary, so there's no new reference-direction rule to enforce here beyond the usual Domain-has-no-outgoing-references rule.
+
 **Composition-root exception**: `AERai.Seller.Wpf` also has project references to `Infrastructure` and `SpApiClient`, in addition to `Presentation`. This is intentional and limited to one place: `App.xaml.cs` (the DI composition root), which must resolve concrete Infrastructure/SpApiClient implementations to register them against `Application` interfaces. No Infrastructure or SpApiClient type may be referenced from anywhere else in `Wpf` — not from a View, a code-behind event handler, or anywhere outside `App.xaml.cs`'s service registration. The `architecture-reviewer` agent checks the *usage*, not just the project reference, for this rule.
 
 **Why layered this way**: the UI is WPF today but the plan explicitly keeps it swappable (Avalonia/Blazor/etc. later). `Wpf` must contain only Views and bootstrapping — zero business logic — so a future UI only requires a new front-end project referencing the same `Presentation`/`Application` layers.

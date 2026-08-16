@@ -1,4 +1,4 @@
-using AERai.Seller.Domain;
+using AERai.Seller.Domain.Staging;
 
 namespace AERai.Seller.Application.Abstractions;
 

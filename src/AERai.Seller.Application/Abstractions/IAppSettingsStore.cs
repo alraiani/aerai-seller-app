@@ -12,7 +12,11 @@ public sealed record AppSettings(
     string? RefreshToken,
     string ApiHost,
     string MarketplaceId,
-    string Theme)
+    string Theme,
+    // Default value keeps deserialization of settings files written before this field existed
+    // backward-compatible: System.Text.Json falls back to a parameter's declared default for a
+    // missing JSON property, rather than the value type's default(int).
+    int DefaultTargetStockDays = 45)
 {
     public static AppSettings CreateDefault() => new(
         ClientId: null,
@@ -20,5 +24,6 @@ public sealed record AppSettings(
         RefreshToken: null,
         ApiHost: "https://sellingpartnerapi-na.amazon.com",
         MarketplaceId: "ATVPDKIKX0DER",
-        Theme: "System");
+        Theme: "System",
+        DefaultTargetStockDays: 45);
 }

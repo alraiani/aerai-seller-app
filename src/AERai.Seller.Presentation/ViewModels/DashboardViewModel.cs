@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using AERai.Seller.Application.Dashboard;
 using AERai.Seller.Application.Sync;
+using AERai.Seller.Domain;
 using AERai.Seller.Presentation.Abstractions;
 using AERai.Seller.Presentation.Messaging;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -40,14 +41,23 @@ public partial class DashboardViewModel : ObservableObject
         _messenger = messenger;
         _timeProvider = timeProvider;
         _logger = logger;
-        _selectedDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        // "Today" matches Amazon Seller Central's convention (Pacific Time), not UTC or local
+        // time — see AmazonBusinessDay for why.
+        _selectedDate = AmazonBusinessDay.TodayIn(timeProvider.GetUtcNow());
     }
 
     public ObservableCollection<SkuOrderSummary> OrdersBySku { get; } = [];
     public ObservableCollection<SyncStatusSummary> SyncStatuses { get; } = [];
+    public ObservableCollection<DailySalesSummary> DailySales { get; } = [];
 
     [ObservableProperty]
     private DateOnly _selectedDate;
+
+    [ObservableProperty]
+    private int _totalUnitsSold;
+
+    [ObservableProperty]
+    private decimal _totalRevenue;
 
     [ObservableProperty]
     private bool _isLoading;
@@ -85,6 +95,16 @@ public partial class DashboardViewModel : ObservableObject
             foreach (var summary in summaries)
             {
                 OrdersBySku.Add(summary);
+            }
+
+            TotalUnitsSold = summaries.Sum(s => s.UnitsSold);
+            TotalRevenue = summaries.Sum(s => s.Revenue);
+
+            var dailySales = await _dashboardQueryService.GetDailySalesForLastNDaysAsync(SelectedDate, 7);
+            DailySales.Clear();
+            foreach (var day in dailySales)
+            {
+                DailySales.Add(day);
             }
 
             var statuses = await _dashboardQueryService.GetSyncStatusAsync();
@@ -155,4 +175,20 @@ public partial class DashboardViewModel : ObservableObject
     partial void OnLastErrorChanged(string? value) => CopyErrorCommand.NotifyCanExecuteChanged();
 
     partial void OnSelectedDateChanged(DateOnly value) => _ = LoadAsync();
+
+    /// <summary>Called whenever the Dashboard page is shown (including re-navigation to a cached
+    /// page instance) so the date picker always reflects "today" rather than whatever day was left
+    /// selected from a prior visit.</summary>
+    public async Task ResetToTodayAsync()
+    {
+        var today = AmazonBusinessDay.TodayIn(_timeProvider.GetUtcNow());
+        if (SelectedDate != today)
+        {
+            SelectedDate = today; // triggers OnSelectedDateChanged -> fire-and-forget LoadAsync()
+        }
+        else
+        {
+            await LoadAsync();
+        }
+    }
 }

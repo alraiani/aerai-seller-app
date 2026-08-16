@@ -1,4 +1,4 @@
-namespace AERai.Seller.Domain;
+namespace AERai.Seller.Domain.Staging;
 
 /// <summary>
 /// One quantity reading for a SKU in a given state as of a given date.

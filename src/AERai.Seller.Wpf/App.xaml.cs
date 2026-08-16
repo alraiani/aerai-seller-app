@@ -40,7 +40,12 @@ public partial class App : System.Windows.Application
 
                 services.AddTransient<DashboardPage>();
                 services.AddTransient<InventoryPage>();
+                services.AddTransient<CatalogPage>();
                 services.AddTransient<SettingsPage>();
+                services.AddTransient<ReplenishmentPage>();
+                services.AddTransient<CatalogItemSettingsPage>();
+                services.AddTransient<BookkeepingPage>();
+                services.AddTransient<BookkeepingAccountMappingPage>();
                 services.AddSingleton<MainWindow>();
             })
             .Build();
