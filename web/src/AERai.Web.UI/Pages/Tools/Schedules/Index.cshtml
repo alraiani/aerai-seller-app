@@ -1,0 +1,73 @@
+@page
+@model AERai.Web.UI.Pages.Tools.Schedules.IndexModel
+@{
+    ViewData["Title"] = "Amazon sync schedules";
+}
+<div class="alert @(Model.Connection.CanRun ? "alert-light border" : "alert-warning") d-flex justify-content-between align-items-center">
+    <div>
+        <strong>SP-API connection:</strong> @Model.Connection.Mode
+        @if (Model.Connection.Mode == "Simulated")
+        {
+            <span class="text-body-secondary">— generates realistic sample reports locally; no data comes from Amazon.</span>
+        }
+        @if (Model.Connection.Problem is { } problem)
+        {
+            <div class="small">@problem Schedules can be edited, but nothing will run.</div>
+        }
+    </div>
+    <a asp-page="Runs" class="btn btn-sm btn-outline-secondary">Run history</a>
+</div>
+
+<div class="mb-3"><a asp-page="Edit" class="btn btn-sm btn-primary">New schedule</a></div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead>
+                <tr><th>Name</th><th>Report</th><th>Frequency</th><th>Next run</th><th>Last run</th><th>Auto-promote</th><th>Enabled</th><th></th></tr>
+            </thead>
+            <tbody>
+            @foreach (var s in Model.Schedules)
+            {
+                var last = Model.LatestRuns.GetValueOrDefault(s.Id);
+                <tr>
+                    <td><a asp-page="Edit" asp-route-id="@s.Id">@s.Name</a></td>
+                    <td>@s.ReportType</td>
+                    <td>@ScheduleDisplay.Frequency(s)</td>
+                    <td>@(s.IsEnabled ? ScheduleDisplay.Local(s.NextRunAt, s.TimeZoneId) : "—")</td>
+                    <td>
+                        @if (last is not null)
+                        {
+                            <span class="badge @ScheduleDisplay.StatusBadge(last.Status)">@last.Status</span>
+                            <div class="small text-body-secondary">@ScheduleDisplay.Local(last.StartedAt, s.TimeZoneId)</div>
+                        }
+                        else
+                        {
+                            <span class="text-body-secondary">Never</span>
+                        }
+                    </td>
+                    <td>@(s.AutoPromote ? "Yes" : "No — review first")</td>
+                    <td>
+                        <form method="post" asp-page-handler="SetEnabled" asp-route-id="@s.Id" asp-route-enabled="@(!s.IsEnabled)">
+                            <button type="submit" class="btn btn-sm @(s.IsEnabled ? "btn-success" : "btn-outline-secondary")">@(s.IsEnabled ? "On" : "Off")</button>
+                        </form>
+                    </td>
+                    <td class="text-end">
+                        <form method="post" asp-page-handler="RunNow" asp-route-id="@s.Id">
+                            <button type="submit" class="btn btn-sm btn-outline-primary" disabled="@(!Model.Connection.CanRun)">Run now</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            @if (Model.Schedules.Count == 0)
+            {
+                <tr><td colspan="8" class="text-body-secondary p-3">No schedules yet.</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+<p class="small text-body-secondary mt-3 mb-0">
+    Each run pulls the report from Amazon, stores the untouched file in blob storage, stages it, and — when auto-promote is on —
+    promotes it into the reporting tables. Times are shown in each schedule's time zone.
+</p>

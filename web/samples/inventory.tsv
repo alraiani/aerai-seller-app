@@ -1,0 +1,22 @@
+snapshot-date	sku	asin	product-name	state	quantity
+2026-10-02	AER-MAT-BLK	B0C1MAT001	AERai Yoga Mat - Black	Available	42
+2026-10-02	AER-MAT-BLK	B0C1MAT001	AERai Yoga Mat - Black	inbound-shipped	120
+2026-10-02	AER-MAT-BLK	B0C1MAT001	AERai Yoga Mat - Black	Reserved	3
+2026-10-02	AER-MAT-BLK	B0C1MAT001	AERai Yoga Mat - Black	Unfulfillable	1
+2026-10-02	AER-MAT-BLU	B0C1MAT002	AERai Yoga Mat - Blue	Available	210
+2026-10-02	AER-MAT-BLU	B0C1MAT002	AERai Yoga Mat - Blue	inbound-shipped	0
+2026-10-02	AER-MAT-BLU	B0C1MAT002	AERai Yoga Mat - Blue	Reserved	5
+2026-10-02	AER-MAT-BLU	B0C1MAT002	AERai Yoga Mat - Blue	Unfulfillable	1
+2026-10-02	AER-BLK-2PK	B0C1BLK010	AERai Yoga Block 2-Pack	Available	15
+2026-10-02	AER-BLK-2PK	B0C1BLK010	AERai Yoga Block 2-Pack	inbound-shipped	0
+2026-10-02	AER-BLK-2PK	B0C1BLK010	AERai Yoga Block 2-Pack	Reserved	3
+2026-10-02	AER-BLK-2PK	B0C1BLK010	AERai Yoga Block 2-Pack	Unfulfillable	2
+2026-10-02	AER-STRAP	B0C1STR020	AERai Stretch Strap	Available	380
+2026-10-02	AER-STRAP	B0C1STR020	AERai Stretch Strap	inbound-shipped	50
+2026-10-02	AER-STRAP	B0C1STR020	AERai Stretch Strap	Reserved	3
+2026-10-02	AER-STRAP	B0C1STR020	AERai Stretch Strap	Unfulfillable	0
+2026-10-02	AER-TOWEL	B0C1TWL030	AERai Grip Towel	Available	8
+2026-10-02	AER-TOWEL	B0C1TWL030	AERai Grip Towel	inbound-shipped	24
+2026-10-02	AER-TOWEL	B0C1TWL030	AERai Grip Towel	Reserved	0
+2026-10-02	AER-TOWEL	B0C1TWL030	AERai Grip Towel	Unfulfillable	0
+2026-10-02	AER-TOWEL	B0C1TWL030	AERai Grip Towel	Lost-in-space	3

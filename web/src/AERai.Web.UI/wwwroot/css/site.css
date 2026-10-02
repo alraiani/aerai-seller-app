@@ -1,0 +1,91 @@
+/* AERai Seller — application shell and component styles.
+   No inline styles are allowed (see Content-Security-Policy), so all presentation lives here. */
+
+:root {
+    --aerai-sidebar-width: 15rem;
+    --aerai-brand: #0f4c81;
+    --aerai-sidebar-bg: #0b2540;
+    --aerai-sidebar-fg: #c9d6e3;
+}
+
+html, body { height: 100%; }
+body { background-color: #f5f7fa; }
+
+/* ---- Shell ---- */
+.app-shell { display: flex; min-height: 100vh; }
+
+.app-sidebar {
+    width: var(--aerai-sidebar-width);
+    flex-shrink: 0;
+    background: var(--aerai-sidebar-bg);
+    color: var(--aerai-sidebar-fg);
+    padding: 1rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.app-brand {
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.25rem;
+    text-decoration: none;
+    padding: 0.25rem 0.75rem 1rem;
+}
+.app-brand span { font-weight: 300; }
+
+.app-sidebar .nav-section {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.6;
+    padding: 0.75rem 0.75rem 0.25rem;
+}
+
+.app-sidebar .nav-link {
+    color: var(--aerai-sidebar-fg);
+    border-radius: 0.375rem;
+    padding: 0.4rem 0.75rem;
+}
+.app-sidebar .nav-link:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.app-sidebar .nav-link.active { background: var(--aerai-brand); color: #fff; }
+
+.app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.app-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1.5rem;
+    background: #fff;
+    border-bottom: 1px solid #e3e8ee;
+}
+
+.app-content { padding: 1.5rem; }
+
+@media (max-width: 768px) {
+    .app-shell { flex-direction: column; }
+    .app-sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; }
+    .app-sidebar .nav-section { display: none; }
+}
+
+/* ---- Components ---- */
+.kpi-card .kpi-label { font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.04em; }
+.kpi-card .kpi-value { font-size: 1.6rem; font-weight: 600; }
+
+.trend-chart { width: 100%; height: 160px; }
+.trend-chart .bar { fill: var(--aerai-brand); }
+.trend-chart .bar-today { fill: #2a9d8f; }
+.trend-chart .axis-label { font-size: 10px; fill: #6c757d; }
+
+.search-input { max-width: 20rem; }
+.raw-line { font-family: var(--bs-font-monospace); font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; }
+
+/* ---- Sign-in ---- */
+.login-wrapper { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--aerai-sidebar-bg); }
+.login-card { width: 100%; max-width: 24rem; }
+.login-brand { color: var(--aerai-brand); font-weight: 700; }
+
+/* ASP.NET always renders the validation summary container; hide it until it actually has errors,
+   otherwise its alert styling shows an empty red box on first load. */
+.validation-summary-valid { display: none; }

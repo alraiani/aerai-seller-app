@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\AERai.Web.Application\AERai.Web.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- SignInManager/UserManager live in the shared framework; Infrastructure adapts them behind Application interfaces. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.30.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lets tests exercise internal SP-API pipeline classes directly. -->
+    <InternalsVisibleTo Include="AERai.Web.Infrastructure.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Versioned view/procedure scripts applied by migrations through SqlResource. -->
+    <EmbeddedResource Include="Persistence\Sql\**\*.sql" />
+  </ItemGroup>
+
+</Project>

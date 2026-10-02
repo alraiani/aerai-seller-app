@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // F5: builds, starts the app under the debugger, and opens the browser when it's ready.
+      // Requires SQL Server + Azurite running (task "docker: start SQL Server + Azurite").
+      "name": "AERai Web (Development)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/AERai.Web.UI/bin/Debug/net10.0/AERai.Web.UI.dll",
+      "cwd": "${workspaceFolder}/src/AERai.Web.UI",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5042"
+      },
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      },
+      "stopAtEntry": false
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+settlement-id	settlement-start-date	settlement-end-date	deposit-date	total-amount	currency	transaction-type	order-id	merchant-order-id	adjustment-id	shipment-id	marketplace-name	amount-type	amount-description	amount	fulfillment-id	posted-date	posted-date-time	order-item-code	merchant-order-item-id	merchant-adjustment-item-id	sku	quantity-purchased	promotion-id
+24680135791	2026-09-04 07:00:00 UTC	2026-09-18 07:00:00 UTC		1234.56	USD																		
+24680135791						Order	113-9212474-8805987				Amazon.com	ItemPrice	Principal	21.00	AFN	2026-09-05					AER-TOWEL		
+24680135791						Order	113-9212474-8805987				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-3.71	AFN	2026-09-05					AER-TOWEL		
+24680135791						Order	113-9212474-8805987				Amazon.com	ItemFees	Commission	-3.15	AFN	2026-09-05					AER-TOWEL		
+24680135791						Order	113-8688814-4012668				Amazon.com	ItemPrice	Principal	21.00	AFN	2026-09-06					AER-TOWEL		
+24680135791						Order	113-8688814-4012668				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-5.43	AFN	2026-09-06					AER-TOWEL		
+24680135791						Order	113-8688814-4012668				Amazon.com	ItemFees	Commission	-3.15	AFN	2026-09-06					AER-TOWEL		
+24680135791						Order	113-2796438-2126097				Amazon.com	ItemPrice	Principal	9.99	AFN	2026-09-07					AER-STRAP		
+24680135791						Order	113-2796438-2126097				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-3.39	AFN	2026-09-07					AER-STRAP		
+24680135791						Order	113-2796438-2126097				Amazon.com	ItemFees	Commission	-1.50	AFN	2026-09-07					AER-STRAP		
+24680135791						Order	113-7129259-2538691				Amazon.com	ItemPrice	Principal	9.99	AFN	2026-09-08					AER-STRAP		
+24680135791						Order	113-7129259-2538691				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-5.41	AFN	2026-09-08					AER-STRAP		
+24680135791						Order	113-7129259-2538691				Amazon.com	ItemFees	Commission	-1.50	AFN	2026-09-08					AER-STRAP		
+24680135791						Order	113-9559085-1683953				Amazon.com	ItemPrice	Principal	21.00	AFN	2026-09-09					AER-TOWEL		
+24680135791						Order	113-9559085-1683953				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-3.12	AFN	2026-09-09					AER-TOWEL		
+24680135791						Order	113-9559085-1683953				Amazon.com	ItemFees	Commission	-3.15	AFN	2026-09-09					AER-TOWEL		
+24680135791						Order	113-2379775-6263446				Amazon.com	ItemPrice	Principal	29.99	AFN	2026-09-10					AER-MAT-BLU		
+24680135791						Order	113-2379775-6263446				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-5.33	AFN	2026-09-10					AER-MAT-BLU		
+24680135791						Order	113-2379775-6263446				Amazon.com	ItemFees	Commission	-4.50	AFN	2026-09-10					AER-MAT-BLU		
+24680135791						Order	113-2341639-1910414				Amazon.com	ItemPrice	Principal	21.00	AFN	2026-09-11					AER-TOWEL		
+24680135791						Order	113-2341639-1910414				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-5.26	AFN	2026-09-11					AER-TOWEL		
+24680135791						Order	113-2341639-1910414				Amazon.com	ItemFees	Commission	-3.15	AFN	2026-09-11					AER-TOWEL		
+24680135791						Order	113-3284817-1433799				Amazon.com	ItemPrice	Principal	9.99	AFN	2026-09-12					AER-STRAP		
+24680135791						Order	113-3284817-1433799				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-5.57	AFN	2026-09-12					AER-STRAP		
+24680135791						Order	113-3284817-1433799				Amazon.com	ItemFees	Commission	-1.50	AFN	2026-09-12					AER-STRAP		
+24680135791						Order	113-2838582-4249869				Amazon.com	ItemPrice	Principal	21.00	AFN	2026-09-13					AER-TOWEL		
+24680135791						Order	113-2838582-4249869				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-3.39	AFN	2026-09-13					AER-TOWEL		
+24680135791						Order	113-2838582-4249869				Amazon.com	ItemFees	Commission	-3.15	AFN	2026-09-13					AER-TOWEL		
+24680135791						Order	113-5829851-3770111				Amazon.com	ItemPrice	Principal	9.99	AFN	2026-09-14					AER-STRAP		
+24680135791						Order	113-5829851-3770111				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-5.06	AFN	2026-09-14					AER-STRAP		
+24680135791						Order	113-5829851-3770111				Amazon.com	ItemFees	Commission	-1.50	AFN	2026-09-14					AER-STRAP		
+24680135791						Order	113-2099179-6887081				Amazon.com	ItemPrice	Principal	29.99	AFN	2026-09-15					AER-MAT-BLU		
+24680135791						Order	113-2099179-6887081				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-4.83	AFN	2026-09-15					AER-MAT-BLU		
+24680135791						Order	113-2099179-6887081				Amazon.com	ItemFees	Commission	-4.50	AFN	2026-09-15					AER-MAT-BLU		
+24680135791						Order	113-3663675-6433116				Amazon.com	ItemPrice	Principal	17.49	AFN	2026-09-16					AER-BLK-2PK		
+24680135791						Order	113-3663675-6433116				Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-5.69	AFN	2026-09-16					AER-BLK-2PK		
+24680135791						Order	113-3663675-6433116				Amazon.com	ItemFees	Commission	-2.62	AFN	2026-09-16					AER-BLK-2PK		
+24680135791						Refund	113-1111111-2222222				Amazon.com	ItemPrice	Principal	-29.99	AFN	2026-09-12					AER-MAT-BLK		
+24680135791						ServiceFee					Amazon.com	other-transaction	Subscription Fee	-39.99	AFN	2026-09-10							
+24680135791						Order	113-3333333-4444444				Amazon.com	ItemPrice	Principal	abc	AFN	2026-09-11					AER-STRAP		

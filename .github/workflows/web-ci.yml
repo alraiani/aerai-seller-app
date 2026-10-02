@@ -1,0 +1,140 @@
+# CI/CD for the AERai web app (web/). The WPF app under src/ is not built here.
+name: web-ci
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', '.github/workflows/web-ci.yml']
+  pull_request:
+    paths: ['web/**', '.github/workflows/web-ci.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: web
+
+jobs:
+  build-test:
+    name: Build, test, and package
+    runs-on: ubuntu-latest
+    services:
+      # Lets the SQL Server integration tests (promotion procedure, views) run in CI.
+      sql:
+        image: mcr.microsoft.com/mssql/server:2025-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          # Throwaway password for an ephemeral CI container; not used anywhere else.
+          MSSQL_SA_PASSWORD: Ci-Only-Sql-Pw-1
+        ports: ['1433:1433']
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P Ci-Only-Sql-Pw-1 -Q 'SELECT 1' -b"
+          --health-interval 10s --health-timeout 5s --health-retries 12 --health-start-period 30s
+    steps:
+      - uses: actions/checkout@v4
+
+      # The WPF app (src/) and the web app (web/) must stay fully independent. IDE tooling (e.g. VS Code
+      # C# Dev Kit) can silently add projects to whichever solution is open, so fail fast if anything
+      # links the two.
+      - name: Check WPF and web solutions are not linked
+        working-directory: .
+        run: |
+          if grep -nE 'web[/\\]' AERai.Seller.slnx; then echo "::error::AERai.Seller.slnx references web/ projects"; exit 1; fi
+          if grep -rnE 'AERai\.Seller\.|\.\./\.\./\.\./' --include='*.csproj' --include='*.slnx' --include='*.props' web; then echo "::error::web/ references the WPF solution"; exit 1; fi
+          if grep -rnE 'AERai\.Web' --include='*.csproj' --include='*.props' src tests; then echo "::error::WPF projects reference web/"; exit 1; fi
+
+      # Blob Storage emulator for the raw landing-zone tests. Started as a step (not a service)
+      # because it needs command-line flags; the SDK can be newer than the emulator's API version.
+      - name: Start Azurite
+        run: docker run -d -p 10000:10000 mcr.microsoft.com/azure-storage/azurite:latest azurite-blob --blobHost 0.0.0.0 --loose --skipApiVersionCheck
+
+      - name: Set up .NET from global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: web/global.json
+
+      - name: Restore tools and packages
+        run: |
+          dotnet tool restore
+          dotnet restore AERai.Web.slnx
+
+      - name: Build (warnings are errors)
+        run: dotnet build AERai.Web.slnx -c Release --no-restore
+
+      - name: Test
+        env:
+          AERAI_TEST_SQL: Server=localhost,1433;User Id=sa;Password=Ci-Only-Sql-Pw-1;TrustServerCertificate=True
+          AERAI_TEST_BLOB: UseDevelopmentStorage=true
+        run: dotnet test AERai.Web.slnx -c Release --no-build --logger "trx;LogFileName=results.trx"
+
+      - name: Validate Bicep
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
+      - name: Publish web app
+        run: dotnet publish src/AERai.Web.UI/AERai.Web.UI.csproj -c Release --no-build -o ../artifacts/app
+
+      - name: Build migrations bundle
+        run: >
+          dotnet ef migrations bundle
+          --project src/AERai.Web.Infrastructure --startup-project src/AERai.Web.Infrastructure
+          --self-contained -r linux-x64 -o ../artifacts/efbundle --force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: artifacts/
+          retention-days: 7
+
+  deploy:
+    name: Deploy to production
+    needs: build-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://seller.aeraigroup.com
+    permissions:
+      contents: read
+      id-token: write # OIDC token for azure/login; no stored Azure credentials.
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: artifacts
+
+      - name: Sign in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Open SQL firewall for this runner
+        working-directory: .
+        run: |
+          ip=$(curl -s https://api.ipify.org)
+          az sql server firewall-rule create -g "${{ vars.AZURE_RESOURCE_GROUP }}" -s "${{ vars.AZURE_SQL_SERVER }}" \
+            -n "gh-${{ github.run_id }}" --start-ip-address "$ip" --end-ip-address "$ip"
+
+      - name: Apply database migrations
+        working-directory: artifacts
+        run: |
+          chmod +x efbundle
+          ./efbundle --connection "Server=tcp:${{ vars.AZURE_SQL_SERVER }}.database.windows.net,1433;Database=AERaiSeller;Authentication=Active Directory Default;Encrypt=True;"
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          package: artifacts/app
+
+      - name: Close SQL firewall rule
+        if: always()
+        working-directory: .
+        run: az sql server firewall-rule delete -g "${{ vars.AZURE_RESOURCE_GROUP }}" -s "${{ vars.AZURE_SQL_SERVER }}" -n "gh-${{ github.run_id }}" || true

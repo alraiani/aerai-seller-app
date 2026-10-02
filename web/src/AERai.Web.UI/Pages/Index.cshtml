@@ -1,0 +1,130 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Dashboard";
+    var s = Model.Snapshot;
+
+    // Trend chart geometry (SVG units). Bars are scaled to the busiest day in the window.
+    const int chartWidth = 700, chartHeight = 140, labelHeight = 16;
+    var maxRevenue = s.Trend.Count == 0 ? 0m : s.Trend.Max(t => t.Revenue);
+    var slot = s.Trend.Count == 0 ? 0d : chartWidth / (double)s.Trend.Count;
+}
+
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card kpi-card h-100"><div class="card-body">
+            <div class="kpi-label">Revenue today (UTC)</div>
+            <div class="kpi-value">@s.TodayRevenue.ToString("C")</div>
+        </div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card kpi-card h-100"><div class="card-body">
+            <div class="kpi-label">Units today</div>
+            <div class="kpi-value">@s.TodayUnits.ToString("N0")</div>
+        </div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card kpi-card h-100"><div class="card-body">
+            <div class="kpi-label">Revenue, last 7 days</div>
+            <div class="kpi-value">@s.Last7DaysRevenue.ToString("C")</div>
+            @if (s.WeekOverWeekChange is { } change)
+            {
+                <div class="small @(change >= 0 ? "text-success" : "text-danger")">@change.ToString("+0.0%;-0.0%") vs prior 7 days</div>
+            }
+        </div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card kpi-card h-100"><div class="card-body">
+            <div class="kpi-label">SKUs at risk</div>
+            <div class="kpi-value @(s.AtRisk.Count > 0 ? "text-danger" : "")">@s.AtRisk.Count</div>
+            <div class="small text-body-secondary">≤ @s.AtRiskThresholdDays.ToString("0") days of supply</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">Revenue — last @s.Trend.Count days</div>
+    <div class="card-body">
+        <svg class="trend-chart" viewBox="0 0 @chartWidth @(chartHeight + labelHeight)" preserveAspectRatio="none" role="img" aria-label="Daily revenue trend">
+            @for (var i = 0; i < s.Trend.Count; i++)
+            {
+                var day = s.Trend[i];
+                var height = maxRevenue == 0 ? 0 : (double)(day.Revenue / maxRevenue) * chartHeight;
+                var x = i * slot + slot * 0.15;
+                <rect class="@(day.Date == s.Today ? "bar-today" : "bar")" x="@x.ToString("0.#")" y="@((chartHeight - height).ToString("0.#"))"
+                      width="@((slot * 0.7).ToString("0.#"))" height="@height.ToString("0.#")">
+                    <title>@day.Date.ToString("MMM d"): @day.Revenue.ToString("C") (@day.Units units)</title>
+                </rect>
+                @* Razor reserves &lt;text&gt;, so the SVG element is emitted as a literal markup line. *@
+                @:<text class="axis-label" x="@((i * slot + slot / 2).ToString("0.#"))" y="@(chartHeight + labelHeight - 3)" text-anchor="middle">@day.Date.ToString("M/d")</text>
+            }
+        </svg>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-xl-7">
+        <div class="card h-100">
+            <div class="card-header">Today's orders by SKU</div>
+            <div class="card-body p-0">
+                @if (s.TodayBySku.Count == 0)
+                {
+                    <p class="text-body-secondary p-3 mb-0">No sales recorded today yet.</p>
+                }
+                else
+                {
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>SKU</th><th>Title</th><th class="text-end">Units</th><th class="text-end">Revenue</th></tr></thead>
+                        <tbody>
+                        @foreach (var row in s.TodayBySku)
+                        {
+                            <tr><td>@row.Sku</td><td class="text-truncate">@row.Title</td><td class="text-end">@row.Units</td><td class="text-end">@row.Revenue.ToString("C")</td></tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-5">
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between">
+                <span>Inventory at risk</span>
+                <a asp-page="/Inventory/Index" class="small">All inventory</a>
+            </div>
+            <div class="card-body p-0">
+                @if (s.AtRisk.Count == 0)
+                {
+                    <p class="text-body-secondary p-3 mb-0">No SKUs below @s.AtRiskThresholdDays.ToString("0") days of supply.</p>
+                }
+                else
+                {
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>SKU</th><th class="text-end">Available</th><th class="text-end">Days of supply</th></tr></thead>
+                        <tbody>
+                        @foreach (var p in s.AtRisk)
+                        {
+                            <tr><td>@p.Sku</td><td class="text-end">@p.Available</td><td class="text-end text-danger">@p.DaysOfSupply?.ToString("0.0")</td></tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">Last import</div>
+            <div class="card-body">
+                @if (s.LatestBatch is { } b)
+                {
+                    <div><strong>@b.Source</strong> · @b.FileName</div>
+                    <div class="small text-body-secondary">@b.UploadedAt.ToString("u") by @b.UploadedBy</div>
+                    <div class="mt-2"><partial name="_BatchStatusBadge" model="b.Status" /></div>
+                }
+                else
+                {
+                    <p class="text-body-secondary mb-0">Nothing imported yet.</p>
+                }
+            </div>
+        </div>
+    </div>
+</div>

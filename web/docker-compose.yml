@@ -1,0 +1,78 @@
+# Local development stack for the AERai web app.
+#
+#   cp .env.example .env        # then set MSSQL_SA_PASSWORD
+#   docker compose up -d        # SQL Server + Azurite (local blob storage for raw files)
+#   docker compose --profile app up -d --build   # SQL Server + containerized web app
+#
+# Data lives in named volumes ("sql2025data", "azuritedata"), so it survives container rebuilds.
+# Remove it deliberately with: docker compose down -v
+
+name: aerai
+
+services:
+  sql2025:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    # SQL Server images are amd64-only; on Apple silicon this runs under Rosetta emulation.
+    platform: linux/amd64
+    container_name: sql2025
+    hostname: sql2025
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in web/.env}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sql2025data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  # Local emulator for Azure Blob Storage: the raw landing zone for source files before staging.
+  # Connection string for the host: UseDevelopmentStorage=true (set in appsettings.Development.json).
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: azurite
+    # --skipApiVersionCheck: the Azure SDK may be newer than the emulator; --loose tolerates
+    # unsupported headers instead of failing requests.
+    command: azurite-blob --blobHost 0.0.0.0 --blobPort 10000 --location /data --loose --skipApiVersionCheck
+    ports:
+      - "10000:10000"
+    volumes:
+      - azuritedata:/data
+    restart: unless-stopped
+
+  web:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aerai-web
+    depends_on:
+      sql2025:
+        condition: service_healthy
+      azurite:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: "8080"
+      # Local-only: the containerized app talks to the compose SQL Server as sa.
+      # Azure uses managed identity (see infra/), never a SQL password.
+      ConnectionStrings__Sql: "Server=sql2025,1433;Database=AERaiSeller;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True"
+      # Azurite's well-known development account (public, documented by Microsoft; not a secret).
+      ConnectionStrings__RawStorage: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      Seed__AdminEmail: ${SEED_ADMIN_EMAIL:-}
+      Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:-}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  sql2025data:
+    # Fixed name (no "aerai_" project prefix) so this is the same volume created by the
+    # equivalent `docker run -v sql2025data:/var/opt/mssql ...` command.
+    name: sql2025data
+  azuritedata:

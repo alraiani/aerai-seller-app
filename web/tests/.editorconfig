@@ -1,0 +1,8 @@
+# Test-project overrides. Inherits everything else from web/.editorconfig.
+
+[*.cs]
+# Test names follow MethodName_Condition_ExpectedResult (see the web-coding-standards skill).
+dotnet_diagnostic.CA1707.severity = none
+
+# xUnit requires public test classes; analyzers suggesting they be internal don't apply.
+dotnet_diagnostic.CA1515.severity = none

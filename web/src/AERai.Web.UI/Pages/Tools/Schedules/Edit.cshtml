@@ -1,0 +1,85 @@
+@page "{id:int?}"
+@using AERai.Web.Application.Ingestion
+@using AERai.Web.Domain.Ingestion
+@model AERai.Web.UI.Pages.Tools.Schedules.EditModel
+@{
+    ViewData["Title"] = Model.Id is null ? "New schedule" : "Edit schedule";
+}
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-body">
+                <form method="post">
+                    <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
+                    <div class="mb-3">
+                        <label asp-for="Input.Name" class="form-label"></label>
+                        <input asp-for="Input.Name" class="form-control" />
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Input.ReportType" class="form-label"></label>
+                        <select asp-for="Input.ReportType" asp-items="Html.GetEnumSelectList<AmazonReportType>()" class="form-select"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Input.Frequency" class="form-label"></label>
+                        <select asp-for="Input.Frequency" asp-items="Html.GetEnumSelectList<ScheduleFrequency>()" class="form-select"></select>
+                        <div class="form-text">Interval uses "Every (minutes)". Daily uses "At (local time)" and the time zone.</div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-4">
+                            <label asp-for="Input.IntervalMinutes" class="form-label"></label>
+                            <input asp-for="Input.IntervalMinutes" class="form-control" min="@SyncScheduleService.MinIntervalMinutes" step="15" />
+                        </div>
+                        <div class="col-sm-4">
+                            <label asp-for="Input.DailyTime" class="form-label"></label>
+                            <input asp-for="Input.DailyTime" type="time" class="form-control" />
+                        </div>
+                        <div class="col-sm-4">
+                            <label asp-for="Input.TimeZoneId" class="form-label"></label>
+                            <select asp-for="Input.TimeZoneId" class="form-select">
+                                @foreach (var (id, label) in ScheduleDisplay.TimeZones)
+                                {
+                                    <option value="@id">@label</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Input.LookbackDays" class="form-label"></label>
+                        <input asp-for="Input.LookbackDays" class="form-control" min="1" max="@SyncScheduleService.MaxLookbackDays" />
+                        <div class="form-text">How far back the very first run reaches. Later runs pick up where the last successful run ended.</div>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input asp-for="Input.AutoPromote" class="form-check-input" />
+                        <label asp-for="Input.AutoPromote" class="form-check-label"></label>
+                    </div>
+                    <div class="form-check mb-4">
+                        <input asp-for="Input.IsEnabled" class="form-check-input" />
+                        <label asp-for="Input.IsEnabled" class="form-check-label"></label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <a asp-page="Index" class="btn btn-link">Cancel</a>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header">Report types</div>
+            <div class="card-body small">
+                <p><strong>Orders</strong> — orders created or updated in the window. Hourly is typical; minimum @SyncScheduleService.MinIntervalMinutes minutes because Amazon limits report requests.</p>
+                <p><strong>FbaInventory</strong> — a snapshot of FBA stock by state. Once or twice a day is plenty.</p>
+                <p class="mb-0"><strong>Settlements</strong> — Amazon publishes these every ~14 days on its own schedule; a daily check picks up new ones and never ingests the same report twice.</p>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">Auto-promote</div>
+            <div class="card-body small">
+                On: each pulled report flows straight into the dashboards and reports. Off: it stops at staging so someone can review it
+                under <a asp-page="/Tools/Batches/Index">Import batches</a> and promote it manually.
+            </div>
+        </div>
+    </div>
+</div>
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

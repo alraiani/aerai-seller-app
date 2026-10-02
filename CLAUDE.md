@@ -2,6 +2,8 @@
 
 Internal Windows desktop app for Amazon seller operations: inventory management (stock visibility, demand forecasting, supplier→prep→FBA replenishment scheduling) and bookkeeping (SP-API order/fee/settlement sync, QuickBooks Desktop export). See `docs/plan.md` (mirrors the approved Claude Code plan) for the phased feature roadmap.
 
+**Web app (`web/`)**: a separate ASP.NET Core Razor Pages + SQL Server + Azure app for seller.aeraigroup.com lives in `web/` with its own solution (`web/AERai.Web.slnx`) and its own rules in `web/CLAUDE.md`. The rules below are for the WPF app only; for anything under `web/`, follow `web/CLAUDE.md` and load the `web-coding-standards` skill.
+
 ## Solution layout & dependency direction
 
 ```

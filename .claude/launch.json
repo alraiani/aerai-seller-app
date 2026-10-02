@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "aerai-web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "web/src/AERai.Web.UI", "--launch-profile", "http"],
+      "port": 5042
+    }
+  ]
+}

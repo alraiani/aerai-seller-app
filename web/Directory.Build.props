@@ -1,0 +1,19 @@
+<Project>
+  <!--
+    Shared build settings for every project in the AERai web solution.
+    Centralizing these keeps compiler strictness identical across layers so a
+    warning can never be "fine in one project but an error in another".
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591: missing XML docs is enforced by review/skill, not the compiler, so generated code (migrations) doesn't fail the build. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+</Project>

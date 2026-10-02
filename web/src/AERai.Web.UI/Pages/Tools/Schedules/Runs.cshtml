@@ -1,0 +1,47 @@
+@page
+@model AERai.Web.UI.Pages.Tools.Schedules.RunsModel
+@{
+    ViewData["Title"] = "Sync run history";
+}
+<div class="d-flex justify-content-between mb-3">
+    <a asp-page="Index" class="btn btn-sm btn-outline-secondary">Back to schedules</a>
+    <a asp-page="Runs" asp-route-scheduleId="@Model.ScheduleId" class="btn btn-sm btn-outline-primary">Refresh</a>
+</div>
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>#</th><th>Schedule</th><th>Trigger</th><th>Started (UTC)</th><th>Duration</th><th>Status</th><th>Batches</th><th>Details</th></tr></thead>
+            <tbody>
+            @foreach (var r in Model.Runs.Items)
+            {
+                <tr>
+                    <td>@r.Id</td>
+                    <td>@Model.ScheduleNames.GetValueOrDefault(r.SyncScheduleId, $"#{r.SyncScheduleId}")</td>
+                    <td>@r.Trigger<div class="small text-body-secondary">@r.TriggeredBy</div></td>
+                    <td>@r.StartedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                    <td>@(r.CompletedAt is { } done ? $"{(done - r.StartedAt).TotalSeconds:0}s" : "running…")</td>
+                    <td><span class="badge @ScheduleDisplay.StatusBadge(r.Status)">@r.Status</span></td>
+                    <td>
+                        @foreach (var batchId in (r.ImportBatchIds ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            <a asp-page="/Tools/Batches/Details" asp-route-id="@batchId" class="me-1">@batchId</a>
+                        }
+                    </td>
+                    <td class="small">
+                        @r.Message
+                        @if (r.AmazonReportIds is not null)
+                        {
+                            <div class="text-body-secondary">Amazon report: @r.AmazonReportIds</div>
+                        }
+                    </td>
+                </tr>
+            }
+            @if (Model.Runs.Items.Count == 0)
+            {
+                <tr><td colspan="8" class="text-body-secondary p-3">No runs yet.</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+<partial name="_Pager" model="Model.Runs.ToPager(Model.Search)" />

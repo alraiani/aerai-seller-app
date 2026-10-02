@@ -1,0 +1,74 @@
+@{
+    var isSignedIn = User.Identity?.IsAuthenticated == true;
+    var isOperator = User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator);
+    var isAdmin = User.IsInRole(AppRoles.Admin);
+    var currentPath = Context.Request.Path.Value ?? "/";
+
+    // Highlights the sidebar entry for the current section.
+    string Active(string prefix) =>
+        (prefix == "/" ? currentPath == "/" : currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ? "active" : string.Empty;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] · AERai Seller</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+@if (isSignedIn)
+{
+    <div class="app-shell">
+        <nav class="app-sidebar" aria-label="Main navigation">
+            <a class="app-brand" asp-page="/Index">AERai <span>Seller</span></a>
+            <div class="nav-section">Overview</div>
+            <a class="nav-link @Active("/")" asp-page="/Index">Dashboard</a>
+            <div class="nav-section">Operations</div>
+            <a class="nav-link @Active("/Inventory")" asp-page="/Inventory/Index">Inventory</a>
+            <a class="nav-link @Active("/Orders")" asp-page="/Orders/Index">Orders</a>
+            <a class="nav-link @Active("/Products")" asp-page="/Products/Index">Products &amp; COGS</a>
+            <div class="nav-section">Bookkeeping</div>
+            <a class="nav-link @Active("/Settlements")" asp-page="/Settlements/Index">Settlements</a>
+            @if (isOperator)
+            {
+                <div class="nav-section">Tools</div>
+                <a class="nav-link @Active("/Tools/Import")" asp-page="/Tools/Import">Import data</a>
+                <a class="nav-link @Active("/Tools/Batches")" asp-page="/Tools/Batches/Index">Import batches</a>
+                <a class="nav-link @Active("/Tools/Schedules")" asp-page="/Tools/Schedules/Index">Amazon sync</a>
+            }
+            @if (isAdmin)
+            {
+                <div class="nav-section">Admin</div>
+                <a class="nav-link @Active("/Admin/Users")" asp-page="/Admin/Users/Index">Users</a>
+            }
+        </nav>
+        <div class="app-main">
+            <header class="app-topbar">
+                <h1 class="h5 mb-0">@ViewData["Title"]</h1>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="text-body-secondary small">@User.Identity!.Name</span>
+                    <form method="post" asp-page="/Account/Logout">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary">Sign out</button>
+                    </form>
+                </div>
+            </header>
+            <main class="app-content" role="main">
+                <partial name="_StatusMessage" />
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+}
+else
+{
+    <main role="main">
+        @RenderBody()
+    </main>
+}
+<script src="~/lib/jquery/dist/jquery.min.js"></script>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

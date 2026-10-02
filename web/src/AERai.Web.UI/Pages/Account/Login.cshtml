@@ -1,0 +1,39 @@
+@page
+@model AERai.Web.UI.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "Sign in";
+}
+<div class="login-wrapper">
+    <div class="card shadow login-card">
+        <div class="card-body p-4">
+            <h1 class="h3 login-brand mb-1">AERai Seller</h1>
+            <p class="text-body-secondary mb-4">Sign in to seller.aeraigroup.com</p>
+
+            <form method="post">
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2" role="alert"></div>
+                <input type="hidden" asp-for="ReturnUrl" />
+
+                <div class="mb-3">
+                    <label asp-for="Input.Email" class="form-label">Email</label>
+                    <input asp-for="Input.Email" class="form-control" autocomplete="username" autofocus />
+                    <span asp-validation-for="Input.Email" class="text-danger small"></span>
+                </div>
+                <div class="mb-3">
+                    <label asp-for="Input.Password" class="form-label">Password</label>
+                    <input asp-for="Input.Password" class="form-control" autocomplete="current-password" />
+                    <span asp-validation-for="Input.Password" class="text-danger small"></span>
+                </div>
+                <div class="form-check mb-4">
+                    <input asp-for="Input.RememberMe" class="form-check-input" />
+                    <label asp-for="Input.RememberMe" class="form-check-label"></label>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Sign in</button>
+            </form>
+            <p class="text-body-secondary small mt-4 mb-0">Accounts are created by an administrator.</p>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

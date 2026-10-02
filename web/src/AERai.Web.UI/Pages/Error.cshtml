@@ -1,0 +1,14 @@
+@page
+@model ErrorModel
+@{
+    ViewData["Title"] = "Error";
+}
+<div class="container py-5">
+    <h1 class="h4 text-danger">Something went wrong</h1>
+    <p>The problem has been logged. Please try again, or contact an administrator.</p>
+    @if (Model.ShowRequestId)
+    {
+        <p class="small text-body-secondary">Reference: <code>@Model.RequestId</code></p>
+    }
+    <a href="/" class="btn btn-primary">Back to dashboard</a>
+</div>

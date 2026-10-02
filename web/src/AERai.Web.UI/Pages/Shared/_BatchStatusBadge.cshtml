@@ -1,0 +1,13 @@
+@using AERai.Web.Domain.Staging
+@model ImportBatchStatus
+@{
+    var (css, label) = Model switch
+    {
+        ImportBatchStatus.Received => ("text-bg-secondary", "Received — not promoted"),
+        ImportBatchStatus.Promoted => ("text-bg-success", "Promoted"),
+        ImportBatchStatus.PromotedWithErrors => ("text-bg-warning", "Promoted with errors"),
+        ImportBatchStatus.Failed => ("text-bg-danger", "Failed"),
+        _ => ("text-bg-light", Model.ToString()),
+    };
+}
+<span class="badge @css">@label</span>

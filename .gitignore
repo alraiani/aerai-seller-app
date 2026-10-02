@@ -427,3 +427,6 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# AERai web: local Docker secrets (copy web/.env.example to web/.env)
+web/.env
