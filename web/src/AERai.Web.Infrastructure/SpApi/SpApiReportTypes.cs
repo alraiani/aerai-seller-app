@@ -12,7 +12,11 @@ internal static class SpApiReportTypes
     {
         AmazonReportType.Orders => "GET_FLAT_FILE_ALL_ORDERS_DATA_BY_LAST_UPDATE_GENERAL",
         AmazonReportType.FbaInventory => "GET_FBA_MYI_ALL_INVENTORY_DATA",
-        AmazonReportType.Settlements => "GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE",
+        // The _V2 flat file is the "long" layout (one row per amount with amount-type/amount-description/
+        // amount) that stg.SettlementLine mirrors. The similarly named GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE
+        // is a "wide" layout (price-amount, item-related-fee-amount, ...) and fails staging. Amazon
+        // generates both for every settlement, so requesting _V2 loses nothing.
+        AmazonReportType.Settlements => "GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2",
         _ => throw new ArgumentOutOfRangeException(nameof(reportType), reportType, "Unsupported report type."),
     };
 }

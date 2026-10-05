@@ -12,7 +12,7 @@ public enum ImportSource
     /// <summary>Per-SKU, per-state inventory quantities on a snapshot date.</summary>
     Inventory = 2,
 
-    /// <summary>Settlement flat file (V2) with one row per settlement transaction amount.</summary>
+    /// <summary>Settlement flat file V2 (<c>GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2</c>): one row per settlement amount.</summary>
     Settlements = 3,
 
     /// <summary>
