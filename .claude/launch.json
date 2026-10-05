@@ -6,6 +6,12 @@
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["run", "--project", "web/src/AERai.Web.UI", "--launch-profile", "http"],
       "port": 5042
+    },
+    {
+      "name": "aerai-web-review",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "web/src/AERai.Web.UI", "--launch-profile", "http", "--no-build", "--urls", "http://localhost:5043"],
+      "port": 5043
     }
   ]
 }

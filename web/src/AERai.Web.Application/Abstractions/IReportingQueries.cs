@@ -8,13 +8,6 @@ namespace AERai.Web.Application.Abstractions;
 /// </summary>
 public interface IReportingQueries
 {
-    /// <summary>Gets per-SKU daily sales for an inclusive UTC date range.</summary>
-    /// <param name="from">First day (inclusive).</param>
-    /// <param name="to">Last day (inclusive).</param>
-    /// <returns>Rows ordered by date, then SKU.</returns>
-    /// <param name="cancellationToken">Cancels the operation.</param>
-    Task<IReadOnlyList<DailySalesBySku>> GetDailySalesAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken);
-
     /// <summary>Lists orders, newest first.</summary>
     /// <param name="request">Paging; search matches order id or status.</param>
     /// <returns>One page of orders.</returns>
@@ -26,13 +19,6 @@ public interface IReportingQueries
     /// <returns>One page of positions.</returns>
     /// <param name="cancellationToken">Cancels the operation.</param>
     Task<PagedResult<InventoryPosition>> GetInventoryPositionsAsync(PageRequest request, CancellationToken cancellationToken);
-
-    /// <summary>Gets SKUs whose days of supply is at or below a threshold.</summary>
-    /// <param name="maxDaysOfSupply">Threshold in days.</param>
-    /// <param name="take">Maximum rows to return.</param>
-    /// <returns>At-risk positions, most urgent first.</returns>
-    /// <param name="cancellationToken">Cancels the operation.</param>
-    Task<IReadOnlyList<InventoryPosition>> GetAtRiskInventoryAsync(decimal maxDaysOfSupply, int take, CancellationToken cancellationToken);
 
     /// <summary>Lists settlements, newest period first.</summary>
     /// <param name="request">Paging; search matches settlement id.</param>

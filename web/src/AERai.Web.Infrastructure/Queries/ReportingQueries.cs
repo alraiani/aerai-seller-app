@@ -13,16 +13,6 @@ namespace AERai.Web.Infrastructure.Queries;
 internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueries
 {
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<DailySalesBySku>> GetDailySalesAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
-        await dbContext.DailySalesBySku
-            .AsNoTracking()
-            .Where(s => s.SalesDate >= from && s.SalesDate <= to)
-            .OrderBy(s => s.SalesDate)
-            .ThenBy(s => s.Sku)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-    /// <inheritdoc/>
     public Task<PagedResult<OrderSummary>> GetOrdersAsync(PageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -57,17 +47,6 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
             .ThenBy(p => p.Sku)
             .ToPagedResultAsync(request, cancellationToken);
     }
-
-    /// <inheritdoc/>
-    public async Task<IReadOnlyList<InventoryPosition>> GetAtRiskInventoryAsync(decimal maxDaysOfSupply, int take, CancellationToken cancellationToken) =>
-        await dbContext.InventoryPositions
-            .AsNoTracking()
-            .Where(p => p.DaysOfSupply != null && p.DaysOfSupply <= maxDaysOfSupply)
-            .OrderBy(p => p.DaysOfSupply)
-            .ThenBy(p => p.Sku)
-            .Take(take)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
 
     /// <inheritdoc/>
     public Task<PagedResult<SettlementSummary>> GetSettlementsAsync(PageRequest request, CancellationToken cancellationToken)

@@ -9,10 +9,13 @@
         (prefix == "/" ? currentPath == "/" : currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ? "active" : string.Empty;
 }
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    @* Must run before the stylesheets paint to avoid a light-mode flash for dark-theme users. *@
+    <script src="~/js/theme.js" asp-append-version="true"></script>
     <title>@ViewData["Title"] · AERai Seller</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
@@ -22,7 +25,13 @@
 {
     <div class="app-shell">
         <nav class="app-sidebar" aria-label="Main navigation">
-            <a class="app-brand" asp-page="/Index">AERai <span>Seller</span></a>
+            <div class="sidebar-head">
+                <a class="app-brand" asp-page="/Index">AERai <span>Seller</span></a>
+                @* CSS-only toggle (no script needed): the links collapse behind it on small screens. *@
+                <label class="nav-toggle-label" for="nav-toggle">Menu</label>
+            </div>
+            <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Show navigation" />
+            <div class="nav-links">
             <div class="nav-section">Overview</div>
             <a class="nav-link @Active("/")" asp-page="/Index">Dashboard</a>
             <div class="nav-section">Operations</div>
@@ -43,12 +52,14 @@
                 <div class="nav-section">Admin</div>
                 <a class="nav-link @Active("/Admin/Users")" asp-page="/Admin/Users/Index">Users</a>
             }
+            </div>
         </nav>
         <div class="app-main">
             <header class="app-topbar">
                 <h1 class="h5 mb-0">@ViewData["Title"]</h1>
                 <div class="d-flex align-items-center gap-3">
-                    <span class="text-body-secondary small">@User.Identity!.Name</span>
+                    <partial name="_ThemeToggle" />
+                    <span class="text-body-secondary small d-none d-md-inline">@User.Identity!.Name</span>
                     <form method="post" asp-page="/Account/Logout">
                         <button type="submit" class="btn btn-sm btn-outline-secondary">Sign out</button>
                     </form>
@@ -64,6 +75,7 @@
 else
 {
     <main role="main">
+        <div class="login-theme"><partial name="_ThemeToggle" /></div>
         @RenderBody()
     </main>
 }

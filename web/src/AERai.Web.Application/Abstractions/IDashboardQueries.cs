@@ -1,0 +1,51 @@
+using AERai.Web.Application.Dashboard;
+using AERai.Web.Domain.Reporting;
+
+namespace AERai.Web.Application.Abstractions;
+
+/// <summary>
+/// Read-only queries the dashboard needs. Returns raw rows; all aggregation and rules live in
+/// <see cref="DashboardService"/> so they're unit-testable.
+/// </summary>
+public interface IDashboardQueries
+{
+    /// <summary>Sold order items placed in a time window, in one currency (blank currency included).</summary>
+    /// <param name="from">Window start (inclusive).</param>
+    /// <param name="to">Window end (exclusive).</param>
+    /// <param name="currency">ISO currency code.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Matching lines.</returns>
+    Task<IReadOnlyList<SalesLine>> GetSalesLinesAsync(DateTimeOffset from, DateTimeOffset to, string currency, CancellationToken cancellationToken);
+
+    /// <summary>Every SKU's current inventory position.</summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>All positions.</returns>
+    Task<IReadOnlyList<InventoryPosition>> GetInventoryPositionsAsync(CancellationToken cancellationToken);
+
+    /// <summary>The settlement with the latest period end in a currency.</summary>
+    /// <param name="currency">ISO currency code.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The settlement, or <see langword="null"/>.</returns>
+    Task<SettlementSummary?> GetLatestSettlementAsync(string currency, CancellationToken cancellationToken);
+
+    /// <summary>SKUs sold since a point in time that have no cost of goods entered.</summary>
+    /// <param name="since">Lower bound on purchase time.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The SKUs, best-selling first.</returns>
+    Task<IReadOnlyList<string>> GetSoldSkusMissingCostAsync(DateTimeOffset since, CancellationToken cancellationToken);
+
+    /// <summary>Staging batches waiting for promotion.</summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The count.</returns>
+    Task<int> CountBatchesAwaitingPromotionAsync(CancellationToken cancellationToken);
+
+    /// <summary>Sync freshness and latest outcome per report type.</summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>One entry per report type that has a schedule.</returns>
+    Task<IReadOnlyList<SyncGlance>> GetSyncHealthAsync(CancellationToken cancellationToken);
+
+    /// <summary>Earliest data-window start of any successful Orders run (how far back sales history reaches).</summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The earliest start, or <see langword="null"/> when Orders have never synced.</returns>
+    Task<DateTimeOffset?> GetOrdersCoverageStartAsync(CancellationToken cancellationToken);
+}

@@ -1,37 +1,48 @@
-using AERai.Web.Application.Imports;
-using AERai.Web.Domain.Reporting;
-
 namespace AERai.Web.Application.Dashboard;
 
 /// <summary>
-/// Everything the dashboard page renders, computed in one call.
+/// Everything the dashboard renders, computed in one call. All times are in
+/// <see cref="TimeZoneId"/>; all money is in <see cref="Currency"/> only (never mixed).
 /// </summary>
-/// <param name="Today">The UTC date treated as "today".</param>
-/// <param name="TodayUnits">Units sold today.</param>
-/// <param name="TodayRevenue">Revenue today.</param>
-/// <param name="Last7DaysRevenue">Revenue for the 7 days ending today.</param>
-/// <param name="Prior7DaysRevenue">Revenue for the 7 days before that.</param>
-/// <param name="TodayBySku">Today's sales per SKU, highest revenue first.</param>
-/// <param name="Trend">Daily totals for the trend window, oldest first, with zero-filled gaps.</param>
-/// <param name="AtRisk">SKUs at or below the at-risk days-of-supply threshold.</param>
-/// <param name="AtRiskThresholdDays">The threshold used for <paramref name="AtRisk"/>.</param>
-/// <param name="LatestBatch">Most recent import, if any.</param>
+/// <param name="Period">Selected period.</param>
+/// <param name="TimeZoneId">IANA time zone used for days and hours.</param>
+/// <param name="Currency">Currency of every amount.</param>
+/// <param name="GeneratedAt">When the snapshot was computed.</param>
+/// <param name="WindowStart">Start of the selected period (local midnight).</param>
+/// <param name="Revenue">Revenue (Pending included, Cancelled excluded).</param>
+/// <param name="Orders">Distinct orders.</param>
+/// <param name="Units">Units sold.</param>
+/// <param name="AverageOrderValue">Revenue ÷ orders.</param>
+/// <param name="PendingOrders">Orders in the period still Pending at Amazon.</param>
+/// <param name="Granularity">Whether <paramref name="Chart"/> is hourly or daily.</param>
+/// <param name="Chart">Sales chart buckets, oldest first.</param>
+/// <param name="TopProducts">Best sellers by revenue.</param>
+/// <param name="Attention">Items that need action, most urgent first; empty means all clear.</param>
+/// <param name="Inventory">Inventory health.</param>
+/// <param name="LatestPayout">Most recent settlement in <paramref name="Currency"/>, if any.</param>
+/// <param name="Sync">Freshness per report type.</param>
+/// <param name="SalesCoverageStart">Earliest point synced order history is known to cover.</param>
+/// <param name="ComparisonAvailable">
+/// Whether synced history covers the whole comparison window. When <see langword="false"/>, all
+/// <see cref="Metric.Previous"/> values are 0 and every change is <see langword="null"/>.
+/// </param>
 public sealed record DashboardSnapshot(
-    DateOnly Today,
-    int TodayUnits,
-    decimal TodayRevenue,
-    decimal Last7DaysRevenue,
-    decimal Prior7DaysRevenue,
-    IReadOnlyList<SkuSales> TodayBySku,
-    IReadOnlyList<DailyTotal> Trend,
-    IReadOnlyList<InventoryPosition> AtRisk,
-    decimal AtRiskThresholdDays,
-    ImportBatchSummary? LatestBatch)
-{
-    /// <summary>
-    /// Week-over-week revenue change as a fraction (0.25 = +25%); <see langword="null"/> when the prior week had no revenue.
-    /// </summary>
-    public decimal? WeekOverWeekChange => Prior7DaysRevenue == 0
-        ? null
-        : (Last7DaysRevenue - Prior7DaysRevenue) / Prior7DaysRevenue;
-}
+    DashboardPeriod Period,
+    string TimeZoneId,
+    string Currency,
+    DateTimeOffset GeneratedAt,
+    DateTimeOffset WindowStart,
+    Metric Revenue,
+    Metric Orders,
+    Metric Units,
+    Metric AverageOrderValue,
+    int PendingOrders,
+    ChartGranularity Granularity,
+    IReadOnlyList<ChartPoint> Chart,
+    IReadOnlyList<TopProduct> TopProducts,
+    IReadOnlyList<AttentionItem> Attention,
+    InventoryGlance Inventory,
+    PayoutGlance? LatestPayout,
+    IReadOnlyList<SyncGlance> Sync,
+    DateTimeOffset? SalesCoverageStart,
+    bool ComparisonAvailable);

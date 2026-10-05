@@ -1,54 +1,125 @@
-/* AERai Seller — application shell and component styles.
-   No inline styles are allowed (see Content-Security-Policy), so all presentation lives here. */
+/* AERai Seller — application styles.
+   Colors are theme tokens (light and dark below); components only reference tokens, so every page
+   follows the selected theme. No inline styles are allowed (Content-Security-Policy), so all
+   presentation lives here. */
 
-:root {
-    --aerai-sidebar-width: 15rem;
-    --aerai-brand: #0f4c81;
-    --aerai-sidebar-bg: #0b2540;
-    --aerai-sidebar-fg: #c9d6e3;
+/* ---------- Theme tokens ---------- */
+:root,
+[data-bs-theme="light"] {
+    --app-bg: #f4f6fa;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --border: #e4e8ef;
+    --text: #0f172a;
+    --muted: #64748b;
+    --brand: #2563eb;
+    --brand-soft: rgba(37, 99, 235, 0.10);
+    --positive: #047857;
+    --positive-soft: rgba(4, 120, 87, 0.10);
+    --negative: #dc2626;
+    --negative-soft: rgba(220, 38, 38, 0.10);
+    --warning: #b45309;
+    --warning-soft: rgba(217, 119, 6, 0.12);
+    --info: #2563eb;
+    --info-soft: rgba(37, 99, 235, 0.10);
+    --sidebar-bg: #0b1b33;
+    --sidebar-fg: #b8c4d6;
+    --sidebar-muted: #6b7c96;
+    --sidebar-hover: rgba(255, 255, 255, 0.07);
+    --sidebar-active: #1d4ed8;
+    --chart-bar: #b9cdf7;
+    --chart-bar-current: #2563eb;
+    --chart-grid: #e9edf3;
+    --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+[data-bs-theme="dark"] {
+    --app-bg: #0b0f17;
+    --surface: #121826;
+    --surface-2: #171f30;
+    --border: #232c3d;
+    --text: #e5e9f0;
+    --muted: #8b97ab;
+    --brand: #60a5fa;
+    --brand-soft: rgba(96, 165, 250, 0.14);
+    --positive: #34d399;
+    --positive-soft: rgba(52, 211, 153, 0.12);
+    --negative: #f87171;
+    --negative-soft: rgba(248, 113, 113, 0.12);
+    --warning: #fbbf24;
+    --warning-soft: rgba(251, 191, 36, 0.12);
+    --info: #60a5fa;
+    --info-soft: rgba(96, 165, 250, 0.12);
+    --sidebar-bg: #080b12;
+    --sidebar-fg: #a3aec0;
+    --sidebar-muted: #5d6a80;
+    --sidebar-hover: rgba(255, 255, 255, 0.05);
+    --sidebar-active: #1e3a8a;
+    --chart-bar: #2a4472;
+    --chart-bar-current: #60a5fa;
+    --chart-grid: #1f2737;
+    --shadow: none;
+}
+
+/* Bootstrap integration: surfaces and text use the tokens in both themes. */
+:root,
+[data-bs-theme] {
+    --bs-body-bg: var(--app-bg);
+    --bs-body-color: var(--text);
+    --bs-secondary-color: var(--muted);
+    --bs-border-color: var(--border);
+    --bs-link-color-rgb: 37, 99, 235;
+}
+
+[data-bs-theme="dark"] {
+    --bs-link-color-rgb: 96, 165, 250;
 }
 
 html, body { height: 100%; }
-body { background-color: #f5f7fa; }
+body { background-color: var(--app-bg); color: var(--text); font-feature-settings: "tnum" 1; }
 
-/* ---- Shell ---- */
+.card {
+    --bs-card-bg: var(--surface);
+    --bs-card-border-color: var(--border);
+    --bs-card-cap-bg: transparent;
+    box-shadow: var(--shadow);
+}
+.card-header { font-weight: 600; font-size: 0.875rem; border-bottom-color: var(--border); }
+.table { --bs-table-bg: transparent; --bs-table-hover-bg: var(--surface-2); --bs-table-border-color: var(--border); }
+.table > thead th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.text-muted-token { color: var(--muted); }
+.text-bad { color: var(--negative); }
+.text-warn { color: var(--warning); }
+
+/* ---------- Shell ---------- */
 .app-shell { display: flex; min-height: 100vh; }
 
 .app-sidebar {
-    width: var(--aerai-sidebar-width);
+    width: 15rem;
     flex-shrink: 0;
-    background: var(--aerai-sidebar-bg);
-    color: var(--aerai-sidebar-fg);
+    background: var(--sidebar-bg);
+    color: var(--sidebar-fg);
     padding: 1rem 0.75rem;
     display: flex;
     flex-direction: column;
     gap: 0.125rem;
 }
 
-.app-brand {
-    color: #fff;
-    font-weight: 700;
-    font-size: 1.25rem;
-    text-decoration: none;
-    padding: 0.25rem 0.75rem 1rem;
-}
+.app-brand { color: #fff; font-weight: 700; font-size: 1.2rem; text-decoration: none; padding: 0.25rem 0.75rem 1rem; }
+.app-brand:hover { color: #fff; }
 .app-brand span { font-weight: 300; }
 
 .app-sidebar .nav-section {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    opacity: 0.6;
-    padding: 0.75rem 0.75rem 0.25rem;
+    color: var(--sidebar-muted);
+    padding: 0.85rem 0.75rem 0.25rem;
 }
 
-.app-sidebar .nav-link {
-    color: var(--aerai-sidebar-fg);
-    border-radius: 0.375rem;
-    padding: 0.4rem 0.75rem;
-}
-.app-sidebar .nav-link:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
-.app-sidebar .nav-link.active { background: var(--aerai-brand); color: #fff; }
+.app-sidebar .nav-link { color: var(--sidebar-fg); border-radius: 0.5rem; padding: 0.45rem 0.75rem; font-size: 0.925rem; }
+.app-sidebar .nav-link:hover { background: var(--sidebar-hover); color: #fff; }
+.app-sidebar .nav-link.active { background: var(--sidebar-active); color: #fff; }
 
 .app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
@@ -56,36 +127,117 @@ body { background-color: #f5f7fa; }
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 1rem;
     padding: 0.75rem 1.5rem;
-    background: #fff;
-    border-bottom: 1px solid #e3e8ee;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
 }
 
 .app-content { padding: 1.5rem; }
 
+.nav-links { display: flex; flex-direction: column; gap: 0.125rem; }
+.nav-toggle-label { display: none; }
+/* Visually hidden but still focusable, so keyboard users can open the mobile menu. */
+.nav-toggle { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.app-sidebar:has(.nav-toggle:focus-visible) .nav-toggle-label { outline: 2px solid var(--brand); outline-offset: 2px; }
+
 @media (max-width: 768px) {
     .app-shell { flex-direction: column; }
-    .app-sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; }
-    .app-sidebar .nav-section { display: none; }
+    .app-sidebar { width: 100%; padding: 0.5rem 0.75rem; }
+    .sidebar-head { display: flex; align-items: center; justify-content: space-between; }
+    .app-brand { padding: 0.25rem 0; }
+    .nav-toggle-label {
+        display: inline-block; cursor: pointer; padding: 0.3rem 0.8rem; border-radius: 0.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.15); color: var(--sidebar-fg); font-size: 0.875rem;
+    }
+    .nav-links { display: none; padding-top: 0.5rem; }
+    .nav-toggle:checked ~ .nav-links { display: flex; }
+    .app-content { padding: 1rem; }
+    .app-topbar { padding: 0.75rem 1rem; }
+    .app-topbar h1 { font-size: 1.05rem; }
 }
 
-/* ---- Components ---- */
-.kpi-card .kpi-label { font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.04em; }
-.kpi-card .kpi-value { font-size: 1.6rem; font-weight: 600; }
+/* ---------- Theme toggle ---------- */
+.theme-toggle { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); }
+.theme-toggle-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 24px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); padding: 0;
+}
+.theme-toggle-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.theme-toggle-btn:hover { color: var(--text); }
+.theme-toggle-btn.active { background: var(--surface); color: var(--brand); box-shadow: 0 0 0 1px var(--border); }
+.login-theme { position: fixed; top: 1rem; right: 1rem; z-index: 10; }
 
-.trend-chart { width: 100%; height: 160px; }
-.trend-chart .bar { fill: var(--aerai-brand); }
-.trend-chart .bar-today { fill: #2a9d8f; }
-.trend-chart .axis-label { font-size: 10px; fill: #6c757d; }
+/* ---------- Dashboard ---------- */
+.dash-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1.25rem; }
+.segmented { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--surface); }
+.segmented a { padding: 0.35rem 0.9rem; border-radius: 0.45rem; color: var(--muted); text-decoration: none; font-size: 0.875rem; font-weight: 500; }
+.segmented a:hover { color: var(--text); }
+.segmented a.active { background: var(--brand-soft); color: var(--brand); }
 
+.freshness { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.8rem; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.dot-ok { background: var(--positive); }
+.dot-warn { background: var(--warning); }
+.dot-bad { background: var(--negative); }
+.dot-info { background: var(--info); }
+
+.kpi { padding: 1.1rem 1.25rem; }
+.kpi-label { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+.kpi-value { font-size: 1.85rem; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; margin-top: 0.25rem; }
+.kpi-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.5rem; margin-top: 0.35rem; font-size: 0.78rem; color: var(--muted); }
+
+.delta { display: inline-flex; align-items: center; gap: 0.15rem; padding: 0.05rem 0.45rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+.delta-up { color: var(--positive); background: var(--positive-soft); }
+.delta-down { color: var(--negative); background: var(--negative-soft); }
+.delta-flat { color: var(--muted); background: var(--surface-2); }
+
+.chart { width: 100%; height: auto; max-height: 260px; display: block; }
+.chart .bar { fill: var(--chart-bar); }
+.chart .bar-current { fill: var(--chart-bar-current); }
+.chart .bar-future { fill: none; stroke: var(--chart-grid); stroke-dasharray: 3 3; }
+.chart .grid { stroke: var(--chart-grid); stroke-width: 1; }
+.chart .axis { font-size: 11px; fill: var(--muted); }
+.chart-summary { font-size: 0.8rem; color: var(--muted); }
+
+.attention-list { list-style: none; margin: 0; padding: 0; }
+.attention-item { display: flex; gap: 0.75rem; padding: 0.8rem 1.25rem; border-top: 1px solid var(--border); text-decoration: none; color: inherit; }
+.attention-item:first-child { border-top: 0; }
+.attention-item:hover { background: var(--surface-2); color: inherit; }
+.attention-item .dot { margin-top: 0.45rem; }
+.attention-title { font-weight: 600; font-size: 0.9rem; }
+.attention-detail { font-size: 0.8rem; color: var(--muted); word-break: break-word; }
+.attention-go { margin-left: auto; color: var(--muted); align-self: center; }
+.all-clear { display: flex; align-items: center; gap: 0.75rem; padding: 1.5rem 1.25rem; }
+.all-clear-icon { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--positive-soft); color: var(--positive); }
+.all-clear-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+.share { width: 100%; height: 6px; display: block; }
+.share .track { fill: var(--surface-2); }
+.share .fill { fill: var(--chart-bar-current); }
+.product-title { font-weight: 500; max-width: min(22rem, 48vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.product-sku { font-size: 0.75rem; color: var(--muted); }
+
+.stat-row { display: flex; justify-content: space-between; padding: 0.4rem 0; font-size: 0.875rem; border-top: 1px solid var(--border); }
+.stat-row:first-of-type { border-top: 0; }
+.stat-row .label { color: var(--muted); }
+.big-number { font-size: 1.6rem; font-weight: 650; letter-spacing: -0.02em; }
+
+.sync-list { list-style: none; margin: 0; padding: 0; font-size: 0.85rem; }
+.sync-list li { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0; }
+.sync-list .when { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
+
+/* ---------- Shared components ---------- */
 .search-input { max-width: 20rem; }
+/* Long values (Amazon titles can be 200+ characters) are cut with an ellipsis; the full text is in the tooltip. */
+.cell-truncate { max-width: min(28rem, 40vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .raw-line { font-family: var(--bs-font-monospace); font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; }
-
-/* ---- Sign-in ---- */
-.login-wrapper { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--aerai-sidebar-bg); }
-.login-card { width: 100%; max-width: 24rem; }
-.login-brand { color: var(--aerai-brand); font-weight: 700; }
 
 /* ASP.NET always renders the validation summary container; hide it until it actually has errors,
    otherwise its alert styling shows an empty red box on first load. */
 .validation-summary-valid { display: none; }
+
+/* ---------- Sign-in ---------- */
+.login-wrapper { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--sidebar-bg); padding: 1rem; }
+.login-card { width: 100%; max-width: 24rem; }
+.login-brand { color: var(--brand); font-weight: 700; }

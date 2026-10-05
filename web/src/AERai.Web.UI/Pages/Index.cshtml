@@ -1,129 +1,293 @@
 @page
+@using System.Globalization
+@using AERai.Web.Application.Dashboard
+@using AERai.Web.Domain.Ingestion
 @model IndexModel
 @{
     ViewData["Title"] = "Dashboard";
     var s = Model.Snapshot;
+    var c = s.Currency;
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var orders = s.Sync.FirstOrDefault(x => x.ReportType == AmazonReportType.Orders);
 
-    // Trend chart geometry (SVG units). Bars are scaled to the busiest day in the window.
-    const int chartWidth = 700, chartHeight = 140, labelHeight = 16;
-    var maxRevenue = s.Trend.Count == 0 ? 0m : s.Trend.Max(t => t.Revenue);
-    var slot = s.Trend.Count == 0 ? 0d : chartWidth / (double)s.Trend.Count;
+    // Chart geometry in SVG units; bars scale to the busiest bucket. Gridlines at 50% and 100%.
+    const double width = 720, height = 190, top = 12, bottom = 22;
+    var plot = height - top - bottom;
+    var max = s.Chart.Count == 0 ? 0m : s.Chart.Max(p => p.Revenue);
+    var slot = s.Chart.Count == 0 ? 0d : width / s.Chart.Count;
+    var labelEvery = s.Granularity == ChartGranularity.Hour ? 3 : s.Chart.Count > 14 ? 5 : 1;
+    var currentIndex = s.Granularity == ChartGranularity.Hour
+        ? s.Chart.ToList().FindLastIndex(p => !p.IsFuture)
+        : s.Chart.Count - 1;
+
+    string Label(ChartPoint p) => s.Granularity == ChartGranularity.Hour
+        ? p.LocalStart.ToString("h tt", en).ToLowerInvariant()
+        : s.Chart.Count > 7 ? p.LocalStart.ToString("MMM d", en) : p.LocalStart.ToString("ddd", en);
+    string F(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
 }
 
-<div class="row g-3 mb-4">
-    <div class="col-sm-6 col-xl-3">
-        <div class="card kpi-card h-100"><div class="card-body">
-            <div class="kpi-label">Revenue today (UTC)</div>
-            <div class="kpi-value">@s.TodayRevenue.ToString("C")</div>
-        </div></div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card kpi-card h-100"><div class="card-body">
-            <div class="kpi-label">Units today</div>
-            <div class="kpi-value">@s.TodayUnits.ToString("N0")</div>
-        </div></div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card kpi-card h-100"><div class="card-body">
-            <div class="kpi-label">Revenue, last 7 days</div>
-            <div class="kpi-value">@s.Last7DaysRevenue.ToString("C")</div>
-            @if (s.WeekOverWeekChange is { } change)
-            {
-                <div class="small @(change >= 0 ? "text-success" : "text-danger")">@change.ToString("+0.0%;-0.0%") vs prior 7 days</div>
-            }
-        </div></div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card kpi-card h-100"><div class="card-body">
-            <div class="kpi-label">SKUs at risk</div>
-            <div class="kpi-value @(s.AtRisk.Count > 0 ? "text-danger" : "")">@s.AtRisk.Count</div>
-            <div class="small text-body-secondary">≤ @s.AtRiskThresholdDays.ToString("0") days of supply</div>
-        </div></div>
-    </div>
+<div class="dash-header">
+    <nav class="segmented" aria-label="Period">
+        <a asp-page="/Index" asp-route-period="today" class="@(s.Period == DashboardPeriod.Today ? "active" : "")">Today</a>
+        <a asp-page="/Index" asp-route-period="7d" class="@(s.Period == DashboardPeriod.Last7Days ? "active" : "")">7 days</a>
+        <a asp-page="/Index" asp-route-period="30d" class="@(s.Period == DashboardPeriod.Last30Days ? "active" : "")">30 days</a>
+    </nav>
+    <span class="freshness" title="Times shown in @s.TimeZoneId">
+        @if (orders is not null)
+        {
+            <span class="dot @DashboardFormat.SyncDot(orders, s.GeneratedAt, Model.StaleAfter)"></span>
+            <span>Sales updated @DashboardFormat.Ago(orders.LastSuccessAt, s.GeneratedAt)</span>
+        }
+        else
+        {
+            <span class="dot dot-warn"></span>
+            <span>Sales not synced yet</span>
+        }
+        <span aria-hidden="true">·</span><span>@s.TimeZoneId.Split('/').Last().Replace('_', ' ') time</span>
+    </span>
 </div>
 
-<div class="card mb-4">
-    <div class="card-header">Revenue — last @s.Trend.Count days</div>
-    <div class="card-body">
-        <svg class="trend-chart" viewBox="0 0 @chartWidth @(chartHeight + labelHeight)" preserveAspectRatio="none" role="img" aria-label="Daily revenue trend">
-            @for (var i = 0; i < s.Trend.Count; i++)
+@* ---------- Headline numbers ---------- *@
+<div class="row g-3 mb-3">
+    @{
+        var tiles = new (string Label, string Value, decimal? Change, string? Foot)[]
+        {
+            ("Revenue", DashboardFormat.Money(s.Revenue.Current, c), s.Revenue.Change, null),
+            ("Orders", s.Orders.Current.ToString("N0", en), s.Orders.Change, s.PendingOrders > 0 ? $"{s.PendingOrders:N0} pending" : null),
+            ("Units sold", s.Units.Current.ToString("N0", en), s.Units.Change, null),
+            ("Avg. order value", DashboardFormat.Money(s.AverageOrderValue.Current, c), s.AverageOrderValue.Change, null),
+        };
+    }
+    @foreach (var tile in tiles)
+    {
+        <div class="col-6 col-xl-3">
+            <div class="card h-100"><div class="kpi">
+                <div class="kpi-label">@tile.Label</div>
+                <div class="kpi-value">@tile.Value</div>
+                <div class="kpi-foot">
+                    <span class="delta @DashboardFormat.DeltaClass(tile.Change)">@DashboardFormat.Delta(tile.Change)</span>
+                    <span>@(tile.Foot ?? (s.ComparisonAvailable ? DashboardFormat.ComparisonLabel(s.Period) : "no earlier data to compare"))</span>
+                </div>
+            </div></div>
+        </div>
+    }
+</div>
+
+<div class="row g-3 mb-3">
+    @* ---------- Sales chart ---------- *@
+    <div class="col-xl-8">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Sales @(s.Granularity == ChartGranularity.Hour ? "by hour" : "by day")</span>
+                <span class="chart-summary">Peak @DashboardFormat.Money(max, c)</span>
+            </div>
+            <div class="card-body">
+                @if (max == 0)
+                {
+                    <p class="text-muted-token mb-0 py-5 text-center">No sales in this period yet.</p>
+                }
+                else
+                {
+                    <svg class="chart" viewBox="0 0 @F(width) @F(height)" role="img" aria-label="Revenue by @(s.Granularity == ChartGranularity.Hour ? "hour" : "day")">
+                        <line class="grid" x1="0" x2="@F(width)" y1="@F(top)" y2="@F(top)" />
+                        <line class="grid" x1="0" x2="@F(width)" y1="@F(top + plot / 2)" y2="@F(top + plot / 2)" />
+                        <line class="grid" x1="0" x2="@F(width)" y1="@F(top + plot)" y2="@F(top + plot)" />
+                        @for (var i = 0; i < s.Chart.Count; i++)
+                        {
+                            var p = s.Chart[i];
+                            var h = (double)(p.Revenue / max) * plot;
+                            var x = i * slot + slot * 0.15;
+                            var w = slot * 0.7;
+                            if (p.IsFuture)
+                            {
+                                <rect class="bar-future" x="@F(x)" y="@F(top + plot - 2)" width="@F(w)" height="2" />
+                            }
+                            else
+                            {
+                                <rect class="@(i == currentIndex ? "bar-current" : "bar")" x="@F(x)" y="@F(top + plot - Math.Max(h, 1))" width="@F(w)" height="@F(Math.Max(h, 1))" rx="2">
+                                    <title>@Label(p): @DashboardFormat.Money(p.Revenue, c) · @p.Orders orders · @p.Units units</title>
+                                </rect>
+                            }
+                            if (i % labelEvery == 0 || i == s.Chart.Count - 1)
+                            {
+                                // Edge labels anchor inward so they are never clipped by the chart bounds.
+                                var anchor = i == 0 ? "start" : i == s.Chart.Count - 1 ? "end" : "middle";
+                                var labelX = i == 0 ? x : i == s.Chart.Count - 1 ? x + w : i * slot + slot / 2;
+                                @* Razor reserves <text>, so the SVG element is emitted as a literal markup line. *@
+                                @:<text class="axis" x="@F(labelX)" y="@F(height - 6)" text-anchor="@anchor">@Label(p)</text>
+                            }
+                        }
+                    </svg>
+                }
+            </div>
+        </div>
+    </div>
+
+    @* ---------- Needs attention ---------- *@
+    <div class="col-xl-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between">
+                <span>Needs attention</span>
+                @if (s.Attention.Count > 0)
+                {
+                    <span class="text-muted-token fw-normal">@s.Attention.Count</span>
+                }
+            </div>
+            @if (s.Attention.Count == 0)
             {
-                var day = s.Trend[i];
-                var height = maxRevenue == 0 ? 0 : (double)(day.Revenue / maxRevenue) * chartHeight;
-                var x = i * slot + slot * 0.15;
-                <rect class="@(day.Date == s.Today ? "bar-today" : "bar")" x="@x.ToString("0.#")" y="@((chartHeight - height).ToString("0.#"))"
-                      width="@((slot * 0.7).ToString("0.#"))" height="@height.ToString("0.#")">
-                    <title>@day.Date.ToString("MMM d"): @day.Revenue.ToString("C") (@day.Units units)</title>
-                </rect>
-                @* Razor reserves &lt;text&gt;, so the SVG element is emitted as a literal markup line. *@
-                @:<text class="axis-label" x="@((i * slot + slot / 2).ToString("0.#"))" y="@(chartHeight + labelHeight - 3)" text-anchor="middle">@day.Date.ToString("M/d")</text>
+                <div class="all-clear">
+                    <span class="all-clear-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg></span>
+                    <div><div class="fw-semibold">All clear</div><div class="text-muted-token small">Stock, syncs, and data look healthy.</div></div>
+                </div>
             }
-        </svg>
+            else
+            {
+                <ul class="attention-list">
+                    @foreach (var item in s.Attention)
+                    {
+                        <li>
+                            <a class="attention-item" asp-page="@DashboardFormat.PageFor(item.Target)">
+                                <span class="dot @DashboardFormat.SeverityDot(item.Severity)" aria-label="@item.Severity"></span>
+                                <span>
+                                    <span class="attention-title d-block">@item.Title</span>
+                                    <span class="attention-detail d-block">@item.Detail</span>
+                                </span>
+                                <span class="attention-go" aria-hidden="true">›</span>
+                            </a>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
     </div>
 </div>
 
 <div class="row g-3">
-    <div class="col-xl-7">
+    @* ---------- Best sellers ---------- *@
+    <div class="col-xl-8">
         <div class="card h-100">
-            <div class="card-header">Today's orders by SKU</div>
+            <div class="card-header d-flex justify-content-between">
+                <span>Best sellers</span>
+                <a asp-page="/Orders/Index" class="small fw-normal">All orders</a>
+            </div>
             <div class="card-body p-0">
-                @if (s.TodayBySku.Count == 0)
+                @if (s.TopProducts.Count == 0)
                 {
-                    <p class="text-body-secondary p-3 mb-0">No sales recorded today yet.</p>
+                    <p class="text-muted-token p-3 mb-0">No sales in this period yet.</p>
                 }
                 else
                 {
-                    <table class="table table-sm table-hover mb-0">
-                        <thead><tr><th>SKU</th><th>Title</th><th class="text-end">Units</th><th class="text-end">Revenue</th></tr></thead>
+                    <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead><tr><th>Product</th><th class="text-end">Units</th><th class="text-end">Revenue</th><th class="d-none d-md-table-cell">Share</th><th class="text-end">Change</th></tr></thead>
                         <tbody>
-                        @foreach (var row in s.TodayBySku)
+                        @foreach (var p in s.TopProducts)
                         {
-                            <tr><td>@row.Sku</td><td class="text-truncate">@row.Title</td><td class="text-end">@row.Units</td><td class="text-end">@row.Revenue.ToString("C")</td></tr>
+                            <tr>
+                                <td>
+                                    <div class="product-title" title="@p.Title">@(p.Title ?? p.Sku)</div>
+                                    <div class="product-sku">@p.Sku</div>
+                                </td>
+                                <td class="text-end">@p.Units.ToString("N0", en)</td>
+                                <td class="text-end fw-semibold">@DashboardFormat.Money(p.Revenue, c)</td>
+                                <td class="d-none d-md-table-cell">
+                                    <svg class="share" viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label="@p.Share.ToString("P0", en) of revenue">
+                                        <rect class="track" x="0" y="0" width="100" height="6" rx="3" />
+                                        <rect class="fill" x="0" y="0" width="@F((double)(p.Share * 100))" height="6" rx="3" />
+                                    </svg>
+                                    <span class="product-sku">@p.Share.ToString("P0", en)</span>
+                                </td>
+                                <td class="text-end"><span class="delta @DashboardFormat.DeltaClass(p.Change)">@DashboardFormat.Delta(p.Change)</span></td>
+                            </tr>
                         }
                         </tbody>
                     </table>
+                    </div>
                 }
             </div>
         </div>
     </div>
-    <div class="col-xl-5">
-        <div class="card mb-3">
+
+    <div class="col-xl-4 d-flex flex-column gap-3">
+        @* ---------- Inventory ---------- *@
+        <div class="card">
             <div class="card-header d-flex justify-content-between">
-                <span>Inventory at risk</span>
-                <a asp-page="/Inventory/Index" class="small">All inventory</a>
+                <span>Inventory</span>
+                <a asp-page="/Inventory/Index" class="small fw-normal">Details</a>
             </div>
-            <div class="card-body p-0">
-                @if (s.AtRisk.Count == 0)
+            <div class="card-body">
+                @if (s.Inventory.SkusTotal == 0)
                 {
-                    <p class="text-body-secondary p-3 mb-0">No SKUs below @s.AtRiskThresholdDays.ToString("0") days of supply.</p>
+                    <p class="text-muted-token mb-0">No inventory synced yet.</p>
                 }
                 else
                 {
-                    <table class="table table-sm mb-0">
-                        <thead><tr><th>SKU</th><th class="text-end">Available</th><th class="text-end">Days of supply</th></tr></thead>
-                        <tbody>
-                        @foreach (var p in s.AtRisk)
-                        {
-                            <tr><td>@p.Sku</td><td class="text-end">@p.Available</td><td class="text-end text-danger">@p.DaysOfSupply?.ToString("0.0")</td></tr>
-                        }
-                        </tbody>
-                    </table>
+                    <div class="d-flex align-items-baseline gap-2 mb-2">
+                        <span class="big-number">@s.Inventory.SkusInStock</span>
+                        <span class="text-muted-token">of @s.Inventory.SkusTotal SKUs in stock</span>
+                    </div>
+                    <div class="stat-row"><span class="label">Available units</span><span>@s.Inventory.AvailableUnits.ToString("N0", en)</span></div>
+                    <div class="stat-row"><span class="label">Inbound units</span><span>@s.Inventory.InboundUnits.ToString("N0", en)</span></div>
+                    <div class="stat-row">
+                        <span class="label">Out of stock &amp; selling</span>
+                        <span class="@(s.Inventory.OutOfStockSelling > 0 ? "text-bad fw-semibold" : "")">@s.Inventory.OutOfStockSelling</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="label">Low stock</span>
+                        <span class="@(s.Inventory.LowStock > 0 ? "text-warn fw-semibold" : "")">@s.Inventory.LowStock</span>
+                    </div>
                 }
             </div>
         </div>
+
+        @* ---------- Latest payout ---------- *@
         <div class="card">
-            <div class="card-header">Last import</div>
+            <div class="card-header d-flex justify-content-between">
+                <span>Latest payout</span>
+                <a asp-page="/Settlements/Index" class="small fw-normal">Settlements</a>
+            </div>
             <div class="card-body">
-                @if (s.LatestBatch is { } b)
+                @if (s.LatestPayout is { } pay)
                 {
-                    <div><strong>@b.Source</strong> · @b.FileName</div>
-                    <div class="small text-body-secondary">@b.UploadedAt.ToString("u") by @b.UploadedBy</div>
-                    <div class="mt-2"><partial name="_BatchStatusBadge" model="b.Status" /></div>
+                    <div class="big-number">@DashboardFormat.Money(pay.Net, c)</div>
+                    <div class="text-muted-token small mb-2">
+                        @(pay.PeriodStart?.ToString("MMM d", en)) – @(pay.PeriodEnd?.ToString("MMM d", en))
+                    </div>
+                    <div class="stat-row"><span class="label">Sales</span><span>@DashboardFormat.Money(pay.Sales, c)</span></div>
+                    <div class="stat-row">
+                        <span class="label">Amazon fees @(pay.FeeRate is { } rate ? $"({rate.ToString("P0", en)})" : "")</span>
+                        <span>@DashboardFormat.Money(pay.Fees, c)</span>
+                    </div>
+                    <div class="stat-row"><span class="label">Refunds</span><span>@DashboardFormat.Money(pay.Refunds, c)</span></div>
                 }
                 else
                 {
-                    <p class="text-body-secondary mb-0">Nothing imported yet.</p>
+                    <p class="text-muted-token mb-0">No @c settlements synced yet.</p>
                 }
+            </div>
+        </div>
+
+        @* ---------- Data sources ---------- *@
+        <div class="card">
+            <div class="card-header d-flex justify-content-between">
+                <span>Data from Amazon</span>
+                <a asp-page="/Tools/Schedules/Index" class="small fw-normal">Sync</a>
+            </div>
+            <div class="card-body py-2">
+                <ul class="sync-list">
+                    @foreach (var source in s.Sync)
+                    {
+                        <li>
+                            <span class="dot @DashboardFormat.SyncDot(source, s.GeneratedAt, Model.StaleAfter)"></span>
+                            <span>@DashboardFormat.ReportLabel(source.ReportType)</span>
+                            @if (!source.IsScheduled)
+                            {
+                                <span class="text-muted-token small">· manual</span>
+                            }
+                            <span class="when">@DashboardFormat.Ago(source.LastSuccessAt, s.GeneratedAt)</span>
+                        </li>
+                    }
+                </ul>
             </div>
         </div>
     </div>

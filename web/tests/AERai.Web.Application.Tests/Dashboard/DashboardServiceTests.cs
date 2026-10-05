@@ -1,5 +1,6 @@
 using AERai.Web.Application.Dashboard;
 using AERai.Web.Application.Tests.Fakes;
+using AERai.Web.Domain.Ingestion;
 using AERai.Web.Domain.Reporting;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -8,84 +9,204 @@ namespace AERai.Web.Application.Tests.Dashboard;
 
 public sealed class DashboardServiceTests
 {
-    private static readonly DateOnly Today = new(2026, 10, 2);
+    // Mon 2026-10-05 15:00 UTC = 11:00 EDT (UTC-4).
+    private static readonly DateTimeOffset Now = new(2026, 10, 5, 15, 0, 0, TimeSpan.Zero);
 
-    private readonly FakeReportingQueries _reporting = new();
-    private readonly FakeImportBatchQueries _batches = new();
+    private readonly FakeDashboardQueries _queries = new();
+    private readonly FakeTimeProvider _clock = new(Now);
 
-    // 23:30 UTC: late enough that a local-time "today" would differ in many US time zones.
-    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 2, 23, 30, 0, TimeSpan.Zero));
+    public DashboardServiceTests()
+    {
+        // Healthy, fresh Orders sync by default so tests only see the attention items they set up.
+        _queries.Sync.Add(new SyncGlance(AmazonReportType.Orders, true, Now.AddMinutes(-10), Now.AddMinutes(-10), SyncRunStatus.Succeeded, null));
+
+        // History covers well over 60 days, so every comparison window is complete unless a test says otherwise.
+        _queries.CoverageStart = Now.AddDays(-90);
+    }
 
     private DashboardService CreateService(DashboardOptions? options = null) =>
-        new(_reporting, _batches, Options.Create(options ?? new DashboardOptions { TrendDays = 14 }), _clock);
+        new(_queries, Options.Create(options ?? new DashboardOptions()), _clock);
 
-    private void AddSale(DateOnly date, string sku, int units, decimal revenue) =>
-        _reporting.DailySales.Add(new DailySalesBySku { SalesDate = date, Sku = sku, Units = units, Revenue = revenue, OrderCount = 1 });
+    private void Sale(DateTimeOffset at, string sku, decimal price, int quantity = 1, string order = "", string status = "Shipped") =>
+        _queries.Lines.Add(new SalesLine
+        {
+            AmazonOrderId = order.Length > 0 ? order : Guid.NewGuid().ToString("N"),
+            PurchaseDate = at,
+            OrderStatus = status,
+            Currency = "USD",
+            Sku = sku,
+            Title = $"Title {sku}",
+            Quantity = quantity,
+            ItemPrice = price,
+        });
+
+    private static DateTimeOffset Eastern(int month, int day, int hour, int minute = 0) =>
+        new(2026, month, day, hour, minute, 0, TimeSpan.FromHours(-4));
 
     [Fact]
-    public async Task GetSnapshotAsync_TodaySales_AggregatesBySkuHighestRevenueFirst()
+    public async Task Today_UsesLocalDayBoundaryNotUtc()
     {
-        AddSale(Today, "A", 1, 10m);
-        AddSale(Today, "B", 2, 40m);
-        AddSale(Today.AddDays(-1), "A", 5, 50m);
+        Sale(Eastern(10, 4, 23, 30), "LATE", 50m);   // 03:30 UTC Oct 5, but Oct 4 locally → yesterday
+        Sale(Eastern(10, 5, 9, 15), "MORNING", 20m);  // today
 
-        var snapshot = await CreateService().GetSnapshotAsync(CancellationToken.None);
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Today, CancellationToken.None);
 
-        Assert.Equal(Today, snapshot.Today);
-        Assert.Equal(3, snapshot.TodayUnits);
-        Assert.Equal(50m, snapshot.TodayRevenue);
-        Assert.Equal(["B", "A"], snapshot.TodayBySku.Select(s => s.Sku));
+        Assert.Equal(20m, snapshot.Revenue.Current);
+        Assert.Equal(Eastern(10, 5, 0), snapshot.WindowStart);
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_GapsInSales_TrendIsZeroFilledAndEndsToday()
+    public async Task Today_ComparesWithYesterdayUpToTheSameTime()
     {
-        AddSale(Today.AddDays(-3), "A", 2, 20m);
+        Sale(Eastern(10, 5, 10), "A", 30m);
+        Sale(Eastern(10, 4, 10), "A", 20m);  // yesterday before 11:00 → counted
+        Sale(Eastern(10, 4, 18), "A", 500m); // yesterday after 11:00 → excluded from the comparison
 
-        var snapshot = await CreateService().GetSnapshotAsync(CancellationToken.None);
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Today, CancellationToken.None);
 
-        Assert.Equal(14, snapshot.Trend.Count);
-        Assert.Equal(Today.AddDays(-13), snapshot.Trend[0].Date);
-        Assert.Equal(Today, snapshot.Trend[^1].Date);
-        Assert.Equal(20m, snapshot.Trend.Single(t => t.Date == Today.AddDays(-3)).Revenue);
-        Assert.Equal(13, snapshot.Trend.Count(t => t.Revenue == 0));
+        Assert.Equal(20m, snapshot.Revenue.Previous);
+        Assert.Equal(0.5m, snapshot.Revenue.Change);
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_TwoWeeksOfSales_ComputesWeekOverWeekChange()
+    public async Task Metrics_CountDistinctOrdersAndAverageOrderValue()
     {
-        AddSale(Today, "A", 1, 150m);               // last 7 days
-        AddSale(Today.AddDays(-6), "A", 1, 50m);    // last 7 days (boundary)
-        AddSale(Today.AddDays(-7), "A", 1, 100m);   // prior 7 days (boundary)
-        AddSale(Today.AddDays(-14), "A", 1, 999m);  // outside both windows
+        Sale(Eastern(10, 5, 8), "A", 10m, 2, order: "O1");
+        Sale(Eastern(10, 5, 8), "B", 30m, 1, order: "O1");
+        Sale(Eastern(10, 5, 9), "A", 20m, 1, order: "O2", status: "Pending");
 
-        var snapshot = await CreateService().GetSnapshotAsync(CancellationToken.None);
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Today, CancellationToken.None);
 
-        Assert.Equal(200m, snapshot.Last7DaysRevenue);
-        Assert.Equal(100m, snapshot.Prior7DaysRevenue);
-        Assert.Equal(1m, snapshot.WeekOverWeekChange);
+        Assert.Equal(60m, snapshot.Revenue.Current);
+        Assert.Equal(2m, snapshot.Orders.Current);
+        Assert.Equal(4m, snapshot.Units.Current);
+        Assert.Equal(30m, snapshot.AverageOrderValue.Current);
+        Assert.Equal(1, snapshot.PendingOrders);
+        Assert.Null(snapshot.Revenue.Change); // Nothing yesterday to compare against.
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_NoPriorWeekRevenue_WeekOverWeekIsNull()
+    public async Task Today_ChartHas24LocalHoursWithLaterHoursMarkedFuture()
     {
-        AddSale(Today, "A", 1, 10m);
+        Sale(Eastern(10, 5, 9, 30), "A", 15m);
 
-        var snapshot = await CreateService().GetSnapshotAsync(CancellationToken.None);
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Today, CancellationToken.None);
 
-        Assert.Null(snapshot.WeekOverWeekChange);
+        Assert.Equal(ChartGranularity.Hour, snapshot.Granularity);
+        Assert.Equal(24, snapshot.Chart.Count);
+        Assert.Equal(15m, snapshot.Chart[9].Revenue);
+        Assert.False(snapshot.Chart[11].IsFuture); // 11:00 is the current hour.
+        Assert.True(snapshot.Chart[12].IsFuture);
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_AtRiskThreshold_ReturnsOnlyPositionsAtOrBelowIt()
+    public async Task SevenDays_HasOneBucketPerLocalDayAndFetchesTheComparisonWindow()
     {
-        _reporting.Positions.Add(new InventoryPosition { Sku = "LOW", DaysOfSupply = 5 });
-        _reporting.Positions.Add(new InventoryPosition { Sku = "EDGE", DaysOfSupply = 21 });
-        _reporting.Positions.Add(new InventoryPosition { Sku = "OK", DaysOfSupply = 60 });
+        Sale(Eastern(9, 29, 12), "A", 10m);  // first day of the window
+        Sale(Eastern(9, 28, 10), "A", 99m);  // day before, before 11:00 → comparison period only
 
-        var snapshot = await CreateService(new DashboardOptions { AtRiskDaysOfSupply = 21 }).GetSnapshotAsync(CancellationToken.None);
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Last7Days, CancellationToken.None);
 
-        Assert.Equal(["LOW", "EDGE"], snapshot.AtRisk.Select(p => p.Sku));
-        Assert.Equal(21m, snapshot.AtRiskThresholdDays);
+        Assert.Equal(7, snapshot.Chart.Count);
+        Assert.Equal(new DateOnly(2026, 9, 29), DateOnly.FromDateTime(snapshot.Chart[0].LocalStart.DateTime));
+        Assert.Equal(10m, snapshot.Revenue.Current);
+        Assert.Equal(99m, snapshot.Revenue.Previous);
+        Assert.Equal(Eastern(9, 22, 0).ToUniversalTime(), _queries.RequestedWindow!.Value.From);
+    }
+
+    [Fact]
+    public async Task TopProducts_RankByRevenueWithShareAndChange()
+    {
+        Sale(Eastern(10, 5, 8), "BIG", 75m);
+        Sale(Eastern(10, 5, 8), "SMALL", 25m);
+        Sale(Eastern(10, 4, 8), "BIG", 50m);
+
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Today, CancellationToken.None);
+
+        Assert.Equal(["BIG", "SMALL"], snapshot.TopProducts.Select(p => p.Sku));
+        Assert.Equal(0.75m, snapshot.TopProducts[0].Share);
+        Assert.Equal(0.5m, snapshot.TopProducts[0].Change);
+        Assert.Null(snapshot.TopProducts[1].Change);
+    }
+
+    [Fact]
+    public async Task Attention_AllHealthy_IsEmpty()
+    {
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Last7Days, CancellationToken.None);
+
+        Assert.Empty(snapshot.Attention);
+    }
+
+    [Fact]
+    public async Task Attention_OrdersCriticalFirstAndNamesSkus()
+    {
+        _queries.MissingCost.AddRange(["C1", "C2", "C3", "C4"]);
+        _queries.Positions.Add(new InventoryPosition { Sku = "OUT", Available = 0, UnitsSold30d = 12 });
+        _queries.Positions.Add(new InventoryPosition { Sku = "LOW", Available = 10, UnitsSold30d = 30, DaysOfSupply = 10 });
+        _queries.Positions.Add(new InventoryPosition { Sku = "DEAD", Available = 0, UnitsSold30d = 0 });
+        _queries.AwaitingPromotion = 2;
+
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Last7Days, CancellationToken.None);
+
+        Assert.Equal(
+            [AttentionSeverity.Critical, AttentionSeverity.Warning, AttentionSeverity.Warning, AttentionSeverity.Info],
+            snapshot.Attention.Select(a => a.Severity));
+        Assert.Equal("1 SKU out of stock", snapshot.Attention[0].Title); // DEAD isn't selling, so it isn't urgent.
+        Assert.Contains("OUT", snapshot.Attention[0].Detail, StringComparison.Ordinal);
+        Assert.Contains("C1, C2, C3 +1 more", snapshot.Attention[3].Detail, StringComparison.Ordinal);
+        Assert.Equal((1, 1), (snapshot.Inventory.OutOfStockSelling, snapshot.Inventory.LowStock));
+    }
+
+    [Fact]
+    public async Task Attention_FailedSyncAndStaleSales()
+    {
+        _queries.Sync.Clear();
+        _queries.Sync.Add(new SyncGlance(AmazonReportType.Orders, true, Now.AddHours(-30), Now.AddHours(-1), SyncRunStatus.Failed, "HTTP 403"));
+
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Last7Days, CancellationToken.None);
+
+        Assert.Equal("Orders sync failed", snapshot.Attention[0].Title);
+        Assert.Equal("HTTP 403", snapshot.Attention[0].Detail);
+        Assert.Equal("Sales data is 30 hours old", snapshot.Attention[1].Title);
+    }
+
+    [Fact]
+    public async Task Attention_PeriodStartsBeforeSyncedHistory_FlagsIncompleteTotals()
+    {
+        _queries.CoverageStart = Eastern(9, 28, 10).ToUniversalTime();
+
+        var thirtyDays = await CreateService().GetSnapshotAsync(DashboardPeriod.Last30Days, CancellationToken.None);
+        var today = await CreateService().GetSnapshotAsync(DashboardPeriod.Today, CancellationToken.None);
+
+        Assert.Contains(thirtyDays.Attention, a => a.Title == "Sales before Sep 28 not synced yet");
+        Assert.DoesNotContain(today.Attention, a => a.Title.StartsWith("Sales before", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ComparisonWindowNotFullySynced_ShowsNoChangeInsteadOfMisleadingPercentages()
+    {
+        // History starts Sep 28 10:00 local; the 7-day comparison window starts Sep 22.
+        _queries.CoverageStart = Eastern(9, 28, 10).ToUniversalTime();
+        Sale(Eastern(10, 5, 9), "A", 100m);
+        Sale(Eastern(9, 28, 9), "A", 5m); // partial day inside the uncovered comparison window
+
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Last7Days, CancellationToken.None);
+
+        Assert.False(snapshot.ComparisonAvailable);
+        Assert.Contains(snapshot.Attention, a => a.Title == "Backfill Orders to compare with earlier periods");
+        Assert.Null(snapshot.Revenue.Change);
+        Assert.Null(snapshot.TopProducts[0].Change);
+        Assert.Equal(100m, snapshot.Revenue.Current);
+    }
+
+    [Fact]
+    public async Task LatestPayout_ComputesFeeRate()
+    {
+        _queries.LatestSettlement = new SettlementSummary { SettlementId = "S", Currency = "USD", Sales = 1000m, Fees = -400m, Refunds = -10m, Net = 590m };
+
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Last7Days, CancellationToken.None);
+
+        Assert.Equal(590m, snapshot.LatestPayout!.Net);
+        Assert.Equal(0.4m, snapshot.LatestPayout.FeeRate);
     }
 }

@@ -57,6 +57,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Ledger of Amazon reports already ingested.</summary>
     public DbSet<IngestedReport> IngestedReports => Set<IngestedReport>();
 
+    /// <summary><c>rpt.vw_SalesLine</c>.</summary>
+    public DbSet<SalesLine> SalesLines => Set<SalesLine>();
+
     /// <summary><c>rpt.vw_DailySalesBySku</c>.</summary>
     public DbSet<DailySalesBySku> DailySalesBySku => Set<DailySalesBySku>();
 

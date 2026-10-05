@@ -70,6 +70,7 @@ public static class DependencyInjection
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IImportBatchQueries, ImportBatchQueries>();
         services.AddScoped<IReportingQueries, ReportingQueries>();
+        services.AddScoped<IDashboardQueries, DashboardQueries>();
         services.AddScoped<IPromotionService, SqlPromotionService>();
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<ISyncScheduleRepository, SyncScheduleRepository>();

@@ -6,6 +6,7 @@
 <partial name="_SearchForm" model="Model.Search" />
 <div class="card">
     <div class="card-body p-0">
+        <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
             <thead>
                 <tr>
@@ -20,8 +21,8 @@
             {
                 <tr>
                     <td>@p.Sku</td>
-                    <td class="text-truncate">@p.Title</td>
-                    <td>@p.SnapshotDate.ToString("yyyy-MM-dd")</td>
+                    <td class="cell-truncate" title="@p.Title">@p.Title</td>
+                    <td class="text-nowrap">@p.SnapshotDate.ToString("yyyy-MM-dd")</td>
                     <td class="text-end">@p.Available.ToString("N0")</td>
                     <td class="text-end">@p.Inbound.ToString("N0")</td>
                     <td class="text-end">@p.Reserved.ToString("N0")</td>
@@ -37,6 +38,7 @@
             }
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 <partial name="_Pager" model="Model.Positions.ToPager(Model.Search)" />

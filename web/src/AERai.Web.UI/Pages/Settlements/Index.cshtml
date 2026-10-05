@@ -6,6 +6,7 @@
 <partial name="_SearchForm" model="Model.Search" />
 <div class="card">
     <div class="card-body p-0">
+        <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
             <thead>
                 <tr><th>Settlement</th><th>Period</th><th class="text-end">Sales</th><th class="text-end">Fees</th><th class="text-end">Refunds</th><th class="text-end">Other</th><th class="text-end">Net payout</th></tr>
@@ -29,6 +30,7 @@
             }
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 <partial name="_Pager" model="Model.Settlements.ToPager(Model.Search)" />

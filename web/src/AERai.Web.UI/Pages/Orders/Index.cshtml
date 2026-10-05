@@ -6,6 +6,7 @@
 <partial name="_SearchForm" model="Model.Search" />
 <div class="card">
     <div class="card-body p-0">
+        <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
             <thead>
                 <tr><th>Order</th><th>Purchased (UTC)</th><th>Status</th><th class="text-end">Lines</th><th class="text-end">Units</th><th class="text-end">Total</th></tr>
@@ -15,7 +16,7 @@
             {
                 <tr>
                     <td>@o.AmazonOrderId</td>
-                    <td>@o.PurchaseDate.ToUniversalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="text-nowrap">@o.PurchaseDate.ToUniversalTime().ToString("yyyy-MM-dd HH:mm")</td>
                     <td>@o.OrderStatus</td>
                     <td class="text-end">@o.LineCount</td>
                     <td class="text-end">@o.Units</td>
@@ -28,6 +29,7 @@
             }
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 <partial name="_Pager" model="Model.Orders.ToPager(Model.Search)" />

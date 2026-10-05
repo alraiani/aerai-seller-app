@@ -5,8 +5,9 @@ namespace AERai.Web.Application.Dashboard;
 /// </summary>
 public interface IDashboardService
 {
-    /// <summary>Computes the current dashboard snapshot.</summary>
-    /// <returns>The snapshot.</returns>
+    /// <summary>Computes the dashboard for a period.</summary>
+    /// <param name="period">Window to summarize.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken);
+    /// <returns>The snapshot.</returns>
+    Task<DashboardSnapshot> GetSnapshotAsync(DashboardPeriod period, CancellationToken cancellationToken);
 }

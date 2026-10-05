@@ -69,6 +69,16 @@ Integration tests (`tests/AERai.Web.Infrastructure.Tests`) run only when `AERAI_
 
 ASP.NET Core Identity, cookie auth, no self-registration. Roles: `Admin` (users + everything), `Operator` (imports, promotion, Amazon sync schedules, COGS edits), `Viewer` (read-only). Every page requires login by default; `Account/Login` is the only anonymous page. `/Tools` requires Operator, `/Admin` requires Admin.
 
+## Dashboard & UI conventions
+
+- **Dashboard rules live in `DashboardService`** (Application, unit-tested); `IDashboardQueries` only returns rows (`rpt.vw_SalesLine`, inventory positions, settlements, sync health). Pages format, never compute.
+- **Local business time**: days/hours use `Dashboard:TimeZoneId` (default `America/New_York`), not UTC. Comparisons use the same elapsed time ("today so far" vs "yesterday until now").
+- **Honest comparisons**: if synced Orders history (earliest successful run's `DataStart`) doesn't cover the whole comparison window, changes are suppressed (`ComparisonAvailable = false`) instead of showing misleading percentages.
+- **One currency**: the dashboard reports in `Dashboard:Currency` (USD); CAD/MXN settlements are never summed with it.
+- **Theme**: Light / Dark / System via `wwwroot/js/theme.js` (loaded in `<head>` to avoid a flash; choice in localStorage). Colors are CSS tokens in `site.css` defined per `[data-bs-theme]`; components must use tokens, never hard-coded colors. No inline styles or scripts (CSP) — charts are SVG with attribute geometry and token-colored classes.
+- **Responsive**: tables go inside `.table-responsive`; long Amazon titles use `.cell-truncate` + `title` tooltip. The sidebar collapses behind a CSS-only Menu toggle under 768px.
+- **Razor gotchas**: inside a C# block only the first element on a line is markup — put sibling elements on separate lines. After any Razor compile error, other pages may report bogus errors (e.g. on `<partial model=...>`) from stale source-generator state: run `dotnet build-server shutdown`, delete `src/AERai.Web.UI/obj`, rebuild.
+
 ## Secrets & configuration
 
 - Never commit secrets. Local: `web/.env` (gitignored, copied from `.env.example`) for Docker, `dotnet user-secrets` for the UI project.
