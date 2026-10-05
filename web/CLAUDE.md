@@ -72,6 +72,7 @@ ASP.NET Core Identity, cookie auth, no self-registration. Roles: `Admin` (users 
 ## Secrets & configuration
 
 - Never commit secrets. Local: `web/.env` (gitignored, copied from `.env.example`) for Docker, `dotnet user-secrets` for the UI project.
+- Amazon credentials: `SpApi:ClientId`, `SpApi:ClientSecret`, `SpApi:RefreshToken` (used now) and `AmazonAds:ClientId`, `AmazonAds:ClientSecret`, `AmazonAds:RefreshToken`, `AmazonAds:ProfileId` (reserved for the upcoming Ads integration; not read by code yet). Locally set them with `scripts/set-spapi-secrets.sh` (hidden prompts → user-secrets); in Azure they are Key Vault secrets named with `--` (e.g. `AmazonAds--RefreshToken`).
 - Connection string key: `ConnectionStrings:Sql`. Raw storage: `ConnectionStrings:RawStorage` (`UseDevelopmentStorage=true` for Azurite, set in `appsettings.Development.json`) or, in Azure, `RawStorage:ServiceUri` with managed identity (storage account has shared keys disabled). Dev admin seed: `Seed:AdminEmail` / `Seed:AdminPassword` (only seeded when both are set).
 - Azure: Key Vault via managed identity (`KeyVault:Uri`), Azure SQL with Entra-only auth (managed identity, no SQL password).
 

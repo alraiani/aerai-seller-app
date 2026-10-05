@@ -28,8 +28,10 @@ dotnet run --project src/AERai.Web.UI --launch-profile http   # http://localhost
 Development applies migrations and seeds roles, the admin, and three (disabled) Amazon sync schedules on
 startup. Locally `SpApi:Mode` is **Simulated**: **Tools → Amazon sync → Run now** pulls realistic generated
 reports through the whole pipeline without Amazon credentials. For real data run
-`scripts/set-spapi-secrets.sh`: it prompts (hidden input) for the LWA client id, client secret, and refresh
-token, stores them in user-secrets, and switches local runs to Live. `scripts/set-spapi-secrets.sh --simulated`
+`scripts/set-spapi-secrets.sh`: it prompts (hidden input) for the SP-API LWA client id, client secret, and
+refresh token, and optionally the Amazon Ads API credentials and profile id, stores them in user-secrets
+(`~/.microsoft/usersecrets/<UserSecretsId>/secrets.json`, outside the repo), and switches local runs to Live.
+Press Enter to skip any prompt; skipped values keep what is already stored. `scripts/set-spapi-secrets.sh --simulated`
 switches back. Then sign in, go to
 **Tools → Import data**, upload the files in `samples/`, and **Promote** each batch. Each batch page
 shows its raw file's blob path and SHA-256, and can **Re-stage from raw file** into a new batch.
