@@ -18,7 +18,7 @@ ASP.NET Core Identity · Azure Blob Storage (Azurite locally) · Azure App Servi
 ```bash
 cd web
 cp .env.example .env                 # set MSSQL_SA_PASSWORD
-docker compose up -d                 # SQL Server + Azurite (local blob storage)
+docker compose up -d                 # SQL Server + Azurite (blob storage) + Mailpit (email inbox: http://localhost:8025)
 scripts/set-local-secrets.sh          # answer "y" to the database prompt, Enter for defaults
 dotnet user-secrets --project src/AERai.Web.UI set "Seed:AdminEmail" "admin@aeraigroup.com"
 dotnet user-secrets --project src/AERai.Web.UI set "Seed:AdminPassword" "<12+ chars, upper, lower, digit>"
@@ -47,14 +47,15 @@ Containerized app as well: `docker compose --profile app up -d --build` → http
 
 ```bash
 dotnet test AERai.Web.slnx                                                      # SQL tests skip
-AERAI_TEST_SQL="Server=localhost,1433;User Id=sa;Password=<pw>;TrustServerCertificate=True" AERAI_TEST_BLOB="UseDevelopmentStorage=true" dotnet test AERai.Web.slnx
+AERAI_TEST_SQL="Server=localhost,1433;User Id=sa;Password=<pw>;TrustServerCertificate=True" AERAI_TEST_BLOB="UseDevelopmentStorage=true" AERAI_TEST_MAILPIT="http://localhost:8025/" dotnet test AERai.Web.slnx
 ```
 
 ## Pages
 
 | Page | Who | Reads |
 |---|---|---|
-| Sign in | anyone | — |
+| Sign in, Forgot / Reset password | anyone | `auth.*` (reset links are emailed; locally they land in Mailpit) |
+| Change password | any signed-in user | `auth.*` |
 | Dashboard | all roles | `rpt.vw_DailySalesBySku`, `rpt.vw_InventoryPosition`, `stg.ImportBatch` |
 | Inventory | all roles | `rpt.vw_InventoryPosition` |
 | Orders | all roles | `rpt.vw_OrderSummary` |

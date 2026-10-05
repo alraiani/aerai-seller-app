@@ -71,6 +71,9 @@ public sealed class SqlDatabaseFixture : IAsyncLifetime
 
         await using var scope = _services.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+
+        // Same startup routine as the app (roles, default schedules), so Identity tests can assign roles.
+        await _services.InitializeDatabaseAsync(applyMigrations: false);
     }
 
     public async Task DisposeAsync()

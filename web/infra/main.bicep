@@ -35,6 +35,15 @@ param sqlAdminLogin string
 @description('Object ID of that Entra ID user or group.')
 param sqlAdminObjectId string
 
+@description('SMTP host for password-reset email, e.g. smtp.azurecomm.net (Azure Communication Services). Empty disables email.')
+param emailHost string = ''
+
+@description('SMTP user name. The password goes in Key Vault as the secret Email--Password.')
+param emailUserName string = ''
+
+@description('Sender address for outgoing email (must be a verified sender at the email provider).')
+param emailFromAddress string = 'no-reply@aeraigroup.com'
+
 @description('App Service plan SKU.')
 param appServiceSku string = 'B1'
 
@@ -85,6 +94,10 @@ module web 'modules/appService.bicep' = {
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     keyVaultUri: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/'
     rawStorageServiceUri: 'https://${storageAccountName}.blob.${environment().suffixes.storage}/'
+    publicBaseUrl: bindCustomDomain ? 'https://${customHostname}' : 'https://app-${resourceSuffix}.azurewebsites.net'
+    emailHost: emailHost
+    emailUserName: emailUserName
+    emailFromAddress: emailFromAddress
     sqlConnectionString: 'Server=tcp:${sql.outputs.serverFqdn},1433;Database=${sql.outputs.databaseName};Authentication=Active Directory Managed Identity;Encrypt=True;TrustServerCertificate=False;'
   }
 }

@@ -1,12 +1,14 @@
 // Composition root for the AERai web app (seller.aeraigroup.com).
 // This is the only file in the UI project allowed to reference AERai.Web.Infrastructure.
 
+using System.Threading.RateLimiting;
 using AERai.Web.Application;
 using AERai.Web.Application.Security;
 using AERai.Web.Infrastructure;
 using AERai.Web.Infrastructure.Persistence;
 using AERai.Web.Infrastructure.Storage;
 using AERai.Web.UI.Middleware;
+using AERai.Web.UI.Models;
 using Azure.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -58,7 +60,28 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizeFolder("/Admin", AppPolicies.RequireAdmin);
     options.Conventions.AllowAnonymousToPage("/Account/Login");
     options.Conventions.AllowAnonymousToPage("/Account/AccessDenied");
+    options.Conventions.AllowAnonymousToPage("/Account/ForgotPassword");
+    options.Conventions.AllowAnonymousToPage("/Account/ForgotPasswordConfirmation");
+    options.Conventions.AllowAnonymousToPage("/Account/ResetPassword");
     options.Conventions.AllowAnonymousToPage("/Error");
+});
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.ContentType = "text/plain; charset=utf-8";
+        await context.HttpContext.Response.WriteAsync(
+            "Too many password reset requests from this network. Please wait 15 minutes and try again.", cancellationToken);
+    };
+    options.AddPolicy(RateLimits.PasswordReset, context =>
+        HttpMethods.IsPost(context.Request.Method)
+            ? RateLimitPartition.GetFixedWindowLimiter(
+                // Behind App Service the client IP comes from X-Forwarded-For (ASPNETCORE_FORWARDEDHEADERS_ENABLED).
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 })
+            : RateLimitPartition.GetNoLimiter("get"));
 });
 
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("database");
@@ -82,6 +105,7 @@ app.UseRequestLocalization("en-US");
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 // Static assets must be reachable before sign-in (the login page needs its CSS).
 app.MapStaticAssets().AllowAnonymous();

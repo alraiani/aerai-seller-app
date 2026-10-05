@@ -1,7 +1,7 @@
 # Local development stack for the AERai web app.
 #
 #   cp .env.example .env        # then set MSSQL_SA_PASSWORD
-#   docker compose up -d        # SQL Server + Azurite (local blob storage for raw files)
+#   docker compose up -d        # SQL Server + Azurite (raw-file blob storage) + Mailpit (local email inbox)
 #   docker compose --profile app up -d --build   # SQL Server + containerized web app
 #
 # Data lives in named volumes ("sql2025data", "azuritedata"), so it survives container rebuilds.
@@ -45,6 +45,16 @@ services:
       - azuritedata:/data
     restart: unless-stopped
 
+  # Local mail catcher: the app's emails (e.g. password resets) land here instead of real inboxes.
+  # Inbox UI: http://localhost:8025   SMTP: localhost:1025 (no auth, no TLS).
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    restart: unless-stopped
+
   web:
     profiles: ["app"]
     build:
@@ -56,6 +66,8 @@ services:
         condition: service_healthy
       azurite:
         condition: service_started
+      mailpit:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_HTTP_PORTS: "8080"
@@ -64,6 +76,9 @@ services:
       ConnectionStrings__Sql: "Server=sql2025,1433;Database=AERaiSeller;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True"
       # Azurite's well-known development account (public, documented by Microsoft; not a secret).
       ConnectionStrings__RawStorage: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      Email__Host: mailpit
+      Email__Port: "1025"
+      Email__Security: None
       Seed__AdminEmail: ${SEED_ADMIN_EMAIL:-}
       Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:-}
     ports:

@@ -51,6 +51,9 @@ jobs:
 
       # Blob Storage emulator for the raw landing-zone tests. Started as a step (not a service)
       # because it needs command-line flags; the SDK can be newer than the emulator's API version.
+      - name: Start Mailpit (local SMTP + API for email tests)
+        run: docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit:latest
+
       - name: Start Azurite
         run: docker run -d -p 10000:10000 mcr.microsoft.com/azure-storage/azurite:latest azurite-blob --blobHost 0.0.0.0 --loose --skipApiVersionCheck
 
@@ -71,6 +74,7 @@ jobs:
         env:
           AERAI_TEST_SQL: Server=localhost,1433;User Id=sa;Password=Ci-Only-Sql-Pw-1;TrustServerCertificate=True
           AERAI_TEST_BLOB: UseDevelopmentStorage=true
+          AERAI_TEST_MAILPIT: http://localhost:8025/
         run: dotnet test AERai.Web.slnx -c Release --no-build --logger "trx;LogFileName=results.trx"
 
       - name: Validate Bicep

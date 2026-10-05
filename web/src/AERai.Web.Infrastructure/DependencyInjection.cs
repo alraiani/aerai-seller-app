@@ -1,4 +1,6 @@
 using AERai.Web.Application.Abstractions;
+using AERai.Web.Application.Security;
+using AERai.Web.Infrastructure.Email;
 using AERai.Web.Infrastructure.Identity;
 using AERai.Web.Infrastructure.Ingestion;
 using AERai.Web.Infrastructure.Persistence;
@@ -61,6 +63,16 @@ public static class DependencyInjection
             })
             .AddEntityFrameworkStores<AppDbContext>()
             .AddDefaultTokenProviders();
+
+        // Re-check each session's security stamp every minute (Identity's default is 30), so a password
+        // change, reset, or admin lock signs out the account's other sessions within a minute.
+        services.Configure<SecurityStampValidatorOptions>(o => o.ValidationInterval = TimeSpan.FromMinutes(1));
+
+        // Reset links (and other Identity data-protection tokens) expire after an hour, matching the email text.
+        services.Configure<DataProtectionTokenProviderOptions>(o => o.TokenLifespan = PasswordResetService.LinkLifetime);
+
+        services.AddOptions<EmailOptions>().BindConfiguration(EmailOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+        services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
         services.AddOptions<SeedOptions>().BindConfiguration(SeedOptions.SectionName);
 

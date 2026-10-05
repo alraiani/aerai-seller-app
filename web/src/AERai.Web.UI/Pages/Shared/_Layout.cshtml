@@ -59,7 +59,7 @@
                 <h1 class="h5 mb-0">@ViewData["Title"]</h1>
                 <div class="d-flex align-items-center gap-3">
                     <partial name="_ThemeToggle" />
-                    <span class="text-body-secondary small d-none d-md-inline">@User.Identity!.Name</span>
+                    <a asp-page="/Account/ChangePassword" class="text-body-secondary small d-none d-md-inline" title="Change password">@User.Identity!.Name</a>
                     <form method="post" asp-page="/Account/Logout">
                         <button type="submit" class="btn btn-sm btn-outline-secondary">Sign out</button>
                     </form>

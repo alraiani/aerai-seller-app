@@ -1,8 +1,10 @@
+using System.Text;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Security;
 using AERai.Web.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -140,11 +142,92 @@ internal sealed partial class IdentityService(
             await userManager.ResetAccessFailedCountAsync(user).ConfigureAwait(false);
         }
 
-        // Invalidates existing cookies so a lock takes effect on the user's next request.
+        // Invalidates existing cookies: the lock takes effect within the 1-minute security stamp check.
         await userManager.UpdateSecurityStampAsync(user).ConfigureAwait(false);
 
         LogLockoutChanged(userId, locked, actingUserId);
         return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result> ChangePasswordAsync(string userId, string currentPassword, string newPassword, CancellationToken cancellationToken)
+    {
+        var user = await userManager.FindByIdAsync(userId).ConfigureAwait(false);
+        if (user is null)
+        {
+            return Result.Failure("Your account could not be found. Sign in again.");
+        }
+
+        var result = await userManager.ChangePasswordAsync(user, currentPassword, newPassword).ConfigureAwait(false);
+        if (!result.Succeeded)
+        {
+            // Identity's own message for a wrong current password is "Incorrect password."; keep it plain.
+            return Result.Failure(result.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.PasswordMismatch))
+                ? "Your current password is incorrect."
+                : Describe(result));
+        }
+
+        // Changing the password rotates the security stamp, which would sign this session out on its
+        // next check; re-issue this session's cookie so only *other* sessions are signed out.
+        await signInManager.RefreshSignInAsync(user).ConfigureAwait(false);
+        LogPasswordChanged(userId);
+        return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    public async Task<PasswordResetToken?> CreatePasswordResetTokenAsync(string email, CancellationToken cancellationToken)
+    {
+        var user = await userManager.FindByEmailAsync(email).ConfigureAwait(false);
+
+        // Admin-locked accounts (LockoutEnd = MaxValue, see SetLockoutAsync) must not be able to get back
+        // in through a reset; temporary failed-attempt lockouts may, since resetting is the fix for them.
+        if (user is null || user.LockoutEnd == DateTimeOffset.MaxValue)
+        {
+            return null;
+        }
+
+        var token = await userManager.GeneratePasswordResetTokenAsync(user).ConfigureAwait(false);
+
+        // Identity tokens contain characters (+, /, =) that don't survive a URL; Base64Url makes them link-safe.
+        var urlSafe = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+        return new PasswordResetToken(user.Id, user.Email ?? email, user.DisplayName, urlSafe);
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result> ResetPasswordAsync(string userId, string token, string newPassword, CancellationToken cancellationToken)
+    {
+        var user = await userManager.FindByIdAsync(userId).ConfigureAwait(false);
+        if (user is null || user.LockoutEnd == DateTimeOffset.MaxValue || !TryDecode(token, out var decoded))
+        {
+            return Result.Failure(PasswordResetService.InvalidLinkMessage);
+        }
+
+        var result = await userManager.ResetPasswordAsync(user, decoded, newPassword).ConfigureAwait(false);
+        if (!result.Succeeded)
+        {
+            return Result.Failure(result.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.InvalidToken))
+                ? PasswordResetService.InvalidLinkMessage
+                : Describe(result));
+        }
+
+        // Proving control of the mailbox is enough to clear a temporary failed-attempt lockout.
+        await userManager.SetLockoutEndDateAsync(user, null).ConfigureAwait(false);
+        await userManager.ResetAccessFailedCountAsync(user).ConfigureAwait(false);
+        return Result.Success();
+    }
+
+    private static bool TryDecode(string token, out string decoded)
+    {
+        try
+        {
+            decoded = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(token));
+            return true;
+        }
+        catch (FormatException)
+        {
+            decoded = string.Empty;
+            return false;
+        }
     }
 
     /// <summary>Joins Identity's error descriptions into one user-presentable message.</summary>
@@ -162,6 +245,9 @@ internal sealed partial class IdentityService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Created user {UserId} with role {Role}")]
     private partial void LogUserCreated(string userId, string role);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "User {UserId} changed their password")]
+    private partial void LogPasswordChanged(string userId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "User {UserId} lockout set to {Locked} by {ActingUserId}")]
     private partial void LogLockoutChanged(string userId, bool locked, string actingUserId);

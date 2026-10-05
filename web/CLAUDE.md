@@ -63,11 +63,11 @@ Flow: **upload → `stg` (raw) → promote proc (TRY_CONVERT + MERGE, idempotent
 
 Locally SQL Server and Azurite run in Docker (`docker compose up -d`). SQL Server uses the named volume `sql2025data` (fixed name, shared with the equivalent `docker run` command), so data survives container rebuilds.
 
-Integration tests (`tests/AERai.Web.Infrastructure.Tests`) run only when `AERAI_TEST_SQL` (server connection string, no database) and/or `AERAI_TEST_BLOB` (e.g. `UseDevelopmentStorage=true`) are set; each test class creates and drops its own database / container. Without `AERAI_TEST_BLOB`, SQL tests use an in-memory raw store.
+Integration tests (`tests/AERai.Web.Infrastructure.Tests`) run only when `AERAI_TEST_SQL` (server connection string, no database), `AERAI_TEST_BLOB` (e.g. `UseDevelopmentStorage=true`), and/or `AERAI_TEST_MAILPIT` (e.g. `http://localhost:8025/`) are set; each test class creates and drops its own database / container. Without `AERAI_TEST_BLOB`, SQL tests use an in-memory raw store.
 
 ## Auth
 
-ASP.NET Core Identity, cookie auth, no self-registration. Roles: `Admin` (users + everything), `Operator` (imports, promotion, Amazon sync schedules, COGS edits), `Viewer` (read-only). Every page requires login by default; `Account/Login` is the only anonymous page. `/Tools` requires Operator, `/Admin` requires Admin.
+ASP.NET Core Identity (email = username), cookie auth, no self-registration. Roles: `Admin` (users + everything), `Operator` (imports, promotion, Amazon sync schedules, COGS edits), `Viewer` (read-only). Every page requires login by default; `Account/Login` is the only anonymous page. `/Tools` requires Operator, `/Admin` requires Admin.
 
 ## Dashboard & UI conventions
 
@@ -78,6 +78,13 @@ ASP.NET Core Identity, cookie auth, no self-registration. Roles: `Admin` (users 
 - **Theme**: Light / Dark / System via `wwwroot/js/theme.js` (loaded in `<head>` to avoid a flash; choice in localStorage). Colors are CSS tokens in `site.css` defined per `[data-bs-theme]`; components must use tokens, never hard-coded colors. No inline styles or scripts (CSP) — charts are SVG with attribute geometry and token-colored classes.
 - **Responsive**: tables go inside `.table-responsive`; long Amazon titles use `.cell-truncate` + `title` tooltip. The sidebar collapses behind a CSS-only Menu toggle under 768px.
 - **Razor gotchas**: inside a C# block only the first element on a line is markup — put sibling elements on separate lines. After any Razor compile error, other pages may report bogus errors (e.g. on `<partial model=...>`) from stale source-generator state: run `dotnet build-server shutdown`, delete `src/AERai.Web.UI/obj`, rebuild.
+
+### Passwords (change / forgot / reset)
+- **Change password** (`/Account/ChangePassword`, the email link in the top bar) requires the current password; other sessions are signed out within a minute (`SecurityStampValidatorOptions.ValidationInterval = 1 min`), the current one stays signed in.
+- **Forgot → email → reset**: `IPasswordResetService` (Application) owns the rules: the same confirmation whether or not the account exists, no link for admin-locked accounts, single-use Base64Url tokens that expire after `PasswordResetService.LinkLifetime` (1 hour). A successful reset also clears a failed-attempt lockout.
+- **Reset-poisoning guard**: emailed links are built by `PublicUrl` from `App:PublicBaseUrl` (required outside Development), never from the request Host header.
+- **Abuse limit**: forgot-password POSTs are rate-limited to 5 per 15 minutes per client IP (`RateLimits.PasswordReset`).
+- **Email**: `IEmailSender` → `SmtpEmailSender` (MailKit). Locally Mailpit (`docker compose`, inbox at http://localhost:8025); in Azure any SMTP provider via `Email:*` with the password in Key Vault (`Email--Password`). Never log email bodies (they contain reset links). Empty `Email:Host` disables email with a warning.
 
 ## Secrets & configuration
 

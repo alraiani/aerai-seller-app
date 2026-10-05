@@ -25,6 +25,18 @@ param keyVaultUri string
 @description('Blob service endpoint of the raw landing zone (accessed with the managed identity).')
 param rawStorageServiceUri string
 
+@description('Public base URL used in emailed links (custom domain once bound, otherwise the azurewebsites.net host).')
+param publicBaseUrl string
+
+@description('SMTP host for outgoing email (e.g. smtp.azurecomm.net); empty disables email.')
+param emailHost string
+
+@description('SMTP user name; the password is the Key Vault secret Email--Password.')
+param emailUserName string
+
+@description('Sender address for outgoing email.')
+param emailFromAddress string
+
 @description('SQL connection string using managed identity authentication (contains no secret).')
 param sqlConnectionString string
 
@@ -66,6 +78,11 @@ resource site 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'RawStorage__ContainerName', value: 'raw' }
         // SP-API credentials are Key Vault secrets (SpApi--ClientId, SpApi--ClientSecret, SpApi--RefreshToken), never app settings.
         { name: 'SpApi__Mode', value: 'Live' }
+        // Emailed links are built from this, never from the request Host header (prevents reset poisoning).
+        { name: 'App__PublicBaseUrl', value: publicBaseUrl }
+        { name: 'Email__Host', value: emailHost }
+        { name: 'Email__UserName', value: emailUserName }
+        { name: 'Email__FromAddress', value: emailFromAddress }
       ]
       connectionStrings: [
         { name: 'Sql', connectionString: sqlConnectionString, type: 'SQLAzure' }
