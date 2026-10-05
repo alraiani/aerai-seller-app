@@ -77,6 +77,37 @@ public sealed class SyncScheduleServiceTests
     }
 
     [Fact]
+    public async Task BackfillAsync_Orders_QueuesRunWithDays()
+    {
+        var id = (await CreateService().CreateAsync(Input(), "ops", CancellationToken.None)).Value;
+
+        var result = await CreateService().BackfillAsync(id, 30, "ops", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new ManualRunRequest(id, "ops", 30), Assert.Single(_channel.Enqueued));
+    }
+
+    [Fact]
+    public async Task BackfillAsync_FbaInventory_FailsBecauseSnapshotsHaveNoHistory()
+    {
+        var input = Input() with { ReportType = AmazonReportType.FbaInventory };
+        var id = (await CreateService().CreateAsync(input, "ops", CancellationToken.None)).Value;
+
+        Assert.True((await CreateService().BackfillAsync(id, 30, "ops", CancellationToken.None)).IsFailure);
+        Assert.Empty(_channel.Enqueued);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(31)]
+    public async Task BackfillAsync_DaysOutOfRange_Fails(int days)
+    {
+        var id = (await CreateService().CreateAsync(Input(), "ops", CancellationToken.None)).Value;
+
+        Assert.True((await CreateService().BackfillAsync(id, days, "ops", CancellationToken.None)).IsFailure);
+    }
+
+    [Fact]
     public async Task RunNowAsync_NotConnected_FailsWithoutQueueing()
     {
         var id = (await CreateService().CreateAsync(Input(), "ops", CancellationToken.None)).Value;

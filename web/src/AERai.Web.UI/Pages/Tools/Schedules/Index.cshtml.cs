@@ -52,6 +52,23 @@ public sealed class IndexModel(
         return RedirectToPage();
     }
 
+    /// <summary>Queues a run that re-pulls the maximum history Amazon allows (30 days).</summary>
+    /// <param name="id">Schedule id.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect to the run history, or back to the list with an error.</returns>
+    public async Task<IActionResult> OnPostBackfillAsync(int id, CancellationToken cancellationToken)
+    {
+        var result = await scheduleService.BackfillAsync(id, SyncScheduleService.MaxLookbackDays, User.Identity!.Name!, cancellationToken);
+        if (result.IsFailure)
+        {
+            TempData[StatusMessage.Error] = result.Error;
+            return RedirectToPage();
+        }
+
+        TempData[StatusMessage.Success] = $"{SyncScheduleService.MaxLookbackDays}-day backfill queued. Amazon can take several minutes to build a large report.";
+        return RedirectToPage("Runs", new { scheduleId = id });
+    }
+
     /// <summary>Queues an immediate run.</summary>
     /// <param name="id">Schedule id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

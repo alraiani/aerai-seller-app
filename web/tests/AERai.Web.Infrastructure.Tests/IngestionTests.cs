@@ -68,13 +68,27 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     }
 
     [SqlFact]
+    public async Task RecordSuccess_OlderWindow_NeverMovesMarkerBackwards()
+    {
+        var id = await AddScheduleAsync(AmazonReportType.Orders, "marker-forward-only");
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ISyncScheduleRepository>();
+        var later = new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
+
+        await repo.RecordSuccessAsync(id, later, CancellationToken.None);
+        await repo.RecordSuccessAsync(id, later.AddDays(-10), CancellationToken.None);
+
+        Assert.Equal(later, (await repo.GetAsync(id, CancellationToken.None))!.LastSuccessfulDataEnd);
+    }
+
+    [SqlFact]
     public async Task SimulatedOrdersRun_FlowsFromGatewayThroughBlobStagingAndPromotionIntoViews()
     {
         var id = await AddScheduleAsync(AmazonReportType.Orders, "sim-orders");
 
         await using var scope = fixture.Services.CreateAsyncScope();
         var summary = await scope.ServiceProvider.GetRequiredService<IReportIngestionService>()
-            .RunAsync(id, SyncTrigger.Manual, "tests@aeraigroup.com", CancellationToken.None);
+            .RunAsync(id, SyncTrigger.Manual, "tests@aeraigroup.com", backfillDays: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
         var batchId = Assert.Single(summary.ImportBatchIds);
@@ -99,8 +113,8 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         await using var scope = fixture.Services.CreateAsyncScope();
         var ingestion = scope.ServiceProvider.GetRequiredService<IReportIngestionService>();
 
-        var first = await ingestion.RunAsync(id, SyncTrigger.Manual, "tests", CancellationToken.None);
-        var second = await ingestion.RunAsync(id, SyncTrigger.Manual, "tests", CancellationToken.None);
+        var first = await ingestion.RunAsync(id, SyncTrigger.Manual, "tests", backfillDays: null, CancellationToken.None);
+        var second = await ingestion.RunAsync(id, SyncTrigger.Manual, "tests", backfillDays: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Succeeded, first.Status);
         Assert.Equal(SyncRunStatus.NoData, second.Status);

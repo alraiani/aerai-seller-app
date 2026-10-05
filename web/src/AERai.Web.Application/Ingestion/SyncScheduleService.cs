@@ -119,6 +119,34 @@ public sealed partial class SyncScheduleService(
     }
 
     /// <inheritdoc/>
+    public async Task<Result> BackfillAsync(int id, int days, string user, CancellationToken cancellationToken)
+    {
+        if (days is < 1 or > MaxLookbackDays)
+        {
+            return Result.Failure($"Backfill must be between 1 and {MaxLookbackDays} days.");
+        }
+
+        if (!connection.CanRun)
+        {
+            return Result.Failure($"Amazon is not connected: {connection.Problem}");
+        }
+
+        var schedule = await repository.GetAsync(id, cancellationToken).ConfigureAwait(false);
+        if (schedule is null)
+        {
+            return Result.Failure("Schedule not found.");
+        }
+
+        if (schedule.ReportType == AmazonReportType.FbaInventory)
+        {
+            return Result.Failure("FBA inventory is a current snapshot, so there is no history to backfill.");
+        }
+
+        await queue.EnqueueAsync(new ManualRunRequest(id, user, days), cancellationToken).ConfigureAwait(false);
+        return Result.Success();
+    }
+
+    /// <inheritdoc/>
     public Result<SyncSchedule> Validate(SyncScheduleInput input)
     {
         ArgumentNullException.ThrowIfNull(input);

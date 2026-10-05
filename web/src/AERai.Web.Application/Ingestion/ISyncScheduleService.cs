@@ -38,6 +38,17 @@ public interface ISyncScheduleService
     /// <returns>Success, or a failure when the schedule is unknown or Amazon is not connected.</returns>
     Task<Result> RunNowAsync(int id, string user, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Queues a run that re-pulls history (Orders, Settlements). FBA inventory is a point-in-time
+    /// snapshot, so it has no history to backfill.
+    /// </summary>
+    /// <param name="id">Schedule id.</param>
+    /// <param name="days">Days of history, 1 to <see cref="SyncScheduleService.MaxLookbackDays"/>.</param>
+    /// <param name="user">Acting user.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Success, or a failure for invalid days, an unsupported report type, or no connection.</returns>
+    Task<Result> BackfillAsync(int id, int days, string user, CancellationToken cancellationToken);
+
     /// <summary>Builds a schedule from validated input (used for create and to preview next runs).</summary>
     /// <param name="input">Settings.</param>
     /// <returns>The schedule, or the first validation failure.</returns>

@@ -68,7 +68,7 @@ public sealed class ReportIngestionServiceTests
         AddSchedule(AmazonReportType.Orders);
         ScriptDoneReport(OrdersTsv);
 
-        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", CancellationToken.None);
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfillDays: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
         var request = Assert.Single(_gateway.Requests);
@@ -93,9 +93,37 @@ public sealed class ReportIngestionServiceTests
         AddSchedule(AmazonReportType.Orders, lastEnd: lastEnd);
         ScriptDoneReport(OrdersTsv);
 
-        await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", CancellationToken.None);
+        await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfillDays: null, CancellationToken.None);
 
         Assert.Equal(lastEnd.AddMinutes(-15), Assert.Single(_gateway.Requests).Start);
+    }
+
+    [Fact]
+    public async Task RunAsync_OrdersBackfill_RequestsFullWindowInsteadOfContinuing()
+    {
+        AddSchedule(AmazonReportType.Orders, lastEnd: Now.AddHours(-1));
+        ScriptDoneReport(OrdersTsv);
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfillDays: 30, CancellationToken.None);
+
+        var request = Assert.Single(_gateway.Requests);
+        Assert.Equal(request.End!.Value.AddDays(-30), request.Start);
+        Assert.StartsWith("Backfill of 30 days.", summary.Message, StringComparison.Ordinal);
+        Assert.Equal(request.End, _schedules.Schedules[1].LastSuccessfulDataEnd); // Moved forward, never back.
+    }
+
+    [Fact]
+    public async Task RunAsync_SettlementsBackfill_ListsFromBackfillStart()
+    {
+        AddSchedule(AmazonReportType.Settlements, lastEnd: Now.AddHours(-1));
+        _gateway.Available.Add(new AvailableAmazonReport("OLDER", "D-OLDER", Now.AddDays(-20)));
+        _gateway.Documents["D-OLDER"] = SettlementTsv;
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfillDays: 30, CancellationToken.None);
+
+        // Without the backfill, listing would start an hour ago (minus overlap) and miss this report.
+        Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
+        Assert.Contains(_runs.Ledger, r => r.AmazonReportId == "OLDER");
     }
 
     [Fact]
@@ -104,7 +132,7 @@ public sealed class ReportIngestionServiceTests
         AddSchedule(AmazonReportType.Orders, autoPromote: false);
         ScriptDoneReport(OrdersTsv);
 
-        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", CancellationToken.None);
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfillDays: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
         Assert.Single(_staged.Saved);
@@ -118,7 +146,7 @@ public sealed class ReportIngestionServiceTests
         AddSchedule(AmazonReportType.Orders);
         _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.Cancelled, null));
 
-        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", CancellationToken.None);
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfillDays: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.NoData, summary.Status);
         Assert.Empty(_rawFiles.Files);
@@ -131,7 +159,7 @@ public sealed class ReportIngestionServiceTests
         AddSchedule(AmazonReportType.Orders);
         ScriptDoneReport("amazon-order-id\tpurchase-date\torder-status\tsku\tquantity\titem-price\n");
 
-        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", CancellationToken.None);
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfillDays: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.NoData, summary.Status);
         Assert.Single(_rawFiles.Files); // Still landed: the landing zone keeps everything received.
@@ -143,7 +171,7 @@ public sealed class ReportIngestionServiceTests
         AddSchedule(AmazonReportType.Orders);
         _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.Fatal, null));
 
-        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", CancellationToken.None);
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfillDays: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Failed, summary.Status);
         Assert.Null(_schedules.Schedules[1].LastSuccessfulDataEnd);
@@ -155,7 +183,7 @@ public sealed class ReportIngestionServiceTests
         AddSchedule(AmazonReportType.Orders);
         _gateway.ThrowOnRequest = new HttpRequestException("SP-API reports.createReport failed with HTTP 403");
 
-        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", CancellationToken.None);
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfillDays: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Failed, summary.Status);
         var run = Assert.Single(_runs.Completed);
@@ -172,7 +200,7 @@ public sealed class ReportIngestionServiceTests
         _gateway.Documents["D-NEW"] = SettlementTsv;
         _runs.Ledger.Add(new IngestedReport { AmazonReportId = "OLD", ReportType = AmazonReportType.Settlements });
 
-        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", CancellationToken.None);
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfillDays: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
         Assert.Equal(ImportSource.Settlements, Assert.Single(_staged.Saved).Source);
@@ -185,7 +213,7 @@ public sealed class ReportIngestionServiceTests
     {
         AddSchedule(AmazonReportType.Settlements);
 
-        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", CancellationToken.None);
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfillDays: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.NoData, summary.Status);
     }

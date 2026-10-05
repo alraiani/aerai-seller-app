@@ -1,4 +1,6 @@
 @page
+@using AERai.Web.Application.Ingestion
+@using AERai.Web.Domain.Ingestion
 @model AERai.Web.UI.Pages.Tools.Schedules.IndexModel
 @{
     ViewData["Title"] = "Amazon sync schedules";
@@ -53,9 +55,18 @@
                         </form>
                     </td>
                     <td class="text-end">
-                        <form method="post" asp-page-handler="RunNow" asp-route-id="@s.Id">
-                            <button type="submit" class="btn btn-sm btn-outline-primary" disabled="@(!Model.Connection.CanRun)">Run now</button>
-                        </form>
+                        <div class="d-flex gap-1 justify-content-end">
+                            <form method="post" asp-page-handler="RunNow" asp-route-id="@s.Id">
+                                <button type="submit" class="btn btn-sm btn-outline-primary" disabled="@(!Model.Connection.CanRun)">Run now</button>
+                            </form>
+                            @if (s.ReportType != AmazonReportType.FbaInventory)
+                            {
+                                <form method="post" asp-page-handler="Backfill" asp-route-id="@s.Id">
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary" disabled="@(!Model.Connection.CanRun)"
+                                            title="Re-pull the last @SyncScheduleService.MaxLookbackDays days from Amazon">Backfill @(SyncScheduleService.MaxLookbackDays)d</button>
+                                </form>
+                            }
+                        </div>
                     </td>
                 </tr>
             }

@@ -36,7 +36,12 @@ internal sealed class FakeSyncScheduleRepository : ISyncScheduleRepository
 
     public Task RecordSuccessAsync(int id, DateTimeOffset dataEnd, CancellationToken cancellationToken)
     {
-        Schedules[id].LastSuccessfulDataEnd = dataEnd;
+        // Mirrors the real repository: the marker only ever moves forward.
+        if (Schedules[id].LastSuccessfulDataEnd is not { } current || current < dataEnd)
+        {
+            Schedules[id].LastSuccessfulDataEnd = dataEnd;
+        }
+
         return Task.CompletedTask;
     }
 }

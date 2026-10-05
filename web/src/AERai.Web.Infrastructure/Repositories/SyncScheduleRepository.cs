@@ -84,6 +84,6 @@ internal sealed class SyncScheduleRepository(AppDbContext dbContext) : ISyncSche
     /// <inheritdoc/>
     public Task RecordSuccessAsync(int id, DateTimeOffset dataEnd, CancellationToken cancellationToken) =>
         dbContext.SyncSchedules
-            .Where(s => s.Id == id)
+            .Where(s => s.Id == id && (s.LastSuccessfulDataEnd == null || s.LastSuccessfulDataEnd < dataEnd))
             .ExecuteUpdateAsync(set => set.SetProperty(s => s.LastSuccessfulDataEnd, dataEnd), cancellationToken);
 }

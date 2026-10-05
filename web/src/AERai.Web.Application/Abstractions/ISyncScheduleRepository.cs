@@ -48,7 +48,10 @@ public interface ISyncScheduleRepository
     /// <returns><see langword="true"/> when this caller won the claim.</returns>
     Task<bool> TryClaimAsync(int id, DateTimeOffset expectedNextRunAt, DateTimeOffset newNextRunAt, DateTimeOffset startedAt, CancellationToken cancellationToken);
 
-    /// <summary>Records the end of the data window covered by a successful run.</summary>
+    /// <summary>
+    /// Records the end of the data window covered by a successful run. Only ever moves the marker
+    /// forward, so an older window (e.g. from a backfill) can't make the next run re-pull data.
+    /// </summary>
     /// <param name="id">Schedule id.</param>
     /// <param name="dataEnd">End of the covered window.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

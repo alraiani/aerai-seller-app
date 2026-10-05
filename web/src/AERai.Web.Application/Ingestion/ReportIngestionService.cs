@@ -78,7 +78,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     }
 
     /// <inheritdoc/>
-    public async Task<SyncRunSummary> RunAsync(int scheduleId, SyncTrigger trigger, string triggeredBy, CancellationToken cancellationToken)
+    public async Task<SyncRunSummary> RunAsync(int scheduleId, SyncTrigger trigger, string triggeredBy, int? backfillDays, CancellationToken cancellationToken)
     {
         var schedule = await _schedules.GetAsync(scheduleId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"Sync schedule {scheduleId} does not exist.");
@@ -93,8 +93,12 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         };
         run.Id = await _runs.StartAsync(run, cancellationToken).ConfigureAwait(false);
         LogRunStarted(run.Id, schedule.Name, trigger);
+        if (backfillDays is { } days)
+        {
+            LogBackfill(run.Id, days);
+        }
 
-        var context = new RunContext(schedule, run);
+        var context = new RunContext(schedule, run, backfillDays);
         try
         {
             if (schedule.ReportType == AmazonReportType.Settlements)
@@ -129,6 +133,11 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         }
 
         run.CompletedAt = _clock.GetUtcNow();
+        if (backfillDays is { } backfilled && run.Status != SyncRunStatus.Failed)
+        {
+            context.Notes.Insert(0, $"Backfill of {backfilled} days.");
+        }
+
         run.Message ??= string.Join(" ", context.Notes);
         run.AmazonReportIds = context.ReportIds.Count > 0 ? string.Join(",", context.ReportIds) : null;
         run.ImportBatchIds = context.BatchIds.Count > 0 ? string.Join(",", context.BatchIds) : null;
@@ -150,9 +159,11 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         if (context.Schedule.ReportType == AmazonReportType.Orders)
         {
             end = now - DataEndSafetyMargin;
-            start = context.Schedule.LastSuccessfulDataEnd is { } previousEnd
-                ? previousEnd - OrdersOverlap
-                : end.Value.AddDays(-context.Schedule.LookbackDays);
+            start = context.BackfillDays is { } backfill
+                ? end.Value.AddDays(-backfill)
+                : context.Schedule.LastSuccessfulDataEnd is { } previousEnd
+                    ? previousEnd - OrdersOverlap
+                    : end.Value.AddDays(-context.Schedule.LookbackDays);
         }
 
         context.Run.DataStart = start;
@@ -185,9 +196,11 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     private async Task IngestListedReportsAsync(RunContext context, CancellationToken cancellationToken)
     {
         var now = _clock.GetUtcNow();
-        var since = context.Schedule.LastSuccessfulDataEnd is { } previous
-            ? previous - SettlementListOverlap
-            : now.AddDays(-context.Schedule.LookbackDays);
+        var since = context.BackfillDays is { } backfill
+            ? now.AddDays(-backfill)
+            : context.Schedule.LastSuccessfulDataEnd is { } previous
+                ? previous - SettlementListOverlap
+                : now.AddDays(-context.Schedule.LookbackDays);
 
         var reports = await _gateway.ListCompletedReportsAsync(context.Schedule.ReportType, since, cancellationToken).ConfigureAwait(false);
         var skipped = 0;
@@ -307,8 +320,10 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     }
 
     /// <summary>Mutable state accumulated during one run.</summary>
-    private sealed class RunContext(SyncSchedule schedule, SyncRun run)
+    private sealed class RunContext(SyncSchedule schedule, SyncRun run, int? backfillDays)
     {
+        public int? BackfillDays { get; } = backfillDays;
+
         public SyncSchedule Schedule { get; } = schedule;
 
         public SyncRun Run { get; } = run;
@@ -324,6 +339,9 @@ public sealed partial class ReportIngestionService : IReportIngestionService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} started for schedule '{ScheduleName}' ({Trigger})")]
     private partial void LogRunStarted(long runId, string scheduleName, SyncTrigger trigger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} is a {BackfillDays}-day backfill")]
+    private partial void LogBackfill(long runId, int backfillDays);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} finished: {Status} — {Message}")]
     private partial void LogRunCompleted(long runId, SyncRunStatus status, string? message);
