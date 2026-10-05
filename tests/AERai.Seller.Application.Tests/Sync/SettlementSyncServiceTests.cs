@@ -108,17 +108,19 @@ public class SettlementSyncServiceTests
             "settlement-id\tsettlement-start-date\tsettlement-end-date\tdeposit-date\ttotal-amount\tcurrency\tmarketplace-name\torder-id\tsku\tamount-type\tamount-description\tamount\tposted-date\n" +
             "1000\t2026-07-01T00:00:00Z\t2026-07-14T00:00:00Z\t2026-07-16T00:00:00Z\t93.50\tUSD\tAmazon.com\t111-1\tWIDGET-1\tItemPrice\tPrincipal\t100.00\t2026-07-05T00:00:00Z\n";
 
+        string? createReportBody = null;
         var reportsApiClient = CreateReportsApiClient(request =>
         {
             var path = request.RequestUri!.AbsolutePath;
             if (path == "/reports/2021-06-30/reports")
             {
+                createReportBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
                 return JsonResponse("""{ "reportId": "report-1" }""");
             }
             if (path == "/reports/2021-06-30/reports/report-1")
             {
                 return JsonResponse("""
-                { "reportId": "report-1", "reportType": "GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE", "processingStatus": "DONE", "reportDocumentId": "doc-1" }
+                { "reportId": "report-1", "reportType": "GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2", "processingStatus": "DONE", "reportDocumentId": "doc-1" }
                 """);
             }
             if (path == "/reports/2021-06-30/documents/doc-1")
@@ -143,6 +145,9 @@ public class SettlementSyncServiceTests
 
         await service.SyncAsync();
 
+        // The long (_V2) layout, not the wide non-_V2 one — see SettlementSyncService's doc comment.
+        Assert.Contains("\"GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2\"", createReportBody);
+
         var call = Assert.Single(settlementRepository.UpsertCalls);
         var settlement = Assert.Single(call.Settlements);
         Assert.Equal("1000", settlement.SettlementId);
@@ -166,7 +171,7 @@ public class SettlementSyncServiceTests
             if (path == "/reports/2021-06-30/reports/report-1")
             {
                 return JsonResponse("""
-                { "reportId": "report-1", "reportType": "GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE", "processingStatus": "FATAL", "reportDocumentId": null }
+                { "reportId": "report-1", "reportType": "GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2", "processingStatus": "FATAL", "reportDocumentId": null }
                 """);
             }
 
