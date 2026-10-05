@@ -160,6 +160,26 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     }
 
     [SqlFact]
+    public async Task Settlements_DayFirstDates_AreParsedDayFirstNotMisreadMonthFirst()
+    {
+        // Real CA/MX settlement files write dates day-first; '07.09.2026' is 7 September, not July 9.
+        const string tsv =
+            "settlement-id\tsettlement-start-date\tsettlement-end-date\ttransaction-type\tamount-type\tamount\tposted-date\tcurrency\n" +
+            "T-SET-DMY\t24.08.2026 01:50:50 UTC\t07.09.2026 01:50:49 UTC\t\t\t\t\tCAD\n" +
+            "T-SET-DMY\t\t\tOrder\tItemPrice\t12.00\t05.09.2026\t\n";
+
+        var batchId = await StageAsync(ImportSource.Settlements, "settlement-ca.tsv", tsv);
+        await PromoteAsync(batchId);
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var settlement = await db.Settlements.SingleAsync(s => s.SettlementId == "T-SET-DMY");
+        Assert.Equal(new DateTimeOffset(2026, 8, 24, 1, 50, 50, TimeSpan.Zero), settlement.PeriodStart);
+        Assert.Equal(new DateTimeOffset(2026, 9, 7, 1, 50, 49, TimeSpan.Zero), settlement.PeriodEnd);
+        Assert.Equal(new DateTimeOffset(2026, 9, 5, 0, 0, 0, TimeSpan.Zero), (await db.SettlementLines.SingleAsync(l => l.SettlementId == "T-SET-DMY")).PostedDate);
+    }
+
+    [SqlFact]
     public async Task Promote_UnknownBatch_ReturnsFailure()
     {
         await using var scope = fixture.Services.CreateAsyncScope();
