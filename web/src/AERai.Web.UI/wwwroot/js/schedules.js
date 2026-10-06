@@ -5,21 +5,7 @@
 
     var refreshOffKey = "aerai-sync-autorefresh-off";
 
-    function submit(form) {
-        if (form.requestSubmit) {
-            form.requestSubmit();
-        } else {
-            form.submit();
-        }
-    }
-
-    // ---------- Toggles and filters submit as soon as they change ----------
-    document.addEventListener("change", function (event) {
-        var target = event.target;
-        if (target.matches("[data-autosubmit]") || (target.form && target.form.hasAttribute("data-autosubmit-form") && target.tagName === "SELECT")) {
-            submit(target.form);
-        }
-    });
+    // Toggles and filter selects submit on change via site.js ([data-autosubmit], [data-autosubmit-form]).
 
     // ---------- Auto-refresh while a run is in progress ----------
     function storageGet() {

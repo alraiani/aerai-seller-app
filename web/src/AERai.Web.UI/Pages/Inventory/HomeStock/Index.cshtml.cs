@@ -84,7 +84,7 @@ public sealed class IndexModel(IInventoryService inventory, IInventoryItemServic
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
-        var overview = await inventory.GetOverviewAsync(Marketplace, new PageRequest(PageNumber, PageSize, Search), null, InventorySort.Sku, cancellationToken);
+        var overview = await inventory.GetOverviewAsync(Marketplace, new PageRequest(PageNumber, PageSize, Search), new InventoryFilter(Sort: InventorySort.Sku), cancellationToken);
         Skus = overview.Items;
     }
 

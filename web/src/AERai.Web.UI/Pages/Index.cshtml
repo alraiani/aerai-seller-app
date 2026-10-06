@@ -245,7 +245,7 @@
             <div class="card-toolbar">
                 <span class="card-toolbar-title">
                     Inventory
-                    <partial name="_Tip" model='"FBA stock from the latest inventory sync. Out of stock and selling = no units left on a SKU that sold recently."' />
+                    <partial name="_Tip" model='"FBA stock from the latest inventory sync. Out of stock and selling = no units left on a SKU that sold recently. Restock due = a send or order is overdue or due within a week (see Inventory)."' />
                 </span>
                 <a asp-page="/Inventory/Index" class="btn btn-sm btn-soft">Details</a>
             </div>
@@ -271,7 +271,7 @@
                         <span class="@(s.Inventory.OutOfStockSelling > 0 ? "pill pill-bad" : "")">@s.Inventory.OutOfStockSelling</span>
                     </div>
                     <div class="stat-row">
-                        <span class="label">Low stock</span>
+                        <span class="label">Restock due</span>
                         <span class="@(s.Inventory.LowStock > 0 ? "pill pill-warn" : "")">@s.Inventory.LowStock</span>
                     </div>
                 }

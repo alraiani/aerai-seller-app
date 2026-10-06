@@ -76,7 +76,7 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
         var revenue = new Metric(Revenue(current), Revenue(previous));
         var orders = new Metric(OrderCount(current), OrderCount(previous));
         var granularity = period == DashboardPeriod.Today ? ChartGranularity.Hour : ChartGranularity.Day;
-        var stock = Summarize(items, settings.AtRiskDaysOfSupply);
+        var stock = Summarize(items);
 
         return new DashboardSnapshot(
             Period: period,
@@ -164,19 +164,19 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
             .ToList();
     }
 
-    private static InventoryGlance Summarize(List<InventoryItem> items, decimal lowStockDays) => new(
+    private static InventoryGlance Summarize(List<InventoryItem> items) => new(
         SkusTotal: items.Count,
         SkusInStock: items.Count(i => i.Position.Available > 0),
         AvailableUnits: items.Sum(i => i.Position.Available),
         InboundUnits: items.Sum(i => i.Position.Inbound),
         OutOfStockSelling: items.Count(IsOutOfStockSelling),
-        LowStock: items.Count(i => IsLowStock(i, lowStockDays)),
+        LowStock: items.Count(IsRestockDue),
         SnapshotDate: items.Count == 0 ? null : items.Max(i => i.Position.SnapshotDate));
 
-    private static bool IsOutOfStockSelling(InventoryItem i) => i.Position.Available == 0 && i.IsSelling;
+    // Same rules as the Inventory page and stock alerts (InventoryItem.Status).
+    private static bool IsOutOfStockSelling(InventoryItem i) => i.Status == StockStatus.OutOfStock;
 
-    private static bool IsLowStock(InventoryItem i, decimal lowStockDays) =>
-        i.Position.Available > 0 && i.DaysOfInventory is { } days && days <= lowStockDays;
+    private static bool IsRestockDue(InventoryItem i) => i.Status is StockStatus.RestockOverdue or StockStatus.RestockSoon;
 
     /// <summary>
     /// Builds the "needs attention" list, most urgent first. Each rule produces at most one item so
@@ -231,9 +231,9 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
 
         if (inventory.LowStock > 0)
         {
-            var skus = stockItems.Where(i => IsLowStock(i, settings.AtRiskDaysOfSupply)).OrderBy(i => i.DaysOfInventory).Select(i => i.Sku).ToList();
+            var skus = stockItems.Where(IsRestockDue).OrderBy(i => i.Restock?.DaysUntilAction).Select(i => i.Sku).ToList();
             items.Add(new AttentionItem(AttentionSeverity.Warning,
-                $"{Plural(inventory.LowStock, "SKU")} under {settings.AtRiskDaysOfSupply:0} days of stock", "Reorder soon: " + NameList(skus), AttentionTarget.Inventory));
+                $"{Plural(inventory.LowStock, "SKU")} to restock", "Send or order overdue or due soon: " + NameList(skus), AttentionTarget.Inventory));
         }
 
         if (awaitingPromotion > 0)

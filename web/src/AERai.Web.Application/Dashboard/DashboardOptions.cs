@@ -11,10 +11,6 @@ public sealed class DashboardOptions
     /// <summary>Configuration section name.</summary>
     public const string SectionName = "Dashboard";
 
-    /// <summary>In-stock SKUs with this many days of supply or fewer are flagged as low.</summary>
-    [Range(1, 365)]
-    public decimal AtRiskDaysOfSupply { get; set; } = 21;
-
     /// <summary>Sales data older than this is flagged as stale.</summary>
     [Range(1, 168)]
     public int StaleAfterHours { get; set; } = 6;

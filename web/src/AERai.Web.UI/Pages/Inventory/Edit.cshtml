@@ -3,97 +3,162 @@
 @model AERai.Web.UI.Pages.Inventory.EditModel
 @{
     ViewData["Title"] = "Edit inventory item";
+    var item = Model.Item;
 }
-<nav class="crumbs" aria-label="Breadcrumb"><a asp-page="Index">Inventory</a><span>/</span><span>@Model.Item.Sku</span></nav>
+
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">Inventory</a>
+    <span aria-hidden="true">/</span>
+    <span>@item.Sku</span>
+</nav>
+
 <div class="row g-3">
-    <div class="col-lg-6">
-        <div class="card">
-            <div class="card-body">
-                <h2 class="h6 mb-1">@(Model.Item.Title ?? Model.Item.Sku)</h2>
-                <p class="product-sku mb-3">@Model.Item.Sku@(Model.Item.Asin is { } asin ? $" · {asin}" : "")</p>
-                <form method="post">
-                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
-                    <div class="mb-3">
-                        <label asp-for="Input.Family" class="form-label"></label>
-                        <input asp-for="Input.Family" class="form-control" list="family-options" autocomplete="off" />
-                        <datalist id="family-options">
-                            @foreach (var f in Model.Families)
-                            {
-                                <option value="@f.Name"></option>
-                            }
-                        </datalist>
-                        <span asp-validation-for="Input.Family" class="text-danger small"></span>
-                        <div class="form-text">Groups similar products so you can filter and total them together. Pick one or type a new name; leave blank for none. Shared by all marketplaces.</div>
+    <div class="col-xl-8">
+        <form method="post" id="item-form">
+            <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
+
+            @* ---------- 1. Details ---------- *@
+            <section class="card form-section mb-3">
+                <div class="form-section-head">
+                    <span class="step">1</span>
+                    <div>
+                        <h2>Details</h2>
+                        <p>Group the product with similar ones and record stock you hold outside Amazon.</p>
                     </div>
-                    <div class="mb-3">
-                        <label asp-for="Input.HomeStock" class="form-label"></label>
-                        <input asp-for="Input.HomeStock" class="form-control" type="number" min="0" step="1" />
-                        <span asp-validation-for="Input.HomeStock" class="text-danger small"></span>
-                        <div class="form-text">Units you hold outside Amazon for @Model.Marketplace.Name. Not counted in days of inventory.</div>
+                </div>
+                <div class="form-section-body">
+                    <div class="row g-3">
+                        <div class="col-md-7">
+                            <label asp-for="Input.Family" class="form-label"></label>
+                            <input asp-for="Input.Family" class="form-control" list="family-options" autocomplete="off" placeholder="e.g. Yoga mats" />
+                            <datalist id="family-options">
+                                @foreach (var f in Model.Families)
+                                {
+                                    <option value="@f.Name"></option>
+                                }
+                            </datalist>
+                            <span asp-validation-for="Input.Family" class="text-danger small"></span>
+                            <div class="form-text">Pick one or type a new name; blank for none. Shared by all marketplaces.</div>
+                        </div>
+                        <div class="col-md-5">
+                            <label asp-for="Input.HomeStock" class="form-label"></label>
+                            <input asp-for="Input.HomeStock" class="form-control" type="number" min="0" step="1" />
+                            <span asp-validation-for="Input.HomeStock" class="text-danger small"></span>
+                            <div class="form-text">Held outside Amazon for @Model.Marketplace.Name. Not counted in days of inventory.</div>
+                        </div>
                     </div>
-                    <fieldset class="mb-3">
-                        <legend class="form-label fw-semibold mb-1">Restock timing in @Model.Marketplace.Name (days)</legend>
-                        <div class="form-text mt-0 mb-2">Used to work out how much to send or order and by when. Leave a box blank to use the default shown.</div>
-                        <div class="row g-2">
-                            <div class="col-6 col-md-4">
-                                <label asp-for="Input.SupplierLeadTimeDays" class="form-label small mb-1"></label>
-                                <input asp-for="Input.SupplierLeadTimeDays" type="number" min="0" step="1" placeholder="@Model.Defaults.SupplierLeadTimeDays" class="form-control form-control-sm" />
-                                <span asp-validation-for="Input.SupplierLeadTimeDays" class="text-danger small"></span>
-                            </div>
-                            <div class="col-6 col-md-4">
-                                <label asp-for="Input.PrepTimeDays" class="form-label small mb-1"></label>
-                                <input asp-for="Input.PrepTimeDays" type="number" min="0" step="1" placeholder="@Model.Defaults.PrepTimeDays" class="form-control form-control-sm" />
-                                <span asp-validation-for="Input.PrepTimeDays" class="text-danger small"></span>
-                            </div>
-                            <div class="col-6 col-md-4">
-                                <label asp-for="Input.TransitDays" class="form-label small mb-1"></label>
-                                <input asp-for="Input.TransitDays" type="number" min="0" step="1" placeholder="@Model.Defaults.TransitDays" class="form-control form-control-sm" />
-                                <span asp-validation-for="Input.TransitDays" class="text-danger small"></span>
-                            </div>
-                            <div class="col-6 col-md-4">
-                                <label asp-for="Input.SafetyStockDays" class="form-label small mb-1"></label>
-                                <input asp-for="Input.SafetyStockDays" type="number" min="0" step="1" placeholder="@Model.Defaults.SafetyStockDays" class="form-control form-control-sm" />
-                                <span asp-validation-for="Input.SafetyStockDays" class="text-danger small"></span>
-                            </div>
-                            <div class="col-6 col-md-4">
-                                <label asp-for="Input.TargetStockDays" class="form-label small mb-1"></label>
-                                <input asp-for="Input.TargetStockDays" type="number" min="1" step="1" placeholder="@Model.Defaults.TargetStockDays" class="form-control form-control-sm" />
-                                <span asp-validation-for="Input.TargetStockDays" class="text-danger small"></span>
+                </div>
+            </section>
+
+            @* ---------- 2. Restock timing ---------- *@
+            <section class="card form-section mb-3">
+                <div class="form-section-head">
+                    <span class="step">2</span>
+                    <div>
+                        <h2>Restock timing in @Model.Marketplace.Name</h2>
+                        <p>Days each stage takes, used to work out how much to send or order and by when. Leave a box blank to use the default shown.</p>
+                    </div>
+                </div>
+                <div class="form-section-body">
+                    <div class="row g-3">
+                        <div class="col-6 col-md-4">
+                            <label asp-for="Input.SupplierLeadTimeDays" class="form-label"></label>
+                            <input asp-for="Input.SupplierLeadTimeDays" type="number" min="0" step="1" placeholder="@Model.Defaults.SupplierLeadTimeDays" class="form-control" />
+                            <span asp-validation-for="Input.SupplierLeadTimeDays" class="text-danger small"></span>
+                            <div class="form-text">Order placed → goods arrive</div>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <label asp-for="Input.PrepTimeDays" class="form-label"></label>
+                            <input asp-for="Input.PrepTimeDays" type="number" min="0" step="1" placeholder="@Model.Defaults.PrepTimeDays" class="form-control" />
+                            <span asp-validation-for="Input.PrepTimeDays" class="text-danger small"></span>
+                            <div class="form-text">Labeling and packing</div>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <label asp-for="Input.TransitDays" class="form-label"></label>
+                            <input asp-for="Input.TransitDays" type="number" min="0" step="1" placeholder="@Model.Defaults.TransitDays" class="form-control" />
+                            <span asp-validation-for="Input.TransitDays" class="text-danger small"></span>
+                            <div class="form-text">Shipped → sellable at Amazon</div>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <label asp-for="Input.SafetyStockDays" class="form-label"></label>
+                            <input asp-for="Input.SafetyStockDays" type="number" min="0" step="1" placeholder="@Model.Defaults.SafetyStockDays" class="form-control" />
+                            <span asp-validation-for="Input.SafetyStockDays" class="text-danger small"></span>
+                            <div class="form-text">Buffer before running out</div>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <label asp-for="Input.TargetStockDays" class="form-label"></label>
+                            <input asp-for="Input.TargetStockDays" type="number" min="1" step="1" placeholder="@Model.Defaults.TargetStockDays" class="form-control" />
+                            <span asp-validation-for="Input.TargetStockDays" class="text-danger small"></span>
+                            <div class="form-text">Days of sales a restock covers</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </form>
+    </div>
+
+    <div class="col-xl-4">
+        <div class="summary-card d-flex flex-column gap-3">
+            <div class="card">
+                <div class="card-body">
+                    <div class="kpi-label mb-2">Product</div>
+                    <div class="product-cell mb-3">
+                        @if (item.ImagePath is { } image)
+                        {
+                            <img class="product-thumb" src="@Url.Page("Image", new { sku = item.Sku, v = System.IO.Path.GetFileNameWithoutExtension(image) })" alt="" width="40" height="40" />
+                        }
+                        else
+                        {
+                            <span class="product-thumb product-thumb-empty" aria-hidden="true"><partial name="_Icon" model='"box"' /></span>
+                        }
+                        <div class="min-w-0">
+                            <div class="fw-semibold">@(item.Title ?? item.Sku)</div>
+                            <div class="product-sku">
+                                <span>@item.Sku</span>
+                                @if (item.Asin is { } asin)
+                                {
+                                    <span>· @asin</span>
+                                }
                             </div>
                         </div>
-                    </fieldset>
-                    <button type="submit" class="btn btn-primary">Save</button>
-                    <a asp-page="Index" class="btn btn-link">Cancel</a>
-                </form>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="card">
-            <div class="card-header">Picture</div>
-            <div class="card-body">
-                <div class="d-flex gap-3 align-items-start">
-                    @if (Model.Item.ImagePath is { } image)
-                    {
-                        <img class="product-thumb product-thumb-lg" src="@Url.Page("Image", new { sku = Model.Item.Sku, v = System.IO.Path.GetFileNameWithoutExtension(image) })" alt="Picture of @Model.Item.Sku" />
-                    }
-                    else
-                    {
-                        <span class="product-thumb product-thumb-lg product-thumb-empty" aria-hidden="true"></span>
-                    }
-                    <div class="flex-grow-1">
-                        <form method="post" asp-page-handler="Picture" enctype="multipart/form-data" class="mb-2">
-                            <input asp-for="Picture" type="file" class="form-control form-control-sm mb-2" accept="image/jpeg,image/png,image/webp" />
-                            <button type="submit" class="btn btn-sm btn-primary">Upload picture</button>
-                        </form>
-                        @if (Model.Item.ImagePath is not null)
-                        {
-                            <form method="post" asp-page-handler="RemovePicture">
-                                <button type="submit" class="btn btn-sm btn-soft-bad">Remove picture</button>
-                            </form>
-                        }
-                        <div class="form-text">JPEG, PNG, or WebP, up to @(InventoryItemService.MaxImageBytes / (1024 * 1024)) MB. Shared by all marketplaces.</div>
                     </div>
+                    <ul class="summary-facts">
+                        <li>Home stock and restock timing apply to @Model.Marketplace.Name only</li>
+                        <li>Family and picture are shared by every marketplace</li>
+                    </ul>
+                    <div class="d-grid gap-2 mt-3">
+                        <button type="submit" form="item-form" class="btn btn-primary">Save changes</button>
+                        <a asp-page="Index" class="btn btn-soft">Cancel</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="kpi-label mb-2">Picture</div>
+                    <div class="d-flex gap-3 align-items-start">
+                        @if (item.ImagePath is { } picture)
+                        {
+                            <img class="product-thumb product-thumb-lg" src="@Url.Page("Image", new { sku = item.Sku, v = System.IO.Path.GetFileNameWithoutExtension(picture) })" alt="Picture of @item.Sku" />
+                        }
+                        else
+                        {
+                            <span class="product-thumb product-thumb-lg product-thumb-empty" aria-hidden="true"><partial name="_Icon" model='"box"' /></span>
+                        }
+                        <div class="flex-grow-1 min-w-0">
+                            <form method="post" asp-page-handler="Picture" enctype="multipart/form-data" class="mb-2">
+                                <input asp-for="Picture" type="file" class="form-control form-control-sm mb-2" accept="image/jpeg,image/png,image/webp" aria-label="Picture file" />
+                                <button type="submit" class="btn btn-sm btn-soft"><partial name="_Icon" model='"upload"' /> Upload</button>
+                            </form>
+                            @if (item.ImagePath is not null)
+                            {
+                                <form method="post" asp-page-handler="RemovePicture">
+                                    <button type="submit" class="btn btn-sm btn-soft-bad"><partial name="_Icon" model='"trash"' /> Remove</button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                    <div class="form-text mt-2">JPEG, PNG, or WebP, up to @(InventoryItemService.MaxImageBytes / (1024 * 1024)) MB.</div>
                 </div>
             </div>
         </div>

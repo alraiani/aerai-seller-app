@@ -6,175 +6,314 @@
     ViewData["Title"] = "Inventory";
     var en = CultureInfo.GetCultureInfo("en-US");
     var t = Model.Overview.Totals;
-    var tiles = new (string Label, string Tip, int Value)[]
-    {
-        ("Sellable", "Units available to buy right now.", t.Available),
-        ("Inbound", "Units on shipment plans, in transit, or being received at a fulfillment center.", t.Inbound),
-        ("In warehouse", "Units inside Amazon's fulfillment centers: sellable, reserved, and unfulfillable.", t.InWarehouse),
-        ("Total at Amazon", "Every unit Amazon reports: in the warehouse plus inbound.", t.AmazonTotal),
-        ("Home stock", "Units you hold outside Amazon for this marketplace, entered by hand or uploaded.", t.HomeStock),
-        ("Overall", "Everything you own for this marketplace: total at Amazon plus home stock.", t.OverallTotal),
-    };
+    var rows = Model.Overview.Items.Items;
+    var noInventory = t.SkuCount == 0 && !Model.IsFiltered;
 }
+
+@* ---------- Summary tiles (counts ignore the status filter, so they stay put when one is clicked) ---------- *@
+<div class="row g-3 mb-3">
+    <div class="col-6 col-xl-3">
+        <a class="card tile h-100 @(t.RestockOverdue > 0 ? "tile-bad" : "")" href="@Model.StatusLink(StockStatusFilter.NeedsAction)">
+            <div class="kpi">
+                <div class="kpi-label">Needs restock <partial name="_Tip" model='"SKUs whose send or order deadline has passed or is within a week, worked back from when stock runs out and each SKU’s lead times. Click to list them."' /></div>
+                <div class="kpi-value">@t.NeedsAction <span class="kpi-of">of @t.SkuCount SKUs</span></div>
+                <div class="kpi-foot">
+                    @if (t.NeedsAction == 0)
+                    {
+                        <span>Nothing due this week</span>
+                    }
+                    else
+                    {
+                        <span class="@(t.RestockOverdue > 0 ? "pill pill-bad" : "pill pill-warn")">@t.RestockOverdue overdue</span>
+                        <span>@t.RestockSoon due soon</span>
+                    }
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-3">
+        <a class="card tile h-100 @(t.OutOfStock > 0 ? "tile-bad" : "")" href="@Model.StatusLink(StockStatusFilter.OutOfStock)">
+            <div class="kpi">
+                <div class="kpi-label">Out of stock <partial name="_Tip" model='"SKUs with nothing available at Amazon that sold in the last 30 days. Click to list them."' /></div>
+                <div class="kpi-value">@t.OutOfStock</div>
+                <div class="kpi-foot">@(t.OutOfStock == 0 ? "Every selling SKU is in stock" : "Losing sales now")</div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card tile h-100">
+            <div class="kpi">
+                <div class="kpi-label">Sellable units <partial name="_Tip" model='"Units customers can buy right now. Total at Amazon also counts inbound, reserved, and unfulfillable units."' /></div>
+                <div class="kpi-value">@t.Available.ToString("N0", en)</div>
+                <div class="kpi-foot">@t.AmazonTotal.ToString("N0", en) at Amazon · @t.Inbound.ToString("N0", en) inbound</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        @if (Model.CanEdit)
+        {
+            <a class="card tile h-100" asp-page="HomeStock/Index">
+                <div class="kpi">
+                    <div class="kpi-label">Home stock <partial name="_Tip" model='"Units you hold outside Amazon for this marketplace. Click to update the counts."' /></div>
+                    <div class="kpi-value">@t.HomeStock.ToString("N0", en)</div>
+                    <div class="kpi-foot">@t.OverallTotal.ToString("N0", en) units overall</div>
+                </div>
+            </a>
+        }
+        else
+        {
+            <div class="card tile h-100">
+                <div class="kpi">
+                    <div class="kpi-label">Home stock <partial name="_Tip" model='"Units held outside Amazon for this marketplace."' /></div>
+                    <div class="kpi-value">@t.HomeStock.ToString("N0", en)</div>
+                    <div class="kpi-foot">@t.OverallTotal.ToString("N0", en) units overall</div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@* ---------- Search + filters, Overview / Breakdown ---------- *@
 <div class="list-toolbar mb-3">
-    <form method="get" class="filters" role="search">
-        <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm search-input" placeholder="SKU, ASIN, name, or family…" aria-label="Search" />
-        <select name="family" class="form-select form-select-sm w-auto" aria-label="Family">
+    <form method="get" class="filters" data-autosubmit-form role="search">
+        @if (Model.IsBreakdown)
+        {
+            <input type="hidden" name="view" value="breakdown" />
+        }
+        @if (Model.Descending)
+        {
+            <input type="hidden" name="desc" value="true" />
+        }
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search SKU, ASIN, name, family…" aria-label="Search inventory" />
+        </div>
+        <select name="family" class="form-select form-select-sm" aria-label="Family">
             <option value="">All families</option>
             @foreach (var f in Model.Families)
             {
                 <option value="@f.Id" selected="@(Model.FamilyId == f.Id)">@f.Name</option>
             }
         </select>
-        <button type="submit" class="btn btn-sm btn-outline-primary">Filter</button>
-    </form>
-    @if (Model.CanEdit)
-    {
-        <div class="list-actions">
-            <a asp-page="HomeStock/Index" class="btn btn-sm btn-soft">Edit home stock</a>
-            <a asp-page="HomeStock/Upload" class="btn btn-sm btn-soft">Upload home stock</a>
-        </div>
-    }
-</div>
-<p class="text-muted-token small mb-2">
-    @t.SkuCount.ToString("N0", en) SKU@(t.SkuCount == 1 ? "" : "s") in @Model.Marketplace.Name@(t.SnapshotDate is { } d ? $" · Amazon snapshot {d.ToString("MMM d", en)}" : "")
-</p>
-
-<div class="row g-3 mb-3">
-    @foreach (var tile in tiles)
-    {
-        <div class="col-6 col-md-4 col-xl-2">
-            <div class="card h-100">
-                <div class="kpi">
-                    <div class="kpi-label">@tile.Label <partial name="_Tip" model="tile.Tip" /></div>
-                    <div class="kpi-value kpi-value-sm">@tile.Value.ToString("N0", en)</div>
-                </div>
-            </div>
-        </div>
-    }
-</div>
-
-<div class="card">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0 inventory-table">
-            <thead>
-                <tr>
-                    <th rowspan="2" colspan="2">Product</th>
-                    <th rowspan="2" class="text-end">Available</th>
-                    <th colspan="3" class="th-group">Inbound <partial name="_Tip" model='"Working: on a shipment plan, not shipped. Shipped: in transit. Receiving: arrived and being checked in."' /></th>
-                    <th colspan="3" class="th-group">Reserved <partial name="_Tip" model='"Customer orders: sold, waiting to ship. FC transfer: moving between fulfillment centers. Processing: held for measuring or investigation."' /></th>
-                    <th rowspan="2" class="text-end">Unfulfillable</th>
-                    <th rowspan="2" class="text-end">Home stock</th>
-                    <th rowspan="2" class="text-end col-divider">Sold 30d</th>
-                    <th rowspan="2" class="text-end">Sold 90d</th>
-                    <th rowspan="2" class="text-end">Per day <partial name="_Tip" model="@($"Units sold in the last {InventoryService.VelocityWindowDays} days divided by the days covered since the first sale in that window. Blank until there are {InventoryService.MinCoverageDays} days and {InventoryService.MinUnitsSold} units of history.")" /></th>
-                    <th rowspan="2" class="text-end">Days of inventory <partial name="_Tip" model='"How long sellable, inbound, and FC-transfer/processing stock lasts at the current sales rate. Home stock is not counted."' /></th>
-                    <th rowspan="2" class="col-divider">Restock <partial name="_Tip" model='"What to do to stay in stock: send home stock first, order the rest from your supplier, each by the last day it can still arrive before the safety buffer runs out. Quantities top stock up to the target cover. Set lead times per SKU with Edit."' /></th>
-                    @if (Model.CanEdit)
-                    {
-                        <th rowspan="2"></th>
-                    }
-                </tr>
-                <tr>
-                    <th class="text-end">Working</th><th class="text-end">Shipped</th><th class="text-end">Receiving</th>
-                    <th class="text-end">Customer orders</th><th class="text-end">FC transfer</th><th class="text-end">Processing</th>
-                </tr>
-            </thead>
-            <tbody>
-            @foreach (var item in Model.Overview.Items.Items)
+        <select name="status" class="form-select form-select-sm" aria-label="Status">
+            @foreach (var (filter, label) in InventoryFormat.StatusFilters)
             {
-                var p = item.Position;
-                <tr>
-                    <td class="thumb-cell">
-                        @if (p.ImagePath is { } image)
+                <option value="@(filter == StockStatusFilter.All ? "" : filter.ToString())" selected="@(Model.Status == filter)">@label</option>
+            }
+        </select>
+        <select name="sort" class="form-select form-select-sm" aria-label="Sort by">
+            @foreach (var (sort, label) in InventoryFormat.Sorts)
+            {
+                <option value="@(sort == InventorySort.Urgency ? "" : sort.ToString())" selected="@(Model.Sort == sort)">@label</option>
+            }
+        </select>
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
+        @if (Model.IsFiltered)
+        {
+            <a href="@Url.Page("Index", new { view = Model.IsBreakdown ? "breakdown" : null })" class="btn btn-sm btn-link">Clear filters</a>
+        }
+    </form>
+    <nav class="segmented" aria-label="Columns">
+        <a href="@Model.Link(("view", null))" class="@(!Model.IsBreakdown ? "active" : "")"
+           data-bs-toggle="tooltip" data-bs-title="Status, stock, cover, sales, and the next restock step.">Overview</a>
+        <a href="@Model.Link(("view", "breakdown"))" class="@(Model.IsBreakdown ? "active" : "")"
+           data-bs-toggle="tooltip" data-bs-title="Every Amazon stock state (inbound stages, reserved reasons) plus home stock.">Stock breakdown</a>
+    </nav>
+</div>
+
+@* ---------- SKU list ---------- *@
+<div class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@Model.Overview.Items.TotalCount.ToString("N0", en) SKU@(Model.Overview.Items.TotalCount == 1 ? "" : "s")</span>
+            <span class="text-muted-token fw-normal">in @Model.Marketplace.Name@(t.SnapshotDate is { } d ? $" · Amazon snapshot {InventoryFormat.ShortDate(d)}" : "")</span>
+        </span>
+        @if (Model.CanEdit)
+        {
+            <div class="card-toolbar-group">
+                <a asp-page="HomeStock/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"edit"' /> Edit home stock</a>
+                <a asp-page="HomeStock/Upload" class="btn btn-sm btn-soft btn-icon" aria-label="Upload home stock"
+                   data-bs-toggle="tooltip" data-bs-title="Upload home stock from a spreadsheet (.xlsx or .csv)."><partial name="_Icon" model='"upload"' /></a>
+            </div>
+        }
+    </div>
+
+    @if (noInventory)
+    {
+        <div class="empty-state">
+            <div class="empty-title">No inventory yet</div>
+            <div class="empty-detail">Stock appears once the FBA inventory sync runs for @Model.Marketplace.Name, or after you import an inventory file.</div>
+            <a asp-page="/Tools/Schedules/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"plug"' /> Amazon sync</a>
+        </div>
+    }
+    else if (rows.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-title">No SKUs match</div>
+            <div class="empty-detail">Try a different search, family, or status.</div>
+            <a href="@Url.Page("Index", new { view = Model.IsBreakdown ? "breakdown" : null })" class="btn btn-sm btn-soft">Clear filters</a>
+        </div>
+    }
+    else if (!Model.IsBreakdown)
+    {
+        <div class="table-responsive">
+            <table class="table data-table inventory-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="product-col"><a href="@Model.SortLink(InventorySort.Sku)" class="sort-link">Product @Model.SortArrow(InventorySort.Sku)</a></th>
+                        <th><a href="@Model.SortLink(InventorySort.Urgency)" class="sort-link">Status @Model.SortArrow(InventorySort.Urgency)</a></th>
+                        <th class="text-end"><a href="@Model.SortLink(InventorySort.Available)" class="sort-link">Available @Model.SortArrow(InventorySort.Available)</a></th>
+                        <th><a href="@Model.SortLink(InventorySort.DaysOfInventory)" class="sort-link">Cover @Model.SortArrow(InventorySort.DaysOfInventory)</a>
+                            <partial name="_Tip" model='"Days of inventory: how long sellable, inbound, and FC-transfer stock lasts at the current sales rate (home stock not counted). The bar compares it with the restock target."' /></th>
+                        <th class="text-end col-sold"><a href="@Model.SortLink(InventorySort.Sold30d)" class="sort-link">Sold 30d @Model.SortArrow(InventorySort.Sold30d)</a></th>
+                        <th>Next step <partial name="_Tip" model='"What to do to stay in stock: send home stock first, order the rest from your supplier, each by the last day it still arrives in time. Hover a row’s step for the stockout date and lead times."' /></th>
+                        @if (Model.CanEdit)
                         {
-                            <img class="product-thumb" src="@Url.Page("Image", new { sku = p.Sku, v = System.IO.Path.GetFileNameWithoutExtension(image) })" alt="" loading="lazy" width="40" height="40" />
+                            <th class="text-end"><span class="visually-hidden">Actions</span></th>
                         }
-                        else
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in rows)
+                {
+                    var p = item.Position;
+                    var status = InventoryFormat.Status(item);
+                    <tr>
+                        <td class="product-col"><partial name="_InventoryProduct" model="item" /></td>
+                        <td><span class="@status.CssClass" title="@status.Tip">@status.Label</span></td>
+                        <td class="text-end">
+                            @if (p.SnapshotDate is null)
+                            {
+                                <span class="cell-sub">—</span>
+                            }
+                            else
+                            {
+                                <div class="fw-semibold">@p.Available.ToString("N0", en)</div>
+                                @if (p.Inbound > 0)
+                                {
+                                    <div class="cell-sub">+@p.Inbound.ToString("N0", en) inbound</div>
+                                }
+                            }
+                        </td>
+                        <td>
+                            @if (item.DaysOfInventory is { } days)
+                            {
+                                <div class="cover">
+                                    <span class="cover-days">@days.ToString("N0", en) d</span>
+                                    <svg class="cover-bar" width="@InventoryFormat.CoverBarWidth" height="6" viewBox="0 0 @InventoryFormat.CoverBarWidth 6" aria-hidden="true">
+                                        <rect class="cover-track" x="0" y="0" width="@InventoryFormat.CoverBarWidth" height="6" rx="3" />
+                                        <rect class="@InventoryFormat.CoverClass(item.Status)" x="0" y="0" width="@InventoryFormat.CoverWidth(item)" height="6" rx="3" />
+                                    </svg>
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="cell-sub">—</span>
+                            }
+                        </td>
+                        <td class="text-end col-sold">
+                            <div>@item.UnitsSold30d.ToString("N0", en)</div>
+                            @if (item.DailyVelocity is { } perDay)
+                            {
+                                <div class="cell-sub">@perDay.ToString("0.0", en)/day</div>
+                            }
+                        </td>
+                        <td>
+                            @if (item.Restock is { } plan && plan.UnitsNeeded > 0)
+                            {
+                                var steps = InventoryFormat.Steps(plan);
+                                <div class="next-step" title="@InventoryFormat.StepsTip(item)">
+                                    <div><strong>@steps[0].Action</strong> <span class="text-muted-token">@steps[0].When</span></div>
+                                    @if (steps.Count > 1)
+                                    {
+                                        <div class="cell-sub">then @steps[1].Action.ToLowerInvariant() @steps[1].When</div>
+                                    }
+                                </div>
+                            }
+                            else if (item.Restock is { } covered)
+                            {
+                                <span class="cell-sub" title="@InventoryFormat.StepsTip(item)">Covered until @InventoryFormat.ShortDate(covered.ProjectedStockout)</span>
+                            }
+                            else
+                            {
+                                <span class="cell-sub">—</span>
+                            }
+                        </td>
+                        @if (Model.CanEdit)
                         {
-                            <span class="product-thumb product-thumb-empty" aria-hidden="true"></span>
+                            <td class="text-end">
+                                <a asp-page="Edit" asp-route-sku="@p.Sku" class="btn btn-sm btn-soft btn-icon" aria-label="Edit @p.Sku"
+                                   data-bs-toggle="tooltip" data-bs-title="Edit family, picture, home stock, and lead times"><partial name="_Icon" model='"edit"' /></a>
+                            </td>
                         }
-                    </td>
-                    <td>
-                        <div class="product-title" title="@p.Title">@(p.Title ?? p.Sku)</div>
-                        <div class="product-sku">@p.Sku@(p.Asin is { } asin ? $" · {asin}" : "")@(p.Family is { } family ? $" · {family}" : "")</div>
-                    </td>
-                    @if (p.SnapshotDate is null)
-                    {
-                        <td colspan="8" class="text-end cell-sub">Not at Amazon yet</td>
-                    }
-                    else
-                    {
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table data-table inventory-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="product-col"><a href="@Model.SortLink(InventorySort.Sku)" class="sort-link">Product @Model.SortArrow(InventorySort.Sku)</a></th>
+                        <th class="text-end"><a href="@Model.SortLink(InventorySort.Available)" class="sort-link">Available @Model.SortArrow(InventorySort.Available)</a></th>
+                        <th class="text-end col-group" title="On a shipment plan, not shipped yet"><span class="th-group">Inbound</span>Working</th>
+                        <th class="text-end" title="In transit to Amazon"><span class="th-group">Inbound</span>Shipped</th>
+                        <th class="text-end" title="Arrived and being checked in"><span class="th-group">Inbound</span>Receiving</th>
+                        <th class="text-end col-group" title="Sold, waiting to ship"><span class="th-group">Reserved</span>Orders</th>
+                        <th class="text-end" title="Moving between fulfillment centers"><span class="th-group">Reserved</span>Transfer</th>
+                        <th class="text-end" title="Held for measuring or investigation"><span class="th-group">Reserved</span>Processing</th>
+                        <th class="text-end col-group">Unfulfillable</th>
+                        <th class="text-end">Home</th>
+                        <th class="text-end col-group">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in rows)
+                {
+                    var p = item.Position;
+                    <tr>
+                        <td class="product-col"><partial name="_InventoryProduct" model="item" /></td>
                         <td class="text-end fw-semibold">@p.Available.ToString("N0", en)</td>
                         @if (p.HasInboundBreakdown)
                         {
-                            <td class="text-end">@p.InboundWorking.ToString("N0", en)</td>
-                            <td class="text-end">@p.InboundShipped.ToString("N0", en)</td>
-                            <td class="text-end">@p.InboundReceiving.ToString("N0", en)</td>
+                            <td class="text-end col-group">@Units(p.InboundWorking)</td>
+                            <td class="text-end">@Units(p.InboundShipped)</td>
+                            <td class="text-end">@Units(p.InboundReceiving)</td>
                         }
                         else
                         {
-                            <td colspan="3" class="text-end">@p.Inbound.ToString("N0", en) <span class="cell-sub">no breakdown</span></td>
+                            <td colspan="3" class="text-end col-group" title="This source gives inbound as one total">@p.Inbound.ToString("N0", en) <span class="cell-sub">total</span></td>
                         }
                         @if (p.HasReservedBreakdown)
                         {
-                            <td class="text-end">@p.ReservedCustomerOrder.ToString("N0", en)</td>
-                            <td class="text-end">@p.ReservedFcTransfer.ToString("N0", en)</td>
-                            <td class="text-end">@p.ReservedFcProcessing.ToString("N0", en)</td>
+                            <td class="text-end col-group">@Units(p.ReservedCustomerOrder)</td>
+                            <td class="text-end">@Units(p.ReservedFcTransfer)</td>
+                            <td class="text-end">@Units(p.ReservedFcProcessing)</td>
                         }
                         else
                         {
-                            <td colspan="3" class="text-end">@p.Reserved.ToString("N0", en) <span class="cell-sub">no breakdown</span></td>
+                            <td colspan="3" class="text-end col-group" title="No reserved-inventory report for this date, so only the total is known">@p.Reserved.ToString("N0", en) <span class="cell-sub">total</span></td>
                         }
-                        <td class="text-end">@p.Unfulfillable.ToString("N0", en)</td>
-                    }
-                    <td class="text-end">@p.HomeStock.ToString("N0", en)</td>
-                    <td class="text-end col-divider">@item.UnitsSold30d.ToString("N0", en)</td>
-                    <td class="text-end">@item.UnitsSold90d.ToString("N0", en)</td>
-                    <td class="text-end">@(item.DailyVelocity?.ToString("0.00", en) ?? "—")</td>
-                    <td class="text-end">@(item.DaysOfInventory?.ToString("N1", en) ?? "—")</td>
-                    <td class="col-divider restock-cell">
-                        @if (item.Restock is not { } plan)
-                        {
-                            <span class="cell-sub" title="Needs @InventoryService.MinCoverageDays days and @InventoryService.MinUnitsSold units of sales history.">Not enough sales data</span>
-                        }
-                        else if (plan.DaysUntilAction is not { } due)
-                        {
-                            <span class="cell-sub">Covered until @InventoryFormat.ShortDate(plan.ProjectedStockout)</span>
-                        }
-                        else
-                        {
-                            var pill = InventoryFormat.ActionPill(due, Model.SoonDays);
-                            <span class="@pill.CssClass">@pill.Text</span>
-                            @if (plan.SendFromHome > 0)
-                            {
-                                <div>Send <strong>@plan.SendFromHome.ToString("N0", en)</strong> by @InventoryFormat.ShortDate(plan.SendBy)</div>
-                            }
-                            @if (plan.OrderFromSupplier > 0)
-                            {
-                                <div>Order <strong>@plan.OrderFromSupplier.ToString("N0", en)</strong> by @InventoryFormat.ShortDate(plan.OrderBy)</div>
-                            }
-                        }
-                        @if (!item.LeadTimes.IsCustom)
-                        {
-                            <div class="cell-sub">default lead times</div>
-                        }
-                    </td>
-                    @if (Model.CanEdit)
-                    {
-                        <td class="text-end"><a asp-page="Edit" asp-route-sku="@p.Sku" class="btn btn-sm btn-soft">Edit</a></td>
-                    }
-                </tr>
-            }
-            @if (Model.Overview.Items.Items.Count == 0)
-            {
-                <tr><td colspan="18" class="text-body-secondary p-3">@(string.IsNullOrWhiteSpace(Model.Search) && Model.FamilyId is null ? "No inventory yet. Turn on the FBA inventory sync in Tools → Amazon sync, or import an inventory file." : "No SKUs match your filter.")</td></tr>
-            }
-            </tbody>
-        </table>
+                        <td class="text-end col-group">@Units(p.Unfulfillable)</td>
+                        <td class="text-end">@Units(p.HomeStock)</td>
+                        <td class="text-end col-group fw-semibold">@p.OverallTotal.ToString("N0", en)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
         </div>
-    </div>
+    }
 </div>
 <partial name="_Pager" model="Model.Overview.Items.ToPager(Model.Search, Model.PagerFilters)" />
-<p class="page-footnote">Sorted by the soonest restock action. Search matches SKU, ASIN, product name, or family. Totals cover every SKU that matches, not just this page. Days are @Model.Marketplace.Name local days.</p>
+
+@functions {
+    // Zero is shown as a muted dash so the numbers that matter stand out.
+    private static Microsoft.AspNetCore.Html.IHtmlContent Units(int value) =>
+        value == 0
+            ? new Microsoft.AspNetCore.Html.HtmlString("<span class=\"zero\">–</span>")
+            : new Microsoft.AspNetCore.Html.HtmlString(value.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("en-US")));
+}
