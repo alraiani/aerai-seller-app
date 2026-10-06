@@ -45,6 +45,7 @@ public sealed class SqlDatabaseFixture : IAsyncLifetime
                 // The emulator connection string never connects unless used; the in-memory store replaces it below.
                 ["ConnectionStrings:RawStorage"] = blobConnectionString ?? "UseDevelopmentStorage=true",
                 ["RawStorage:ContainerName"] = $"test-{Guid.NewGuid():N}",
+                ["RawStorage:ProductImageContainerName"] = $"test-img-{Guid.NewGuid():N}",
 
                 // The built-in simulator stands in for Amazon, so ingestion runs end to end without credentials.
                 ["SpApi:Mode"] = "Simulated",
@@ -91,6 +92,7 @@ public sealed class SqlDatabaseFixture : IAsyncLifetime
         if (_usesBlob)
         {
             await _services.GetRequiredService<BlobContainerClient>().DeleteIfExistsAsync();
+            await _services.GetRequiredService<ProductImageContainer>().Client.DeleteIfExistsAsync();
         }
 
         await _services.DisposeAsync();

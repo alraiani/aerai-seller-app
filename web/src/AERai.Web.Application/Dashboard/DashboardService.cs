@@ -54,7 +54,10 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
         var current = lines.Where(l => l.PurchaseDate >= start).ToList();
         var previous = lines.Where(l => l.PurchaseDate < previousEnd).ToList();
 
-        var items = await inventory.GetItemsAsync(marketplace, cancellationToken).ConfigureAwait(false);
+        // The dashboard reports stock at Amazon; SKUs held only at home have no Amazon position yet.
+        var items = (await inventory.GetItemsAsync(marketplace, cancellationToken).ConfigureAwait(false))
+            .Where(i => i.Position.SnapshotDate is not null)
+            .ToList();
         var settlement = await queries.GetLatestSettlementAsync(id, cancellationToken).ConfigureAwait(false);
         var missingCost = await queries.GetSoldSkusMissingCostAsync(id, now.AddDays(-SellingWindowDays), cancellationToken).ConfigureAwait(false);
         var awaitingPromotion = await queries.CountBatchesAwaitingPromotionAsync(id, cancellationToken).ConfigureAwait(false);
@@ -161,7 +164,7 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
             .ToList();
     }
 
-    private static InventoryGlance Summarize(IReadOnlyList<InventoryItem> items, decimal lowStockDays) => new(
+    private static InventoryGlance Summarize(List<InventoryItem> items, decimal lowStockDays) => new(
         SkusTotal: items.Count,
         SkusInStock: items.Count(i => i.Position.Available > 0),
         AvailableUnits: items.Sum(i => i.Position.Available),
@@ -180,7 +183,7 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
     /// the list stays short enough to read at a glance.
     /// </summary>
     private static List<AttentionItem> BuildAttention(
-        IReadOnlyList<InventoryItem> stockItems,
+        List<InventoryItem> stockItems,
         InventoryGlance inventory,
         IReadOnlyList<SyncGlance> sync,
         bool syncPaused,

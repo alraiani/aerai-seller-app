@@ -18,8 +18,20 @@ public sealed class InventoryPosition
     /// <summary>Product title, when known.</summary>
     public string? Title { get; set; }
 
-    /// <summary>Date of the most recent snapshot for the SKU.</summary>
-    public DateOnly SnapshotDate { get; set; }
+    /// <summary>The product's family, if assigned.</summary>
+    public int? FamilyId { get; set; }
+
+    /// <summary>The family's name, if assigned.</summary>
+    public string? Family { get; set; }
+
+    /// <summary>Blob path of the product picture, if one was uploaded (changes with every upload).</summary>
+    public string? ImagePath { get; set; }
+
+    /// <summary>
+    /// Date of the most recent Amazon snapshot for the SKU, or <see langword="null"/> when the SKU is
+    /// only held at home.
+    /// </summary>
+    public DateOnly? SnapshotDate { get; set; }
 
     /// <summary>Units sellable now.</summary>
     public int Available { get; set; }
@@ -51,6 +63,9 @@ public sealed class InventoryPosition
     /// <summary>Units not sellable.</summary>
     public int Unfulfillable { get; set; }
 
+    /// <summary>Units held outside Amazon for this marketplace (entered by users).</summary>
+    public int HomeStock { get; set; }
+
     /// <summary>All inbound units, whatever their stage.</summary>
     public int Inbound => InboundWorking + InboundShipped + InboundReceiving + InboundUnsplit;
 
@@ -66,13 +81,17 @@ public sealed class InventoryPosition
     /// <summary>Every unit Amazon reports for the SKU, in any state.</summary>
     public int AmazonTotal => Available + Inbound + Reserved + Unfulfillable;
 
+    /// <summary>Every unit the seller owns: everything at Amazon plus home stock.</summary>
+    public int OverallTotal => AmazonTotal + HomeStock;
+
     /// <summary>
     /// Units that will become (or already are) sellable without action: available, inbound, and
     /// stock moving or being processed between fulfillment centers.
     /// </summary>
     /// <remarks>
     /// Customer-order reservations are excluded because those units are already sold, and
-    /// unfulfillable units never sell. Unsplit reserved stock is excluded too: without a breakdown
+    /// unfulfillable units never sell. Home stock is excluded because it is not at Amazon yet; it is
+    /// what restock planning sends from. Unsplit reserved stock is excluded too: without a breakdown
     /// it may be mostly customer orders, so counting it would overstate cover.
     /// </remarks>
     public int SellThroughStock => Available + Inbound + ReservedFcTransfer + ReservedFcProcessing;

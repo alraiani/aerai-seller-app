@@ -15,5 +15,10 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.Sku).HasMaxLength(64);
         builder.Property(p => p.Asin).HasMaxLength(16);
         builder.Property(p => p.Title).HasMaxLength(400);
+        builder.Property(p => p.ImagePath).HasMaxLength(256);
+        builder.Property(p => p.ImageContentType).HasMaxLength(32);
+
+        // Deleting a family leaves its products unassigned rather than deleting them.
+        builder.HasOne<ProductFamily>().WithMany().HasForeignKey(p => p.FamilyId).OnDelete(DeleteBehavior.SetNull);
     }
 }

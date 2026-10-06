@@ -1,0 +1,55 @@
+@page
+@using System.Globalization
+@model AERai.Web.UI.Pages.Inventory.HomeStock.IndexModel
+@{
+    ViewData["Title"] = "Edit home stock";
+    var en = CultureInfo.GetCultureInfo("en-US");
+}
+<nav class="crumbs" aria-label="Breadcrumb"><a asp-page="../Index">Inventory</a><span>/</span><span>Home stock</span></nav>
+<div class="list-toolbar mb-3">
+    <partial name="_SearchForm" model="Model.Search" />
+    <a asp-page="Upload" class="btn btn-sm btn-soft">Upload a spreadsheet instead</a>
+</div>
+<p class="text-muted-token small">
+    Units you hold outside Amazon for @Model.Marketplace.Name. Change any numbers, then save once; only changed rows are saved, and 0 clears a SKU.
+    SKUs appear here once Amazon reports them for this marketplace; for others, use the upload.
+</p>
+<form method="post" asp-route-p="@Model.PageNumber" asp-route-q="@Model.Search">
+    <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>Product</th><th class="text-end">At Amazon</th><th class="text-end home-stock-col">Home stock</th></tr></thead>
+                <tbody>
+                @for (var i = 0; i < Model.Skus.Items.Count; i++)
+                {
+                    var p = Model.Skus.Items[i].Position;
+                    <tr>
+                        <td>
+                            <div class="product-title" title="@p.Title">@(p.Title ?? p.Sku)</div>
+                            <div class="product-sku">@p.Sku</div>
+                        </td>
+                        <td class="text-end">@p.AmazonTotal.ToString("N0", en)</td>
+                        <td class="text-end">
+                            <input type="hidden" name="Rows[@i].Sku" value="@p.Sku" />
+                            <input type="hidden" name="Rows[@i].Original" value="@p.HomeStock" />
+                            <input type="number" name="Rows[@i].Quantity" value="@Model.ValueFor(Model.Skus.Items[i])" min="0" step="1" class="form-control form-control-sm text-end" aria-label="Home stock for @p.Sku" />
+                        </td>
+                    </tr>
+                }
+                @if (Model.Skus.Items.Count == 0)
+                {
+                    <tr><td colspan="3" class="text-body-secondary p-3">No SKUs match.</td></tr>
+                }
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </div>
+    <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-primary">Save home stock</button>
+        <a asp-page="../Index" class="btn btn-link">Back to inventory</a>
+    </div>
+</form>
+<partial name="_Pager" model="Model.Skus.ToPager(Model.Search)" />

@@ -8,6 +8,7 @@ using AERai.Web.Infrastructure.Promotion;
 using AERai.Web.Infrastructure.Queries;
 using AERai.Web.Infrastructure.Repositories;
 using AERai.Web.Infrastructure.SpApi;
+using AERai.Web.Infrastructure.Spreadsheets;
 using AERai.Web.Infrastructure.Storage;
 using Azure.Identity;
 using Azure.Storage.Blobs;
@@ -85,6 +86,8 @@ public static class DependencyInjection
         services.AddScoped<IReportingQueries, ReportingQueries>();
         services.AddScoped<IDashboardQueries, DashboardQueries>();
         services.AddScoped<IInventoryQueries, InventoryQueries>();
+        services.AddScoped<IInventoryItemRepository, InventoryItemRepository>();
+        services.AddSingleton<ISpreadsheetReader, ClosedXmlSpreadsheetReader>();
         services.AddScoped<IPromotionService, SqlPromotionService>();
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<ISyncScheduleRepository, SyncScheduleRepository>();
@@ -170,6 +173,10 @@ public static class DependencyInjection
             .GetBlobContainerClient(provider.GetRequiredService<IOptions<RawStorageOptions>>().Value.ContainerName));
 
         services.AddSingleton<IRawFileStore, BlobRawFileStore>();
+
+        services.AddSingleton(provider => new ProductImageContainer(provider.GetRequiredService<BlobServiceClient>()
+            .GetBlobContainerClient(provider.GetRequiredService<IOptions<RawStorageOptions>>().Value.ProductImageContainerName)));
+        services.AddSingleton<IProductImageStore, BlobProductImageStore>();
     }
 
     /// <summary>

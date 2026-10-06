@@ -33,6 +33,7 @@ public sealed class BlobRawFileStoreTests : IAsyncLifetime
                 ["ConnectionStrings:Sql"] = "Server=unused;Database=unused",
                 ["ConnectionStrings:RawStorage"] = _connectionString,
                 ["RawStorage:ContainerName"] = $"test-{Guid.NewGuid():N}",
+                ["RawStorage:ProductImageContainerName"] = $"test-img-{Guid.NewGuid():N}",
             })
             .Build();
 
@@ -49,6 +50,7 @@ public sealed class BlobRawFileStoreTests : IAsyncLifetime
         if (_services is not null)
         {
             await _services.GetRequiredService<BlobContainerClient>().DeleteIfExistsAsync();
+            await _services.GetRequiredService<ProductImageContainer>().Client.DeleteIfExistsAsync();
             await _services.DisposeAsync();
         }
     }

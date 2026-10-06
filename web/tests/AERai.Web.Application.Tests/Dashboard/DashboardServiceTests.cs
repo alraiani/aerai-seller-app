@@ -159,13 +159,13 @@ public sealed class DashboardServiceTests
     public async Task Attention_OrdersCriticalFirstAndNamesSkus()
     {
         _queries.MissingCost.AddRange(["C1", "C2", "C3", "C4"]);
-        _inventory.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "OUT", Available = 0 });
+        _inventory.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "OUT", Available = 0, SnapshotDate = new DateOnly(2026, 10, 5) });
         _inventory.Sold.Add(new UnitsSold("OUT", Now.AddDays(-20), 12));
         // 30 units over 30 days = 1/day, so 10 units last 10 days (under the 21-day threshold).
-        _inventory.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "LOW", Available = 10 });
+        _inventory.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "LOW", Available = 10, SnapshotDate = new DateOnly(2026, 10, 5) });
         _inventory.Sold.Add(new UnitsSold("LOW", Now.AddDays(-29), 15));
         _inventory.Sold.Add(new UnitsSold("LOW", Now, 15));
-        _inventory.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "DEAD", Available = 0 });
+        _inventory.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "DEAD", Available = 0, SnapshotDate = new DateOnly(2026, 10, 5) });
         _queries.AwaitingPromotion = 2;
 
         var snapshot = await CreateService().GetSnapshotAsync(Us, DashboardPeriod.Last7Days, CancellationToken.None);
@@ -177,6 +177,17 @@ public sealed class DashboardServiceTests
         Assert.Contains("OUT", snapshot.Attention[0].Detail, StringComparison.Ordinal);
         Assert.Contains("C1, C2, C3 +1 more", snapshot.Attention[3].Detail, StringComparison.Ordinal);
         Assert.Equal((1, 1), (snapshot.Inventory.OutOfStockSelling, snapshot.Inventory.LowStock));
+    }
+
+    [Fact]
+    public async Task Inventory_SkuHeldOnlyAtHome_IsNotCountedAsAmazonStock()
+    {
+        _inventory.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "AMZ", Available = 4, SnapshotDate = new DateOnly(2026, 10, 5) });
+        _inventory.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "HOME", HomeStock = 50 });
+
+        var snapshot = await CreateService().GetSnapshotAsync(Us, DashboardPeriod.Today, CancellationToken.None);
+
+        Assert.Equal((1, 1), (snapshot.Inventory.SkusTotal, snapshot.Inventory.SkusInStock));
     }
 
     [Fact]

@@ -22,6 +22,37 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.HomeStock", b =>
+                {
+                    b.Property<string>("Sku")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("MarketplaceId")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.HasKey("Sku", "MarketplaceId");
+
+                    b.HasIndex("MarketplaceId");
+
+                    b.ToTable("HomeStock", "core", t =>
+                        {
+                            t.HasCheckConstraint("CK_HomeStock_NonNegative", "[Quantity] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.InventorySnapshot", b =>
                 {
                     b.Property<long>("Id")
@@ -255,6 +286,17 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<int?>("FamilyId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ImageContentType")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("ImagePath")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
                     b.Property<string>("Title")
                         .HasMaxLength(400)
                         .HasColumnType("nvarchar(400)");
@@ -263,6 +305,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.HasKey("Sku");
+
+                    b.HasIndex("FamilyId");
 
                     b.ToTable("Product", "core");
                 });
@@ -292,6 +336,27 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_ProductCost_NonNegative", "[CostOfGoods] >= 0");
                         });
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.ProductFamily", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("ProductFamily", "core");
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Core.Settlement", b =>
@@ -636,6 +701,18 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<int>("Available")
                         .HasColumnType("int");
 
+                    b.Property<string>("Family")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("FamilyId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("HomeStock")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ImagePath")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("InboundReceiving")
                         .HasColumnType("int");
 
@@ -669,7 +746,7 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateOnly>("SnapshotDate")
+                    b.Property<DateOnly?>("SnapshotDate")
                         .HasColumnType("date");
 
                     b.Property<string>("Title")
@@ -1400,6 +1477,21 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.ToTable("UserTokens", "auth");
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.HomeStock", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AERai.Web.Domain.Core.Product", null)
+                        .WithMany()
+                        .HasForeignKey("Sku")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.InventorySnapshot", b =>
                 {
                     b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
@@ -1439,6 +1531,14 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.Product", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.ProductFamily", null)
+                        .WithMany()
+                        .HasForeignKey("FamilyId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Core.ProductCost", b =>

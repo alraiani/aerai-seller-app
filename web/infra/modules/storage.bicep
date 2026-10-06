@@ -5,6 +5,7 @@
 // web app's managed identity gets Storage Blob Data Contributor; there is no account key to leak.
 // Lifecycle: raw files move to Cool after 30 days and Archive after 180, and are never deleted
 // automatically (they are the audit record of what was received).
+// A second container holds product pictures; it is served through the app and is not tiered.
 
 @description('Storage account name (3-24 lowercase alphanumerics, globally unique).')
 @minLength(3)
@@ -19,6 +20,9 @@ param tags object
 
 @description('Blob container for raw files.')
 param containerName string = 'raw'
+
+@description('Blob container for product pictures (replaceable, served through the app).')
+param productImageContainerName string = 'product-images'
 
 @description('Principal ID granted read/write access to blobs (the web app managed identity).')
 param blobContributorPrincipalId string
@@ -56,6 +60,12 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
 resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
   name: containerName
+  properties: { publicAccess: 'None' }
+}
+
+resource productImageContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: productImageContainerName
   properties: { publicAccess: 'None' }
 }
 

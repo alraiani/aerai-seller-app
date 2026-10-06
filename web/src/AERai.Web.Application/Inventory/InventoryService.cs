@@ -72,12 +72,17 @@ public sealed class InventoryService(IInventoryQueries queries, TimeProvider clo
     }
 
     /// <inheritdoc/>
-    public async Task<InventoryOverview> GetOverviewAsync(Marketplace marketplace, PageRequest request, CancellationToken cancellationToken)
+    public async Task<InventoryOverview> GetOverviewAsync(Marketplace marketplace, PageRequest request, int? familyId, InventorySort sort, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var items = await GetItemsAsync(marketplace, cancellationToken).ConfigureAwait(false);
-        var matching = request.SafeSearch is { } search ? items.Where(i => Matches(i.Position, search)).ToList() : items;
+        var filtered = items
+            .Where(i => familyId is null || i.Position.FamilyId == familyId)
+            .Where(i => request.SafeSearch is not { } search || Matches(i.Position, search));
+
+        // Items arrive in urgency order; the SKU order is for working down a list while counting.
+        var matching = (sort == InventorySort.Sku ? filtered.OrderBy(i => i.Sku, StringComparer.Ordinal) : filtered).ToList();
 
         var page = matching.Skip(request.Skip).Take(request.SafePageSize).ToList();
         return new InventoryOverview(
@@ -103,13 +108,15 @@ public sealed class InventoryService(IInventoryQueries queries, TimeProvider clo
     private static bool Matches(InventoryPosition p, string search) =>
         p.Sku.Contains(search, StringComparison.OrdinalIgnoreCase)
         || (p.Asin?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
-        || (p.Title?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
+        || (p.Title?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+        || (p.Family?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
 
-    private static InventoryTotals Totals(IReadOnlyList<InventoryItem> items) => new(
+    private static InventoryTotals Totals(List<InventoryItem> items) => new(
         SkuCount: items.Count,
         Available: items.Sum(i => i.Position.Available),
         Inbound: items.Sum(i => i.Position.Inbound),
         Reserved: items.Sum(i => i.Position.Reserved),
         Unfulfillable: items.Sum(i => i.Position.Unfulfillable),
+        HomeStock: items.Sum(i => i.Position.HomeStock),
         SnapshotDate: items.Count == 0 ? null : items.Max(i => i.Position.SnapshotDate));
 }

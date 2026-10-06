@@ -1,0 +1,73 @@
+@page "{sku}"
+@using AERai.Web.Application.Inventory
+@model AERai.Web.UI.Pages.Inventory.EditModel
+@{
+    ViewData["Title"] = "Edit inventory item";
+}
+<nav class="crumbs" aria-label="Breadcrumb"><a asp-page="Index">Inventory</a><span>/</span><span>@Model.Item.Sku</span></nav>
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h6 mb-1">@(Model.Item.Title ?? Model.Item.Sku)</h2>
+                <p class="product-sku mb-3">@Model.Item.Sku@(Model.Item.Asin is { } asin ? $" · {asin}" : "")</p>
+                <form method="post">
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+                    <div class="mb-3">
+                        <label asp-for="Input.Family" class="form-label"></label>
+                        <input asp-for="Input.Family" class="form-control" list="family-options" autocomplete="off" />
+                        <datalist id="family-options">
+                            @foreach (var f in Model.Families)
+                            {
+                                <option value="@f.Name"></option>
+                            }
+                        </datalist>
+                        <span asp-validation-for="Input.Family" class="text-danger small"></span>
+                        <div class="form-text">Groups similar products so you can filter and total them together. Pick one or type a new name; leave blank for none. Shared by all marketplaces.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Input.HomeStock" class="form-label"></label>
+                        <input asp-for="Input.HomeStock" class="form-control" type="number" min="0" step="1" />
+                        <span asp-validation-for="Input.HomeStock" class="text-danger small"></span>
+                        <div class="form-text">Units you hold outside Amazon for @Model.Marketplace.Name. Not counted in days of inventory.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <a asp-page="Index" class="btn btn-link">Cancel</a>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">Picture</div>
+            <div class="card-body">
+                <div class="d-flex gap-3 align-items-start">
+                    @if (Model.Item.ImagePath is { } image)
+                    {
+                        <img class="product-thumb product-thumb-lg" src="@Url.Page("Image", new { sku = Model.Item.Sku, v = System.IO.Path.GetFileNameWithoutExtension(image) })" alt="Picture of @Model.Item.Sku" />
+                    }
+                    else
+                    {
+                        <span class="product-thumb product-thumb-lg product-thumb-empty" aria-hidden="true"></span>
+                    }
+                    <div class="flex-grow-1">
+                        <form method="post" asp-page-handler="Picture" enctype="multipart/form-data" class="mb-2">
+                            <input asp-for="Picture" type="file" class="form-control form-control-sm mb-2" accept="image/jpeg,image/png,image/webp" />
+                            <button type="submit" class="btn btn-sm btn-primary">Upload picture</button>
+                        </form>
+                        @if (Model.Item.ImagePath is not null)
+                        {
+                            <form method="post" asp-page-handler="RemovePicture">
+                                <button type="submit" class="btn btn-sm btn-soft-bad">Remove picture</button>
+                            </form>
+                        }
+                        <div class="form-text">JPEG, PNG, or WebP, up to @(InventoryItemService.MaxImageBytes / (1024 * 1024)) MB. Shared by all marketplaces.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

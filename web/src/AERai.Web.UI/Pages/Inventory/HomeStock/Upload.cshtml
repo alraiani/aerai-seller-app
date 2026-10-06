@@ -1,0 +1,67 @@
+@page
+@using AERai.Web.Application.Inventory
+@model AERai.Web.UI.Pages.Inventory.HomeStock.UploadModel
+@{
+    ViewData["Title"] = "Upload home stock";
+}
+<nav class="crumbs" aria-label="Breadcrumb"><a asp-page="../Index">Inventory</a><span>/</span><a asp-page="Index">Home stock</a><span>/</span><span>Upload</span></nav>
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
+                    <div class="mb-3">
+                        <label asp-for="Spreadsheet" class="form-label"></label>
+                        <input asp-for="Spreadsheet" type="file" class="form-control" accept=".xlsx,.csv,.tsv" />
+                        <div class="form-text">.xlsx, .csv, or .tsv, up to @(UploadModel.MaxFileBytes / (1024 * 1024)) MB and @InventoryItemService.MaxHomeStockRows.ToString("N0") rows. Imported into @Model.Marketplace.Name.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Upload</button>
+                    <a asp-page-handler="Template" class="btn btn-soft">Download template</a>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">File layout</div>
+            <div class="card-body small">
+                <p class="mb-2">A header row with <code>sku</code> and <code>home-stock</code> columns (other columns are ignored). The template lists every SKU in @Model.Marketplace.Name with its current home stock.</p>
+                <ul class="mb-0">
+                    <li>Each row sets that SKU's home stock; SKUs not in the file are left alone.</li>
+                    <li><code>0</code> clears a SKU. Rows with an unknown SKU or a bad number are skipped and listed below.</li>
+                    <li>If a SKU appears twice, the last row wins.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.Outcome is { } outcome)
+{
+    <div class="card mt-3">
+        <div class="card-header">Result</div>
+        <div class="card-body">
+            <p class="mb-2">Saved home stock for <strong>@outcome.Saved.ToString("N0")</strong> SKU@(outcome.Saved == 1 ? "" : "s"); <strong>@outcome.Rejected.Count.ToString("N0")</strong> row@(outcome.Rejected.Count == 1 ? "" : "s") skipped.</p>
+            @if (outcome.Rejected.Count > 0)
+            {
+                <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>Row</th><th>Problem</th><th>Line</th></tr></thead>
+                    <tbody>
+                    @foreach (var row in outcome.Rejected.Take(UploadModel.RejectedRowsShown))
+                    {
+                        <tr><td>@row.RowNumber</td><td>@row.ErrorMessage</td><td class="raw-line">@row.RawLine</td></tr>
+                    }
+                    </tbody>
+                </table>
+                </div>
+                @if (outcome.Rejected.Count > UploadModel.RejectedRowsShown)
+                {
+                    <p class="page-footnote">Showing the first @UploadModel.RejectedRowsShown of @outcome.Rejected.Count.ToString("N0") skipped rows.</p>
+                }
+            }
+            <a asp-page="../Index" class="btn btn-sm btn-soft mt-3">Back to inventory</a>
+        </div>
+    </div>
+}
