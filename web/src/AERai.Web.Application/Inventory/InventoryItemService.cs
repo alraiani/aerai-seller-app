@@ -27,9 +27,6 @@ public sealed partial class InventoryItemService(
     /// <summary>Largest picture accepted, in bytes (2 MB is plenty for a thumbnail-sized product photo).</summary>
     public const int MaxImageBytes = 2 * 1024 * 1024;
 
-    /// <summary>Longest family name accepted.</summary>
-    public const int MaxFamilyNameLength = 100;
-
     /// <summary>Sanity ceiling on a home-stock count; anything higher is almost certainly a typo.</summary>
     public const int MaxHomeStock = 1_000_000;
 
@@ -58,10 +55,10 @@ public sealed partial class InventoryItemService(
         ArgumentNullException.ThrowIfNull(update);
         ArgumentException.ThrowIfNullOrWhiteSpace(user);
 
-        var name = NormalizeFamily(update.Family);
-        if (name is { Length: > MaxFamilyNameLength })
+        var name = FamilyNames.Normalize(update.Family);
+        if (name is not null && FamilyNames.Validate(name) is { } familyError)
         {
-            return Result.Failure($"Family names can be at most {MaxFamilyNameLength} characters.");
+            return Result.Failure(familyError);
         }
 
         if (update.HomeStock is < 0 or > MaxHomeStock)
@@ -276,10 +273,6 @@ public sealed partial class InventoryItemService(
             ? $"{bad} must be between {field.Min} and {MaxLeadTimeDays} days."
             : null;
     }
-
-    /// <summary>Trims and collapses inner whitespace; blank means no family.</summary>
-    private static string? NormalizeFamily(string? family) =>
-        string.IsNullOrWhiteSpace(family) ? null : string.Join(' ', family.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     private static async Task<Result<ParsedFile>> ParseTextAsync(Stream content, CancellationToken cancellationToken)
     {

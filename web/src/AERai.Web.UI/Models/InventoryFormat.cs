@@ -27,7 +27,8 @@ public static class InventoryFormat
     [
         (InventorySort.Urgency, "Sort: Most urgent"),
         (InventorySort.DaysOfInventory, "Sort: Days of inventory"),
-        (InventorySort.Sold30d, "Sort: Best sellers"),
+        (InventorySort.Sold30d, "Sort: Best sellers (30d)"),
+        (InventorySort.Sold90d, "Sort: Best sellers (90d)"),
         (InventorySort.Available, "Sort: Most available"),
         (InventorySort.Sku, "Sort: SKU"),
     ];

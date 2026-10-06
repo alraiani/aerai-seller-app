@@ -1,0 +1,36 @@
+@using AERai.Web.Application.Inventory
+@model FamilyManagerModel
+@* Create, rename, and delete families. Used inside the Inventory page's Families dialog and on the
+   Families page; every form posts to /Inventory/Families and returns to the list the user was on. *@
+<form method="post" asp-page="/Inventory/Families" asp-page-handler="Create" asp-route-back="@Model.Back" class="family-create">
+    <input type="text" name="name" class="form-control form-control-sm" placeholder="New family, e.g. Yoga mats" maxlength="@FamilyNames.MaxLength" required aria-label="New family name" />
+    <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"plus"' /> Add</button>
+</form>
+
+@if (Model.Families.Count == 0)
+{
+    <div class="empty-state py-4">
+        <div class="empty-title">No families yet</div>
+        <div class="empty-detail">Add one above, then tick SKUs in the list and use <strong>Set family</strong>.</div>
+    </div>
+}
+else
+{
+    <ul class="family-list">
+        @foreach (var f in Model.Families)
+        {
+            <li class="family-row">
+                <form method="post" asp-page="/Inventory/Families" asp-page-handler="Rename" asp-route-id="@f.Id" asp-route-back="@Model.Back" class="family-rename">
+                    <input type="text" name="name" value="@f.Name" class="form-control form-control-sm" maxlength="@FamilyNames.MaxLength" required aria-label="Name of @f.Name" />
+                    <button type="submit" class="btn btn-sm btn-soft btn-icon" aria-label="Save the new name for @f.Name" title="Save name"><partial name="_Icon" model='"check"' /></button>
+                </form>
+                <a class="family-count" href="@Url.Page("/Inventory/Index", new { family = f.Id })" title="Show these SKUs">@f.SkuCount.ToString("N0") SKU@(f.SkuCount == 1 ? "" : "s")</a>
+                <form method="post" asp-page="/Inventory/Families" asp-page-handler="Delete" asp-route-id="@f.Id" asp-route-back="@Model.Back"
+                      data-confirm="@(f.SkuCount == 0 ? $"Delete the family \"{f.Name}\"?" : $"Delete the family \"{f.Name}\"? Its {f.SkuCount} SKU{(f.SkuCount == 1 ? "" : "s")} will no longer be in a family (the SKUs themselves are kept).")">
+                    <button type="submit" class="btn btn-sm btn-soft-bad btn-icon" aria-label="Delete @f.Name" title="Delete family"><partial name="_Icon" model='"trash"' /></button>
+                </form>
+            </li>
+        }
+    </ul>
+    <p class="page-footnote mb-0">To put SKUs in a family, tick them in the list and use <strong>Set family</strong>. Families are shared by every marketplace.</p>
+}

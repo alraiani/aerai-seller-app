@@ -145,7 +145,7 @@ public sealed class EditModel(IInventoryItemService items, ICurrentMarketplace c
     {
         /// <summary>Family name; a new name creates the family, blank clears it.</summary>
         [Display(Name = "Family")]
-        [StringLength(InventoryItemService.MaxFamilyNameLength)]
+        [StringLength(FamilyNames.MaxLength)]
         public string? Family { get; set; }
 
         /// <summary>Units held outside Amazon for the marketplace.</summary>

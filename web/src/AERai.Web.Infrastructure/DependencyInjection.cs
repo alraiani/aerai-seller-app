@@ -88,6 +88,7 @@ public static class DependencyInjection
         services.AddScoped<IDashboardQueries, DashboardQueries>();
         services.AddScoped<IInventoryQueries, InventoryQueries>();
         services.AddScoped<IInventoryItemRepository, InventoryItemRepository>();
+        services.AddScoped<IProductFamilyRepository, ProductFamilyRepository>();
         services.AddScoped<IStockAlertRepository, StockAlertRepository>();
         services.AddSingleton<ISpreadsheetReader, ClosedXmlSpreadsheetReader>();
         services.AddScoped<IPromotionService, SqlPromotionService>();

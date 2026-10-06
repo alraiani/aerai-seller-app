@@ -131,12 +131,35 @@
         @if (Model.CanEdit)
         {
             <div class="card-toolbar-group">
+                <a asp-page="Families" asp-route-back="@Model.Back" class="btn btn-sm btn-soft" data-bs-toggle="modal" data-bs-target="#families-dialog"
+                   title="Create, rename, or delete families"><partial name="_Icon" model='"tag"' /> Families</a>
                 <a asp-page="HomeStock/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"edit"' /> Edit home stock</a>
                 <a asp-page="HomeStock/Upload" class="btn btn-sm btn-soft btn-icon" aria-label="Upload home stock"
                    data-bs-toggle="tooltip" data-bs-title="Upload home stock from a spreadsheet (.xlsx or .csv)."><partial name="_Icon" model='"upload"' /></a>
             </div>
         }
     </div>
+    @if (Model.CanEdit && rows.Count > 0 && !Model.IsBreakdown)
+    {
+        @* Bulk family assignment: tick rows (they belong to this form through form="family-bulk-form"),
+           then type or pick a family. A new name creates the family. *@
+        <form method="post" asp-page="Families" asp-page-handler="Assign" asp-route-back="@Model.Back" id="family-bulk-form"
+              class="bulk-bar bulk-bar-row" data-bulk-bar data-bulk-noun="SKU">
+            <span class="bulk-count" data-bulk-count>Tick SKUs to put them in a family.</span>
+            <input type="text" name="family" list="family-names" class="form-control form-control-sm bulk-input" placeholder="Family name…"
+                   maxlength="@FamilyNames.MaxLength" autocomplete="off" aria-label="Family for the selected SKUs" data-bulk-button />
+            <datalist id="family-names">
+                @foreach (var f in Model.Families)
+                {
+                    <option value="@f.Name"></option>
+                }
+            </datalist>
+            <button type="submit" class="btn btn-sm btn-soft" data-bulk-button
+                    data-bs-toggle="tooltip" data-bs-title="Put the ticked SKUs in this family. A new name creates it."><partial name="_Icon" model='"tag"' /> Set family</button>
+            <button type="submit" name="clear" value="true" class="btn btn-sm btn-soft btn-icon" data-bulk-button aria-label="Remove the ticked SKUs from their family"
+                    data-bs-toggle="tooltip" data-bs-title="Take the ticked SKUs out of their family."><partial name="_Icon" model='"x"' /></button>
+        </form>
+    }
 
     @if (noInventory)
     {
@@ -157,15 +180,20 @@
     else if (!Model.IsBreakdown)
     {
         <div class="table-responsive">
-            <table class="table data-table inventory-table align-middle mb-0">
+            <table class="table data-table inventory-table align-middle mb-0 @(Model.CanEdit ? "has-select" : "")">
                 <thead>
                     <tr>
+                        @if (Model.CanEdit)
+                        {
+                            <th class="select-col"><input type="checkbox" class="form-check-input" data-select-all aria-label="Select all SKUs shown" /></th>
+                        }
                         <th class="product-col"><a href="@Model.SortLink(InventorySort.Sku)" class="sort-link">Product @Model.SortArrow(InventorySort.Sku)</a></th>
                         <th><a href="@Model.SortLink(InventorySort.Urgency)" class="sort-link">Status @Model.SortArrow(InventorySort.Urgency)</a></th>
                         <th class="text-end"><a href="@Model.SortLink(InventorySort.Available)" class="sort-link">Available @Model.SortArrow(InventorySort.Available)</a></th>
                         <th><a href="@Model.SortLink(InventorySort.DaysOfInventory)" class="sort-link">Cover @Model.SortArrow(InventorySort.DaysOfInventory)</a>
                             <partial name="_Tip" model='"Days of inventory: how long sellable, inbound, and FC-transfer stock lasts at the current sales rate (home stock not counted). The bar compares it with the restock target."' /></th>
                         <th class="text-end col-sold"><a href="@Model.SortLink(InventorySort.Sold30d)" class="sort-link">Sold 30d @Model.SortArrow(InventorySort.Sold30d)</a></th>
+                        <th class="text-end col-sold"><a href="@Model.SortLink(InventorySort.Sold90d)" class="sort-link">Sold 90d @Model.SortArrow(InventorySort.Sold90d)</a></th>
                         <th>Next step <partial name="_Tip" model='"What to do to stay in stock: send home stock first, order the rest from your supplier, each by the last day it still arrives in time. Hover a row’s step for the stockout date and lead times."' /></th>
                         @if (Model.CanEdit)
                         {
@@ -179,6 +207,10 @@
                     var p = item.Position;
                     var status = InventoryFormat.Status(item);
                     <tr>
+                        @if (Model.CanEdit)
+                        {
+                            <td class="select-col"><input type="checkbox" class="form-check-input" name="skus" value="@p.Sku" form="family-bulk-form" data-select-row aria-label="Select @p.Sku" /></td>
+                        }
                         <td class="product-col"><partial name="_InventoryProduct" model="item" /></td>
                         <td><span class="@status.CssClass" title="@status.Tip">@status.Label</span></td>
                         <td class="text-end">
@@ -218,6 +250,7 @@
                                 <div class="cell-sub">@perDay.ToString("0.0", en)/day</div>
                             }
                         </td>
+                        <td class="text-end col-sold">@item.UnitsSold90d.ToString("N0", en)</td>
                         <td>
                             @if (item.Restock is { } plan && plan.UnitsNeeded > 0)
                             {
@@ -316,4 +349,21 @@
         value == 0
             ? new Microsoft.AspNetCore.Html.HtmlString("<span class=\"zero\">–</span>")
             : new Microsoft.AspNetCore.Html.HtmlString(value.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("en-US")));
+}
+
+@if (Model.CanEdit)
+{
+    <div class="modal fade" id="families-dialog" tabindex="-1" aria-labelledby="families-title" aria-hidden="true" data-open-on-load="@(Model.OpenFamilies ? "true" : null)" data-open-param="families">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h6" id="families-title">Families</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <partial name="_FamilyManager" model="new FamilyManagerModel(Model.Families, Model.Back)" />
+                </div>
+            </div>
+        </div>
+    </div>
 }

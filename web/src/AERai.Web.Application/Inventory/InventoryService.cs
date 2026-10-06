@@ -147,6 +147,7 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
                 ? items.OrderBy(i => i.DaysOfInventory is null).ThenByDescending(i => i.DaysOfInventory)
                 : items.OrderBy(i => i.DaysOfInventory is null).ThenBy(i => i.DaysOfInventory),
             InventorySort.Sold30d => descending ? items.OrderBy(i => i.UnitsSold30d) : items.OrderByDescending(i => i.UnitsSold30d),
+            InventorySort.Sold90d => descending ? items.OrderBy(i => i.UnitsSold90d) : items.OrderByDescending(i => i.UnitsSold90d),
             InventorySort.Available => descending ? items.OrderBy(i => i.Position.Available) : items.OrderByDescending(i => i.Position.Available),
             _ => items.OrderBy(i => 0),
         };

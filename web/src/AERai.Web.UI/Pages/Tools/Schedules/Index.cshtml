@@ -212,7 +212,7 @@
                 <partial name="_Icon" model='"history"' />
             </a>
         </div>
-        <form method="post" asp-page-handler="Bulk" id="bulk-form" class="bulk-bar" data-bulk-bar>
+        <form method="post" asp-page-handler="Bulk" id="bulk-form" class="bulk-bar" data-bulk-bar data-bulk-noun="schedule">
             <input type="hidden" name="back" value="@back" />
             <span class="bulk-count" data-bulk-count>Tick schedules to act on several at once.</span>
             @if (deletedView)
