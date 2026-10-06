@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using AERai.Web.Domain.Core;
 using Microsoft.Extensions.Options;
 
 namespace AERai.Web.Infrastructure.SpApi;
@@ -12,7 +13,7 @@ namespace AERai.Web.Infrastructure.SpApi;
 /// </summary>
 /// <param name="http">HttpClient configured with the SP-API endpoint and pipeline handler.</param>
 /// <param name="httpClientFactory">Factory for the separate document-download client.</param>
-/// <param name="options">SP-API settings (marketplace).</param>
+/// <param name="options">SP-API settings (regional endpoints).</param>
 internal sealed class ReportsApiClient(HttpClient http, IHttpClientFactory httpClientFactory, IOptions<SpApiOptions> options)
 {
     /// <summary>
@@ -23,37 +24,45 @@ internal sealed class ReportsApiClient(HttpClient http, IHttpClientFactory httpC
 
     private const string BasePath = "reports/2021-06-30";
 
-    /// <summary>Calls <c>createReport</c>.</summary>
+    /// <summary>Calls <c>createReport</c> for one marketplace.</summary>
+    /// <param name="marketplace">Marketplace to report on; its region selects endpoint and credentials.</param>
     /// <param name="reportType">SP-API report type code.</param>
     /// <param name="dataStart">Optional data window start.</param>
     /// <param name="dataEnd">Optional data window end.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The new report id.</returns>
-    public async Task<string> CreateReportAsync(string reportType, DateTimeOffset? dataStart, DateTimeOffset? dataEnd, CancellationToken cancellationToken)
+    public async Task<string> CreateReportAsync(Marketplace marketplace, string reportType, DateTimeOffset? dataStart, DateTimeOffset? dataEnd, CancellationToken cancellationToken)
     {
-        var body = new CreateReportRequest(reportType, [options.Value.MarketplaceId], dataStart?.ToUniversalTime(), dataEnd?.ToUniversalTime());
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{BasePath}/reports") { Content = JsonContent.Create(body) };
+        ArgumentNullException.ThrowIfNull(marketplace);
+
+        var body = new CreateReportRequest(reportType, [marketplace.MarketplaceId], dataStart?.ToUniversalTime(), dataEnd?.ToUniversalTime());
+        using var request = Request(HttpMethod.Post, marketplace.Region, $"{BasePath}/reports");
+        request.Content = JsonContent.Create(body);
         var result = await SendAsync<CreateReportResponse>(request, SpApiOperation.CreateReport, cancellationToken).ConfigureAwait(false);
         return result.ReportId;
     }
 
     /// <summary>Calls <c>getReport</c>.</summary>
+    /// <param name="region">Region the report was requested in.</param>
     /// <param name="reportId">Report id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The report.</returns>
-    public Task<ReportResponse> GetReportAsync(string reportId, CancellationToken cancellationToken)
+    public Task<ReportResponse> GetReportAsync(AmazonRegion region, string reportId, CancellationToken cancellationToken)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"{BasePath}/reports/{Uri.EscapeDataString(reportId)}");
+        var request = Request(HttpMethod.Get, region, $"{BasePath}/reports/{Uri.EscapeDataString(reportId)}");
         return SendAndDisposeAsync<ReportResponse>(request, SpApiOperation.GetReport, cancellationToken);
     }
 
-    /// <summary>Calls <c>getReports</c> for DONE reports of one type, following <c>nextToken</c> pages.</summary>
+    /// <summary>Calls <c>getReports</c> for one marketplace's DONE reports of one type, following <c>nextToken</c> pages.</summary>
+    /// <param name="marketplace">Marketplace whose reports to list.</param>
     /// <param name="reportType">SP-API report type code.</param>
     /// <param name="createdSince">Lower bound on creation time.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>All matching reports.</returns>
-    public async Task<IReadOnlyList<ReportResponse>> GetDoneReportsAsync(string reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ReportResponse>> GetDoneReportsAsync(Marketplace marketplace, string reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(marketplace);
+
         var results = new List<ReportResponse>();
         string? nextToken = null;
         do
@@ -61,11 +70,12 @@ internal sealed class ReportsApiClient(HttpClient http, IHttpClientFactory httpC
             // When nextToken is present SP-API requires it to be the only query parameter.
             var query = nextToken is null
                 ? $"reportTypes={Uri.EscapeDataString(reportType)}&processingStatuses=DONE&pageSize=100" +
+                  $"&marketplaceIds={Uri.EscapeDataString(marketplace.MarketplaceId)}" +
                   $"&createdSince={Uri.EscapeDataString(createdSince.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))}"
                 : $"nextToken={Uri.EscapeDataString(nextToken)}";
 
             var page = await SendAndDisposeAsync<GetReportsResponse>(
-                new HttpRequestMessage(HttpMethod.Get, $"{BasePath}/reports?{query}"), SpApiOperation.GetReports, cancellationToken).ConfigureAwait(false);
+                Request(HttpMethod.Get, marketplace.Region, $"{BasePath}/reports?{query}"), SpApiOperation.GetReports, cancellationToken).ConfigureAwait(false);
 
             results.AddRange(page.Reports ?? []);
             nextToken = page.NextToken;
@@ -79,23 +89,25 @@ internal sealed class ReportsApiClient(HttpClient http, IHttpClientFactory httpC
     /// Calls <c>getReports</c> for a single page of one report, purely to prove that the token
     /// exchange and authorization work. The response content is ignored.
     /// </summary>
+    /// <param name="region">Region whose credentials to test.</param>
     /// <param name="reportType">SP-API report type code (any type the app is authorized for).</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>A task that completes when Amazon accepted the call; throws on failure.</returns>
-    public async Task PingAsync(string reportType, CancellationToken cancellationToken)
+    public async Task PingAsync(AmazonRegion region, string reportType, CancellationToken cancellationToken)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"{BasePath}/reports?reportTypes={Uri.EscapeDataString(reportType)}&pageSize=1");
+        var request = Request(HttpMethod.Get, region, $"{BasePath}/reports?reportTypes={Uri.EscapeDataString(reportType)}&pageSize=1");
         await SendAndDisposeAsync<GetReportsResponse>(request, SpApiOperation.GetReports, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Calls <c>getReportDocument</c>, then downloads and (if needed) decompresses the document.</summary>
+    /// <param name="region">Region the report belongs to.</param>
     /// <param name="reportDocumentId">Document id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The decompressed document stream; the caller disposes it.</returns>
-    public async Task<Stream> OpenDocumentAsync(string reportDocumentId, CancellationToken cancellationToken)
+    public async Task<Stream> OpenDocumentAsync(AmazonRegion region, string reportDocumentId, CancellationToken cancellationToken)
     {
         var document = await SendAndDisposeAsync<ReportDocumentResponse>(
-            new HttpRequestMessage(HttpMethod.Get, $"{BasePath}/documents/{Uri.EscapeDataString(reportDocumentId)}"),
+            Request(HttpMethod.Get, region, $"{BasePath}/documents/{Uri.EscapeDataString(reportDocumentId)}"),
             SpApiOperation.GetReportDocument,
             cancellationToken).ConfigureAwait(false);
 
@@ -107,6 +119,17 @@ internal sealed class ReportsApiClient(HttpClient http, IHttpClientFactory httpC
         return string.Equals(document.CompressionAlgorithm, "GZIP", StringComparison.OrdinalIgnoreCase)
             ? new GZipStream(stream, CompressionMode.Decompress)
             : stream;
+    }
+
+    /// <summary>
+    /// Builds a request against the region's endpoint and tags it with the region, so the pipeline
+    /// uses that region's access token and rate-limit buckets.
+    /// </summary>
+    private HttpRequestMessage Request(HttpMethod method, AmazonRegion region, string relativePath)
+    {
+        var request = new HttpRequestMessage(method, new Uri(options.Value.EndpointFor(region), relativePath));
+        request.Options.Set(SpApiOperation.RegionKey, region);
+        return request;
     }
 
     private async Task<T> SendAndDisposeAsync<T>(HttpRequestMessage request, string operation, CancellationToken cancellationToken)

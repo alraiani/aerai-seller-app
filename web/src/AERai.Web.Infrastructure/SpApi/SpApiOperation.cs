@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using AERai.Web.Domain.Core;
 
 namespace AERai.Web.Infrastructure.SpApi;
 
@@ -10,6 +11,9 @@ internal static class SpApiOperation
 {
     /// <summary>Request option carrying the operation name from a typed client to the pipeline handler.</summary>
     public static readonly HttpRequestOptionsKey<string> OptionKey = new("AERai.SpApiOperation");
+
+    /// <summary>Request option carrying the SP-API region, which selects the access token and rate-limit buckets.</summary>
+    public static readonly HttpRequestOptionsKey<AmazonRegion> RegionKey = new("AERai.SpApiRegion");
 
     public const string CreateReport = "reports.createReport";
     public const string GetReport = "reports.getReport";

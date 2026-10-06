@@ -1,4 +1,5 @@
 using AERai.Web.Application.Ingestion;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 
 namespace AERai.Web.Application.Abstractions;
@@ -13,30 +14,34 @@ namespace AERai.Web.Application.Abstractions;
 /// </remarks>
 public interface IAmazonReportsGateway
 {
-    /// <summary>Asks Amazon to generate a report.</summary>
+    /// <summary>Asks Amazon to generate a report for one marketplace.</summary>
+    /// <param name="marketplace">Marketplace the report is for; its region selects the SP-API endpoint and credentials.</param>
     /// <param name="reportType">Report to generate (must be an on-demand type).</param>
     /// <param name="dataStart">Start of the data window, or <see langword="null"/> for snapshot reports.</param>
     /// <param name="dataEnd">End of the data window, or <see langword="null"/> for snapshot reports.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>Amazon's report id.</returns>
-    Task<string> RequestReportAsync(AmazonReportType reportType, DateTimeOffset? dataStart, DateTimeOffset? dataEnd, CancellationToken cancellationToken);
+    Task<string> RequestReportAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset? dataStart, DateTimeOffset? dataEnd, CancellationToken cancellationToken);
 
     /// <summary>Gets a report's processing status.</summary>
+    /// <param name="marketplace">Marketplace the report is for; its region selects the SP-API endpoint and credentials.</param>
     /// <param name="reportId">Amazon report id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The status and, when done, the document id.</returns>
-    Task<AmazonReportStatus> GetReportStatusAsync(string reportId, CancellationToken cancellationToken);
+    Task<AmazonReportStatus> GetReportStatusAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken);
 
-    /// <summary>Lists completed reports of a type created since a point in time, oldest first.</summary>
+    /// <summary>Lists one marketplace's completed reports of a type created since a point in time, oldest first.</summary>
+    /// <param name="marketplace">Marketplace the report is for; its region selects the SP-API endpoint and credentials.</param>
     /// <param name="reportType">Report type.</param>
     /// <param name="createdSince">Lower bound on report creation time.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>Completed reports with their document ids.</returns>
-    Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken);
 
     /// <summary>Downloads a report document, decompressed, as a readable stream.</summary>
+    /// <param name="marketplace">Marketplace the report is for; its region selects the SP-API endpoint and credentials.</param>
     /// <param name="reportDocumentId">Document id from <see cref="GetReportStatusAsync"/> or <see cref="ListCompletedReportsAsync"/>.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The document content; the caller disposes it.</returns>
-    Task<Stream> OpenReportDocumentAsync(string reportDocumentId, CancellationToken cancellationToken);
+    Task<Stream> OpenReportDocumentAsync(Marketplace marketplace, string reportDocumentId, CancellationToken cancellationToken);
 }

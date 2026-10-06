@@ -1,5 +1,6 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Ingestion;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 
 namespace AERai.Web.Infrastructure.SpApi;
@@ -11,20 +12,22 @@ namespace AERai.Web.Infrastructure.SpApi;
 internal sealed class SpApiReportsGateway(ReportsApiClient client) : IAmazonReportsGateway
 {
     /// <inheritdoc/>
-    public Task<string> RequestReportAsync(AmazonReportType reportType, DateTimeOffset? dataStart, DateTimeOffset? dataEnd, CancellationToken cancellationToken) =>
-        client.CreateReportAsync(SpApiReportTypes.ToCode(reportType), dataStart, dataEnd, cancellationToken);
+    public Task<string> RequestReportAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset? dataStart, DateTimeOffset? dataEnd, CancellationToken cancellationToken) =>
+        client.CreateReportAsync(marketplace, SpApiReportTypes.ToCode(reportType), dataStart, dataEnd, cancellationToken);
 
     /// <inheritdoc/>
-    public async Task<AmazonReportStatus> GetReportStatusAsync(string reportId, CancellationToken cancellationToken)
+    public async Task<AmazonReportStatus> GetReportStatusAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
     {
-        var report = await client.GetReportAsync(reportId, cancellationToken).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(marketplace);
+
+        var report = await client.GetReportAsync(marketplace.Region, reportId, cancellationToken).ConfigureAwait(false);
         return new AmazonReportStatus(ParseStatus(report.ProcessingStatus), report.ReportDocumentId);
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)
     {
-        var reports = await client.GetDoneReportsAsync(SpApiReportTypes.ToCode(reportType), createdSince, cancellationToken).ConfigureAwait(false);
+        var reports = await client.GetDoneReportsAsync(marketplace, SpApiReportTypes.ToCode(reportType), createdSince, cancellationToken).ConfigureAwait(false);
         return reports
             .Where(r => r.ReportDocumentId is not null)
             .OrderBy(r => r.CreatedTime)
@@ -33,8 +36,8 @@ internal sealed class SpApiReportsGateway(ReportsApiClient client) : IAmazonRepo
     }
 
     /// <inheritdoc/>
-    public Task<Stream> OpenReportDocumentAsync(string reportDocumentId, CancellationToken cancellationToken) =>
-        client.OpenDocumentAsync(reportDocumentId, cancellationToken);
+    public Task<Stream> OpenReportDocumentAsync(Marketplace marketplace, string reportDocumentId, CancellationToken cancellationToken) =>
+        client.OpenDocumentAsync(marketplace.Region, reportDocumentId, cancellationToken);
 
     private static AmazonProcessingStatus ParseStatus(string status) => status switch
     {

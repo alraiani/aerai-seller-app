@@ -41,11 +41,11 @@ internal sealed class SyncRunRepository(AppDbContext dbContext) : ISyncRunReposi
     }
 
     /// <inheritdoc/>
-    public Task<PagedResult<SyncRun>> ListAsync(int? scheduleId, PageRequest request, CancellationToken cancellationToken)
+    public Task<PagedResult<SyncRun>> ListAsync(string marketplaceId, int? scheduleId, PageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var query = dbContext.SyncRuns.AsNoTracking();
+        var query = dbContext.SyncRuns.AsNoTracking().Where(r => r.MarketplaceId == marketplaceId);
         if (scheduleId is { } id)
         {
             query = query.Where(r => r.SyncScheduleId == id);

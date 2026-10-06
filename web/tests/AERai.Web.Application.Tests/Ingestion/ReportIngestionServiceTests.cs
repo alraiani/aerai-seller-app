@@ -1,6 +1,7 @@
 using AERai.Web.Application.Imports;
 using AERai.Web.Application.Ingestion;
 using AERai.Web.Application.Tests.Fakes;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.Domain.Staging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,6 +28,7 @@ public sealed class ReportIngestionServiceTests
     private readonly FakePromotionService _promotion = new();
     private readonly FakeSyncScheduleRepository _schedules = new();
     private readonly FakeSyncRunRepository _runs = new();
+    private readonly FakeMarketplaceQueries _marketplaces = new();
     private readonly FakeTimeProvider _clock = new(Now);
 
     private ReportIngestionService CreateService()
@@ -39,15 +41,16 @@ public sealed class ReportIngestionServiceTests
         // Zero poll interval: Task.Delay completes immediately, so polling loops run without waiting.
         var options = Options.Create(new IngestionOptions { ReportPollInterval = TimeSpan.Zero, ReportMaxWait = TimeSpan.FromMinutes(5) });
 
-        return new ReportIngestionService(_gateway, _rawFiles, staging, _promotion, _schedules, _runs, options, _clock,
+        return new ReportIngestionService(_gateway, _rawFiles, staging, _promotion, _schedules, _runs, _marketplaces, options, _clock,
             NullLogger<ReportIngestionService>.Instance);
     }
 
-    private SyncSchedule AddSchedule(AmazonReportType type, bool autoPromote = true, DateTimeOffset? lastEnd = null)
+    private SyncSchedule AddSchedule(
+        AmazonReportType type, bool autoPromote = true, DateTimeOffset? lastEnd = null, string marketplaceId = MarketplaceIds.UnitedStates)
     {
         var schedule = new SyncSchedule
         {
-            Id = 1, Name = "s", ReportType = type, MarketplaceId = "ATVPDKIKX0DER",
+            Id = 1, Name = "s", ReportType = type, MarketplaceId = marketplaceId,
             IsEnabled = true, Frequency = ScheduleFrequency.Interval, IntervalMinutes = 60,
             TimeZoneId = "UTC", LookbackDays = 7, AutoPromote = autoPromote, LastSuccessfulDataEnd = lastEnd, UpdatedBy = "t",
         };
@@ -61,6 +64,32 @@ public sealed class ReportIngestionServiceTests
         _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
         _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.Done, "D1"));
         _gateway.Documents["D1"] = document;
+    }
+
+    [Fact]
+    public async Task RunAsync_CanadaSchedule_PullsForCanadaAndStagesUnderCanada()
+    {
+        AddSchedule(AmazonReportType.Orders, marketplaceId: MarketplaceIds.Canada);
+        ScriptDoneReport(OrdersTsv);
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
+        Assert.Equal(MarketplaceIds.Canada, Assert.Single(_gateway.MarketplacesSeen));
+        Assert.Equal(MarketplaceIds.Canada, Assert.Single(_staged.Saved).MarketplaceId);
+        Assert.Equal(MarketplaceIds.Canada, Assert.Single(_runs.Completed).MarketplaceId);
+    }
+
+    [Fact]
+    public async Task RunAsync_InactiveMarketplace_FailsWithoutCallingAmazon()
+    {
+        AddSchedule(AmazonReportType.Orders, marketplaceId: MarketplaceIds.UnitedKingdom);
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Failed, summary.Status);
+        Assert.Contains("not active", summary.Message, StringComparison.Ordinal);
+        Assert.Empty(_gateway.MarketplacesSeen);
     }
 
     [Fact]

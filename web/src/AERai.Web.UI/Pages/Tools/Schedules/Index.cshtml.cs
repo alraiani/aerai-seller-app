@@ -1,5 +1,6 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Ingestion;
+using AERai.Web.Application.Marketplaces;
 using AERai.Web.Application.Security;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.UI.Models;
@@ -21,6 +22,7 @@ namespace AERai.Web.UI.Pages.Tools.Schedules;
 /// <param name="connection">Amazon connection state.</param>
 /// <param name="tester">Amazon connection test.</param>
 /// <param name="identity">User list for the owner filter.</param>
+/// <param name="currentMarketplace">The marketplace the user is viewing.</param>
 /// <param name="clock">Clock for relative times.</param>
 public sealed class IndexModel(
     ISyncScheduleRepository schedules,
@@ -30,6 +32,7 @@ public sealed class IndexModel(
     IAmazonConnectionInfo connection,
     IAmazonConnectionTester tester,
     IIdentityService identity,
+    ICurrentMarketplace currentMarketplace,
     TimeProvider clock) : PageModel
 {
     /// <summary>Free-text search (<c>?q=</c>).</summary>
@@ -98,7 +101,9 @@ public sealed class IndexModel(
     /// <returns>A task that completes when loaded.</returns>
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        var all = await schedules.ListIncludingDeletedAsync(cancellationToken);
+        // Like every other page, the list and its summary cover the selected marketplace only.
+        var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        IReadOnlyList<SyncSchedule> all = [.. (await schedules.ListIncludingDeletedAsync(cancellationToken)).Where(s => s.MarketplaceId == marketplace.MarketplaceId)];
         var latest = await runs.GetLatestByScheduleAsync(cancellationToken);
 
         Rows = ScheduleList.Apply(all, latest, new ScheduleListFilter(Query, View, Status, ReportType, LastRun, Owner, Sort, Descending));

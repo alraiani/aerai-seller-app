@@ -1,5 +1,6 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
+using AERai.Web.Application.Marketplaces;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.UI.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +12,8 @@ namespace AERai.Web.UI.Pages.Tools.Schedules;
 /// </summary>
 /// <param name="runs">Run history queries.</param>
 /// <param name="schedules">Schedule queries (for names).</param>
-public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository schedules) : ListPageModel
+/// <param name="currentMarketplace">The marketplace the user is viewing.</param>
+public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository schedules, ICurrentMarketplace currentMarketplace) : ListPageModel
 {
     /// <summary>Optional schedule filter from <c>?scheduleId=</c>.</summary>
     [BindProperty(SupportsGet = true)]
@@ -31,7 +33,8 @@ public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository s
     /// <returns>A task that completes when loaded.</returns>
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        Runs = await runs.ListAsync(ScheduleId, ToPageRequest(), cancellationToken);
+        var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        Runs = await runs.ListAsync(marketplace.MarketplaceId, ScheduleId, ToPageRequest(), cancellationToken);
         // Include deleted schedules so their history stays labeled.
         ScheduleNames = (await schedules.ListIncludingDeletedAsync(cancellationToken))
             .ToDictionary(s => s.Id, s => s.IsDeleted ? $"{s.Name} (deleted)" : s.Name);

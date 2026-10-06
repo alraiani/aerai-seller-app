@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using AERai.Web.Domain.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -30,12 +31,15 @@ internal sealed partial class SpApiPipelineHandler(
         ArgumentNullException.ThrowIfNull(request);
 
         var operation = request.Options.TryGetValue(SpApiOperation.OptionKey, out var name) ? name : "unknown";
+
+        // Typed clients always tag the region; untagged requests are North America, the original default.
+        var region = request.Options.TryGetValue(SpApiOperation.RegionKey, out var tagged) ? tagged : AmazonRegion.NorthAmerica;
         var settings = options.Value;
         var tokenRefreshed = false;
 
         for (var attempt = 0; ; attempt++)
         {
-            using (var lease = await limiter.AcquireAsync(operation, cancellationToken).ConfigureAwait(false))
+            using (var lease = await limiter.AcquireAsync(region, operation, cancellationToken).ConfigureAwait(false))
             {
                 if (!lease.IsAcquired)
                 {
@@ -44,18 +48,18 @@ internal sealed partial class SpApiPipelineHandler(
             }
 
             request.Headers.Remove(AccessTokenHeader);
-            request.Headers.Add(AccessTokenHeader, await tokens.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false));
+            request.Headers.Add(AccessTokenHeader, await tokens.GetAccessTokenAsync(region, cancellationToken).ConfigureAwait(false));
 
             var started = Stopwatch.GetTimestamp();
             var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
             var elapsedMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-            LogCall(operation, (int)response.StatusCode, attempt, elapsedMs);
+            LogCall(operation, region, (int)response.StatusCode, attempt, elapsedMs);
 
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden && !tokenRefreshed)
             {
                 // A token can be revoked before its expiry; refresh once, then let a second 401/403 surface.
                 tokenRefreshed = true;
-                tokens.Invalidate();
+                tokens.Invalidate(region);
                 response.Dispose();
                 continue;
             }
@@ -91,8 +95,8 @@ internal sealed partial class SpApiPipelineHandler(
 #pragma warning restore CA5394
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "SP-API {Operation} -> {StatusCode} (attempt {Attempt}, {ElapsedMs:0} ms)")]
-    private partial void LogCall(string operation, int statusCode, int attempt, double elapsedMs);
+    [LoggerMessage(Level = LogLevel.Information, Message = "SP-API {Operation} ({Region}) -> {StatusCode} (attempt {Attempt}, {ElapsedMs:0} ms)")]
+    private partial void LogCall(string operation, AmazonRegion region, int statusCode, int attempt, double elapsedMs);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "SP-API {Operation} throttled or failed; retry {Retry} in {DelaySeconds:0.0}s")]
     private partial void LogRetry(string operation, int retry, double delaySeconds);

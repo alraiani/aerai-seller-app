@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Ingestion;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 
 namespace AERai.Web.Infrastructure.SpApi;
@@ -30,19 +31,32 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
     ];
 
     /// <summary>Document specs keyed by document id (the simulator's stand-in for S3).</summary>
+    /// <summary>
+    /// Local price level and order-id prefix per marketplace, so each one's simulated data looks like
+    /// its own (CAD prices are higher, GBP lower) and order ids never collide across marketplaces.
+    /// </summary>
+    private static readonly Dictionary<string, (decimal PriceFactor, string OrderPrefix, double Volume)> Profiles = new(StringComparer.Ordinal)
+    {
+        [MarketplaceIds.UnitedStates] = (1.00m, "114", 1.0),
+        [MarketplaceIds.Canada] = (1.35m, "702", 0.35),
+        [MarketplaceIds.UnitedKingdom] = (0.80m, "203", 0.5),
+    };
+
     private readonly ConcurrentDictionary<string, Func<string>> _documents = new(StringComparer.Ordinal);
 
     /// <inheritdoc/>
-    public Task<string> RequestReportAsync(AmazonReportType reportType, DateTimeOffset? dataStart, DateTimeOffset? dataEnd, CancellationToken cancellationToken)
+    public Task<string> RequestReportAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset? dataStart, DateTimeOffset? dataEnd, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(marketplace);
+
         var reportId = $"SIM-{reportType}-{Guid.NewGuid():N}"[..32];
         var start = dataStart ?? clock.GetUtcNow().AddDays(-1);
         var end = dataEnd ?? clock.GetUtcNow();
 
         _documents[DocumentId(reportId)] = reportType switch
         {
-            AmazonReportType.Orders => () => OrdersReport(reportId, start, end),
-            AmazonReportType.FbaInventory => () => InventoryReport(reportId),
+            AmazonReportType.Orders => () => OrdersReport(marketplace, reportId, start, end),
+            AmazonReportType.FbaInventory => () => InventoryReport(marketplace, reportId),
             _ => throw new InvalidOperationException($"{reportType} reports cannot be requested; they are listed."),
         };
 
@@ -50,14 +64,16 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
     }
 
     /// <inheritdoc/>
-    public Task<AmazonReportStatus> GetReportStatusAsync(string reportId, CancellationToken cancellationToken) =>
+    public Task<AmazonReportStatus> GetReportStatusAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken) =>
         Task.FromResult(_documents.ContainsKey(DocumentId(reportId))
             ? new AmazonReportStatus(AmazonProcessingStatus.Done, DocumentId(reportId))
             : new AmazonReportStatus(AmazonProcessingStatus.Fatal, null));
 
     /// <inheritdoc/>
-    public Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(marketplace);
+
         if (reportType != AmazonReportType.Settlements)
         {
             return Task.FromResult<IReadOnlyList<AvailableAmazonReport>>([]);
@@ -74,9 +90,10 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
                 continue;
             }
 
-            var reportId = string.Create(CultureInfo.InvariantCulture, $"SIM-SETTLE-{end:yyyyMMdd}");
+            // Each marketplace settles separately, so report (and settlement) ids carry its code.
+            var reportId = string.Create(CultureInfo.InvariantCulture, $"SIM-SETTLE-{marketplace.Code}-{end:yyyyMMdd}");
             var periodStart = start;
-            _documents[DocumentId(reportId)] = () => SettlementReport(reportId, periodStart, end);
+            _documents[DocumentId(reportId)] = () => SettlementReport(marketplace, reportId, periodStart, end);
             reports.Add(new AvailableAmazonReport(reportId, DocumentId(reportId), created));
         }
 
@@ -84,7 +101,7 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
     }
 
     /// <inheritdoc/>
-    public Task<Stream> OpenReportDocumentAsync(string reportDocumentId, CancellationToken cancellationToken) =>
+    public Task<Stream> OpenReportDocumentAsync(Marketplace marketplace, string reportDocumentId, CancellationToken cancellationToken) =>
         _documents.TryGetValue(reportDocumentId, out var build)
             ? Task.FromResult<Stream>(new MemoryStream(Encoding.UTF8.GetBytes(build())))
             : throw new InvalidOperationException($"Simulated document '{reportDocumentId}' does not exist.");
@@ -94,24 +111,29 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
     /// <summary>Deterministic per report, so a re-download yields identical bytes (and SHA-256).</summary>
     private static Random Seeded(string reportId) => new(StringComparer.Ordinal.GetHashCode(reportId));
 
-    private static string OrdersReport(string reportId, DateTimeOffset start, DateTimeOffset end)
+    private static (decimal PriceFactor, string OrderPrefix, double Volume) ProfileOf(Marketplace marketplace) =>
+        Profiles.GetValueOrDefault(marketplace.MarketplaceId, (1.00m, "999", 0.5));
+
+    private static string OrdersReport(Marketplace marketplace, string reportId, DateTimeOffset start, DateTimeOffset end)
     {
         var random = Seeded(reportId);
+        var (priceFactor, prefix, volume) = ProfileOf(marketplace);
         var builder = new StringBuilder("amazon-order-id\tmerchant-order-id\tpurchase-date\tlast-updated-date\torder-status\tfulfillment-channel\tsales-channel\tproduct-name\tsku\tasin\titem-status\tquantity\tcurrency\titem-price\n");
         var span = end - start;
-        var orderCount = Math.Clamp((int)(span.TotalHours / 3), 1, 400);
+        var orderCount = Math.Clamp((int)(span.TotalHours / 3 * volume), 1, 400);
 
 #pragma warning disable CA5394 // Simulated data; randomness is not security-sensitive.
         for (var i = 0; i < orderCount; i++)
         {
             var purchased = start + TimeSpan.FromSeconds(random.NextDouble() * span.TotalSeconds);
-            var orderId = $"114-{random.Next(1_000_000, 9_999_999)}-{random.Next(1_000_000, 9_999_999)}";
+            var orderId = $"{prefix}-{random.Next(1_000_000, 9_999_999)}-{random.Next(1_000_000, 9_999_999)}";
             var status = random.Next(100) switch { < 85 => "Shipped", < 95 => "Pending", _ => "Cancelled" };
             foreach (var (sku, asin, title, price) in Catalog.OrderBy(_ => random.Next()).Take(random.Next(1, 3)))
             {
                 var quantity = random.Next(1, 4);
+                var linePrice = quantity * Math.Round(price * priceFactor, 2);
                 builder.Append(CultureInfo.InvariantCulture,
-                    $"{orderId}\t\t{purchased:yyyy-MM-ddTHH:mm:ss+00:00}\t{purchased:yyyy-MM-ddTHH:mm:ss+00:00}\t{status}\tAmazon\tAmazon.com\t{title}\t{sku}\t{asin}\t{status}\t{quantity}\tUSD\t{quantity * price:0.00}\n");
+                    $"{orderId}\t\t{purchased:yyyy-MM-ddTHH:mm:ss+00:00}\t{purchased:yyyy-MM-ddTHH:mm:ss+00:00}\t{status}\tAmazon\t{marketplace.SalesChannel}\t{title}\t{sku}\t{asin}\t{status}\t{quantity}\t{marketplace.Currency}\t{linePrice:0.00}\n");
             }
         }
 #pragma warning restore CA5394
@@ -119,37 +141,41 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
         return builder.ToString();
     }
 
-    private static string InventoryReport(string reportId)
+    private static string InventoryReport(Marketplace marketplace, string reportId)
     {
         var random = Seeded(reportId);
+        var (priceFactor, _, volume) = ProfileOf(marketplace);
         var builder = new StringBuilder("sku\tfnsku\tasin\tproduct-name\tcondition\tyour-price\tafn-fulfillable-quantity\tafn-unsellable-quantity\tafn-reserved-quantity\tafn-total-quantity\tafn-inbound-working-quantity\tafn-inbound-shipped-quantity\tafn-inbound-receiving-quantity\n");
 
 #pragma warning disable CA5394 // Simulated data; randomness is not security-sensitive.
         foreach (var (sku, asin, title, price) in Catalog)
         {
-            int fulfillable = random.Next(0, 400), unsellable = random.Next(0, 4), reserved = random.Next(0, 10);
+            int fulfillable = (int)(random.Next(0, 400) * volume), unsellable = random.Next(0, 4), reserved = random.Next(0, 10);
             int working = random.Next(0, 3) == 0 ? random.Next(10, 100) : 0, shipped = random.Next(0, 60), receiving = random.Next(0, 20);
             builder.Append(CultureInfo.InvariantCulture,
-                $"{sku}\tX00{asin[4..]}\t{asin}\t{title}\tNew\t{price:0.00}\t{fulfillable}\t{unsellable}\t{reserved}\t{fulfillable + unsellable + reserved}\t{working}\t{shipped}\t{receiving}\n");
+                $"{sku}\tX00{asin[4..]}\t{asin}\t{title}\tNew\t{price * priceFactor:0.00}\t{fulfillable}\t{unsellable}\t{reserved}\t{fulfillable + unsellable + reserved}\t{working}\t{shipped}\t{receiving}\n");
         }
 #pragma warning restore CA5394
 
         return builder.ToString();
     }
 
-    private static string SettlementReport(string reportId, DateTimeOffset start, DateTimeOffset end)
+    private static string SettlementReport(Marketplace marketplace, string reportId, DateTimeOffset start, DateTimeOffset end)
     {
         var random = Seeded(reportId);
+        var (priceFactor, prefix, _) = ProfileOf(marketplace);
+        var currency = marketplace.Currency;
         var settlementId = reportId["SIM-SETTLE-".Length..];
         var builder = new StringBuilder("settlement-id\tsettlement-start-date\tsettlement-end-date\tdeposit-date\ttotal-amount\tcurrency\ttransaction-type\torder-id\tamount-type\tamount-description\tamount\tposted-date\tsku\n");
-        builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t{start:yyyy-MM-dd HH:mm:ss} UTC\t{end:yyyy-MM-dd HH:mm:ss} UTC\t{end.AddDays(1):yyyy-MM-dd HH:mm:ss} UTC\t\tUSD\t\t\t\t\t\t\t\n");
+        builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t{start:yyyy-MM-dd HH:mm:ss} UTC\t{end:yyyy-MM-dd HH:mm:ss} UTC\t{end.AddDays(1):yyyy-MM-dd HH:mm:ss} UTC\t\t{currency}\t\t\t\t\t\t\t\n");
 
 #pragma warning disable CA5394 // Simulated data; randomness is not security-sensitive.
         for (var i = 0; i < 25; i++)
         {
-            var (sku, _, _, price) = Catalog[random.Next(Catalog.Length)];
+            var (sku, _, _, basePrice) = Catalog[random.Next(Catalog.Length)];
+            var price = Math.Round(basePrice * priceFactor, 2);
             var posted = start + TimeSpan.FromDays(random.NextDouble() * SettlementPeriod.TotalDays);
-            var orderId = $"114-{random.Next(1_000_000, 9_999_999)}-{random.Next(1_000_000, 9_999_999)}";
+            var orderId = $"{prefix}-{random.Next(1_000_000, 9_999_999)}-{random.Next(1_000_000, 9_999_999)}";
             builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tOrder\t{orderId}\tItemPrice\tPrincipal\t{price:0.00}\t{posted:yyyy-MM-dd}\t{sku}\n");
             builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tOrder\t{orderId}\tItemFees\tCommission\t{-price * 0.15m:0.00}\t{posted:yyyy-MM-dd}\t{sku}\n");
             builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tOrder\t{orderId}\tItemFees\tFBAPerUnitFulfillmentFee\t{-(3 + random.NextDouble() * 3):0.00}\t{posted:yyyy-MM-dd}\t{sku}\n");

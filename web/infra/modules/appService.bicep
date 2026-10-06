@@ -76,7 +76,8 @@ resource site 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'KeyVault__Uri', value: keyVaultUri }
         { name: 'RawStorage__ServiceUri', value: rawStorageServiceUri }
         { name: 'RawStorage__ContainerName', value: 'raw' }
-        // SP-API credentials are Key Vault secrets (SpApi--ClientId, SpApi--ClientSecret, SpApi--RefreshToken), never app settings.
+        // SP-API credentials are Key Vault secrets (SpApi--ClientId, SpApi--ClientSecret, SpApi--RefreshToken,
+        // optional SpApi--Europe--RefreshToken for the UK), never app settings.
         { name: 'SpApi__Mode', value: 'Live' }
         // Emailed links are built from this, never from the request Host header (prevents reset poisoning).
         { name: 'App__PublicBaseUrl', value: publicBaseUrl }

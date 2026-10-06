@@ -30,7 +30,7 @@ internal sealed class FakeSyncRunRepository : ISyncRunRepository
         return Task.CompletedTask;
     }
 
-    public Task<PagedResult<SyncRun>> ListAsync(int? scheduleId, PageRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<PagedResult<SyncRun>> ListAsync(string marketplaceId, int? scheduleId, PageRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<IReadOnlyDictionary<int, SyncRun>> GetLatestByScheduleAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 }

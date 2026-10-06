@@ -1,6 +1,7 @@
 using System.Globalization;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Imports;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.Domain.Staging;
 using Microsoft.Extensions.Logging;
@@ -39,6 +40,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     private readonly IPromotionService _promotion;
     private readonly ISyncScheduleRepository _schedules;
     private readonly ISyncRunRepository _runs;
+    private readonly IMarketplaceQueries _marketplaces;
     private readonly IngestionOptions _options;
     private readonly TimeProvider _clock;
     private readonly ILogger<ReportIngestionService> _logger;
@@ -50,6 +52,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// <param name="promotion">Promotion into core.</param>
     /// <param name="schedules">Schedule persistence.</param>
     /// <param name="runs">Run history persistence.</param>
+    /// <param name="marketplaces">Marketplace lookups (each schedule pulls for one marketplace).</param>
     /// <param name="options">Polling settings.</param>
     /// <param name="clock">Clock (also drives polling delays, so tests run instantly).</param>
     /// <param name="logger">Logger.</param>
@@ -60,6 +63,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         IPromotionService promotion,
         ISyncScheduleRepository schedules,
         ISyncRunRepository runs,
+        IMarketplaceQueries marketplaces,
         IOptions<IngestionOptions> options,
         TimeProvider clock,
         ILogger<ReportIngestionService> logger)
@@ -72,6 +76,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         _promotion = promotion;
         _schedules = schedules;
         _runs = runs;
+        _marketplaces = marketplaces;
         _options = options.Value;
         _clock = clock;
         _logger = logger;
@@ -102,6 +107,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         var context = new RunContext(schedule, run, backfill);
         try
         {
+            context.Marketplace = await ResolveMarketplaceAsync(schedule, cancellationToken).ConfigureAwait(false);
             if (schedule.ReportType == AmazonReportType.Settlements)
             {
                 await IngestListedReportsAsync(context, cancellationToken).ConfigureAwait(false);
@@ -171,10 +177,10 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         context.Run.DataStart = start;
         context.Run.DataEnd = end;
 
-        var reportId = await _gateway.RequestReportAsync(context.Schedule.ReportType, start, end, cancellationToken).ConfigureAwait(false);
+        var reportId = await _gateway.RequestReportAsync(context.Marketplace, context.Schedule.ReportType, start, end, cancellationToken).ConfigureAwait(false);
         context.ReportIds.Add(reportId);
 
-        var status = await WaitForReportAsync(reportId, cancellationToken).ConfigureAwait(false);
+        var status = await WaitForReportAsync(context.Marketplace, reportId, cancellationToken).ConfigureAwait(false);
         switch (status.Status)
         {
             case AmazonProcessingStatus.Done when status.ReportDocumentId is not null:
@@ -204,7 +210,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
                 ? previous - SettlementListOverlap
                 : now.AddDays(-context.Schedule.LookbackDays);
 
-        var reports = await _gateway.ListCompletedReportsAsync(context.Schedule.ReportType, since, cancellationToken).ConfigureAwait(false);
+        var reports = await _gateway.ListCompletedReportsAsync(context.Marketplace, context.Schedule.ReportType, since, cancellationToken).ConfigureAwait(false);
         var until = context.Backfill?.End ?? now;
 
         // A date-range backfill only takes reports Amazon created inside the range.
@@ -231,12 +237,12 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     }
 
     /// <summary>Polls a report's status until it leaves the queue or the wait limit is reached.</summary>
-    private async Task<AmazonReportStatus> WaitForReportAsync(string reportId, CancellationToken cancellationToken)
+    private async Task<AmazonReportStatus> WaitForReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
     {
         var deadline = _clock.GetUtcNow() + _options.ReportMaxWait;
         while (true)
         {
-            var status = await _gateway.GetReportStatusAsync(reportId, cancellationToken).ConfigureAwait(false);
+            var status = await _gateway.GetReportStatusAsync(marketplace, reportId, cancellationToken).ConfigureAwait(false);
             if (status.Status is not (AmazonProcessingStatus.InQueue or AmazonProcessingStatus.InProgress))
             {
                 return status;
@@ -268,7 +274,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         };
 
         string sha256;
-        var document = await _gateway.OpenReportDocumentAsync(documentId, cancellationToken).ConfigureAwait(false);
+        var document = await _gateway.OpenReportDocumentAsync(context.Marketplace, documentId, cancellationToken).ConfigureAwait(false);
         await using (document.ConfigureAwait(false))
         {
             sha256 = await _rawFiles.SaveAsync(path, document, metadata, cancellationToken).ConfigureAwait(false);
@@ -312,6 +318,17 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     }
 
     /// <summary>Each report type lands in the staging table that matches its native layout.</summary>
+    /// <summary>The schedule's marketplace, which must still exist and be active to be pulled.</summary>
+    private async Task<Marketplace> ResolveMarketplaceAsync(SyncSchedule schedule, CancellationToken cancellationToken)
+    {
+        var all = await _marketplaces.GetAllAsync(cancellationToken).ConfigureAwait(false);
+        var marketplace = all.FirstOrDefault(m => m.MarketplaceId == schedule.MarketplaceId)
+            ?? throw new InvalidOperationException($"Marketplace '{schedule.MarketplaceId}' does not exist.");
+        return marketplace.IsActive
+            ? marketplace
+            : throw new InvalidOperationException($"{marketplace.Name} is not active, so its reports are not pulled.");
+    }
+
     private static ImportSource ToImportSource(AmazonReportType reportType) => reportType switch
     {
         AmazonReportType.Orders => ImportSource.Orders,
@@ -334,6 +351,10 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         public SyncSchedule Schedule { get; } = schedule;
 
         public SyncRun Run { get; } = run;
+
+        /// <summary>The schedule's marketplace.</summary>
+        // Assigned first thing in RunAsync, before any Amazon call reads it.
+        public Marketplace Marketplace { get; set; } = default!;
 
         public List<string> ReportIds { get; } = [];
 

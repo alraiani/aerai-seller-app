@@ -1,5 +1,6 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Ingestion;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 
 namespace AERai.Web.Infrastructure.SpApi;
@@ -13,18 +14,18 @@ internal sealed class UnavailableReportsGateway : IAmazonReportsGateway
     private const string Message = "Amazon SP-API is disabled. Set SpApi:Mode to Live (with credentials) or Simulated.";
 
     /// <inheritdoc/>
-    public Task<string> RequestReportAsync(AmazonReportType reportType, DateTimeOffset? dataStart, DateTimeOffset? dataEnd, CancellationToken cancellationToken) =>
+    public Task<string> RequestReportAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset? dataStart, DateTimeOffset? dataEnd, CancellationToken cancellationToken) =>
         throw new InvalidOperationException(Message);
 
     /// <inheritdoc/>
-    public Task<AmazonReportStatus> GetReportStatusAsync(string reportId, CancellationToken cancellationToken) =>
+    public Task<AmazonReportStatus> GetReportStatusAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken) =>
         throw new InvalidOperationException(Message);
 
     /// <inheritdoc/>
-    public Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken) =>
         throw new InvalidOperationException(Message);
 
     /// <inheritdoc/>
-    public Task<Stream> OpenReportDocumentAsync(string reportDocumentId, CancellationToken cancellationToken) =>
+    public Task<Stream> OpenReportDocumentAsync(Marketplace marketplace, string reportDocumentId, CancellationToken cancellationToken) =>
         throw new InvalidOperationException(Message);
 }

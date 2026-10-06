@@ -68,6 +68,7 @@ echo "== Selling Partner API (Seller Central → Apps and Services → Develop A
 read -rp  "  LWA client id (amzn1.application-oa2-client.…): " sp_client_id
 read -rsp "  LWA client secret (hidden, amzn1.oa2-cs.v1.…): " sp_client_secret; echo
 read -rsp "  Refresh token (hidden, Atzr|…): " sp_refresh_token; echo
+read -rsp "  Europe (UK) refresh token (hidden, Atzr|…; Enter to skip until the UK account is authorized): " sp_eu_refresh_token; echo
 
 echo
 echo "== Amazon Ads API (advertising.amazon.com → your Ads API LWA app) — Enter to skip =="
@@ -85,7 +86,7 @@ read -rp  "  Ads profile id (numeric, one per marketplace/account; optional): " 
 # Values go to dotnet as JSON on stdin via the printf builtin (never as command-line arguments,
 # which other processes can see). Only non-empty values are written, so skipping a prompt never
 # erases a stored secret.
-json="$(DB="$db_connection" SP_ID="$sp_client_id" SP_SECRET="$sp_client_secret" SP_TOKEN="$sp_refresh_token" \
+json="$(DB="$db_connection" SP_ID="$sp_client_id" SP_SECRET="$sp_client_secret" SP_TOKEN="$sp_refresh_token" SP_EU_TOKEN="$sp_eu_refresh_token" \
   ADS_ID="$ads_client_id" ADS_SECRET="$ads_client_secret" ADS_TOKEN="$ads_refresh_token" ADS_PROFILE="$ads_profile_id" \
   python3 -c '
 import json, os
@@ -94,6 +95,7 @@ pairs = {
     "SpApi:ClientId": os.environ["SP_ID"],
     "SpApi:ClientSecret": os.environ["SP_SECRET"],
     "SpApi:RefreshToken": os.environ["SP_TOKEN"],
+    "SpApi:Europe:RefreshToken": os.environ["SP_EU_TOKEN"],
     "AmazonAds:ClientId": os.environ["ADS_ID"],
     "AmazonAds:ClientSecret": os.environ["ADS_SECRET"],
     "AmazonAds:RefreshToken": os.environ["ADS_TOKEN"],

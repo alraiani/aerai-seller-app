@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using AERai.Web.Domain.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -7,7 +9,8 @@ namespace AERai.Web.Infrastructure.SpApi;
 
 /// <summary>
 /// Exchanges the seller's LWA refresh token for short-lived (~1 hour) SP-API access tokens, caching
-/// each until shortly before it expires. Singleton, thread-safe.
+/// each until shortly before it expires. Each region has its own seller authorization, so tokens are
+/// cached per region. Singleton, thread-safe.
 /// </summary>
 /// <param name="httpClientFactory">Factory for the plain (unauthenticated) LWA client.</param>
 /// <param name="options">SP-API settings with the LWA credentials.</param>
@@ -25,40 +28,43 @@ internal sealed partial class LwaTokenProvider(
     /// <summary>Refresh this long before expiry so a token never expires mid-request.</summary>
     private static readonly TimeSpan RefreshMargin = TimeSpan.FromMinutes(2);
 
-    private readonly SemaphoreSlim _gate = new(1, 1);
-    private string? _accessToken;
-    private DateTimeOffset _expiresAt;
+    private readonly ConcurrentDictionary<AmazonRegion, CachedToken> _tokens = new();
 
-    /// <summary>Gets a valid access token, refreshing it if needed.</summary>
+    /// <summary>Returns a valid access token for a region, refreshing it when missing or near expiry.</summary>
+    /// <param name="region">SP-API region to authorize for.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The access token.</returns>
-    /// <exception cref="InvalidOperationException">Credentials are missing or LWA rejected them.</exception>
-    public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken)
+    /// <exception cref="InvalidOperationException">The region's credentials are missing or LWA rejected them.</exception>
+    public async Task<string> GetAccessTokenAsync(AmazonRegion region, CancellationToken cancellationToken)
     {
-        if (TryGetCached() is { } cached)
+        var entry = _tokens.GetOrAdd(region, _ => new CachedToken());
+        if (TryGetCached(entry) is { } cached)
         {
             return cached;
         }
 
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await entry.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             // Another caller may have refreshed while this one waited for the gate.
-            if (TryGetCached() is { } refreshed)
+            if (TryGetCached(entry) is { } refreshed)
             {
                 return refreshed;
             }
 
             var settings = options.Value;
-            if (!settings.HasCredentials)
+            if (!settings.HasCredentialsFor(region))
             {
-                throw new InvalidOperationException("SP-API credentials (SpApi:ClientId, SpApi:ClientSecret, SpApi:RefreshToken) are not configured.");
+                throw new InvalidOperationException(
+                    $"SP-API credentials for {region} are not configured (SpApi:ClientId, SpApi:ClientSecret, {SpApiOptions.RefreshTokenKey(region)}).");
             }
 
             using var content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["grant_type"] = "refresh_token",
-                ["refresh_token"] = settings.RefreshToken!,
+
+                // HasCredentialsFor above guarantees all three are non-blank.
+                ["refresh_token"] = settings.RefreshTokenFor(region)!,
                 ["client_id"] = settings.ClientId!,
                 ["client_secret"] = settings.ClientSecret!,
             });
@@ -69,40 +75,63 @@ internal sealed partial class LwaTokenProvider(
             if (!response.IsSuccessStatusCode)
             {
                 // The body can echo request details; only the status code is logged/surfaced.
-                LogRefreshFailed((int)response.StatusCode);
-                throw new InvalidOperationException($"Login with Amazon rejected the token refresh (HTTP {(int)response.StatusCode}). Check the SP-API credentials.");
+                LogRefreshFailed(region, (int)response.StatusCode);
+                throw new InvalidOperationException($"Login with Amazon rejected the {region} token refresh (HTTP {(int)response.StatusCode}). Check the SP-API credentials.");
             }
 
             var token = await response.Content.ReadFromJsonAsync<LwaTokenResponse>(cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("Login with Amazon returned an empty token response.");
 
-            _accessToken = token.AccessToken;
-            _expiresAt = clock.GetUtcNow().AddSeconds(token.ExpiresIn);
-            LogRefreshed(token.ExpiresIn);
-            return _accessToken;
+            entry.AccessToken = token.AccessToken;
+            entry.ExpiresAt = clock.GetUtcNow().AddSeconds(token.ExpiresIn);
+            LogRefreshed(region, token.ExpiresIn);
+            return token.AccessToken;
         }
         finally
         {
-            _gate.Release();
+            entry.Gate.Release();
         }
     }
 
-    /// <summary>Discards the cached token (after a 401/403), forcing a refresh on next use.</summary>
-    public void Invalidate() => _accessToken = null;
+    /// <summary>Drops a region's cached token so the next call refreshes it (after a 401/403).</summary>
+    /// <param name="region">SP-API region.</param>
+    public void Invalidate(AmazonRegion region)
+    {
+        if (_tokens.TryGetValue(region, out var entry))
+        {
+            entry.AccessToken = null;
+        }
+    }
 
     /// <inheritdoc/>
-    public void Dispose() => _gate.Dispose();
+    public void Dispose()
+    {
+        foreach (var entry in _tokens.Values)
+        {
+            entry.Gate.Dispose();
+        }
+    }
 
-    private string? TryGetCached() =>
-        _accessToken is not null && clock.GetUtcNow() < _expiresAt - RefreshMargin ? _accessToken : null;
+    private string? TryGetCached(CachedToken entry) =>
+        entry.AccessToken is { } token && clock.GetUtcNow() < entry.ExpiresAt - RefreshMargin ? token : null;
+
+    /// <summary>One region's token and the lock that serializes its refreshes.</summary>
+    private sealed class CachedToken
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+
+        public string? AccessToken { get; set; }
+
+        public DateTimeOffset ExpiresAt { get; set; }
+    }
 
     private sealed record LwaTokenResponse(
         [property: JsonPropertyName("access_token")] string AccessToken,
         [property: JsonPropertyName("expires_in")] int ExpiresIn);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Refreshed SP-API access token (expires in {ExpiresInSeconds}s)")]
-    private partial void LogRefreshed(int expiresInSeconds);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Refreshed SP-API access token for {Region} (expires in {ExpiresInSeconds}s)")]
+    private partial void LogRefreshed(AmazonRegion region, int expiresInSeconds);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "SP-API token refresh failed with HTTP {StatusCode}")]
-    private partial void LogRefreshFailed(int statusCode);
+    [LoggerMessage(Level = LogLevel.Error, Message = "SP-API token refresh for {Region} failed with HTTP {StatusCode}")]
+    private partial void LogRefreshFailed(AmazonRegion region, int statusCode);
 }

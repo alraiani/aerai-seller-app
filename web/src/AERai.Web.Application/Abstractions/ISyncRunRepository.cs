@@ -20,12 +20,13 @@ public interface ISyncRunRepository
     /// <returns>A task that completes when saved.</returns>
     Task CompleteAsync(SyncRun run, CancellationToken cancellationToken);
 
-    /// <summary>Lists runs, newest first.</summary>
+    /// <summary>Lists one marketplace's runs, newest first.</summary>
+    /// <param name="marketplaceId">Marketplace whose runs to list.</param>
     /// <param name="scheduleId">Optional filter.</param>
     /// <param name="request">Paging.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>One page of runs.</returns>
-    Task<PagedResult<SyncRun>> ListAsync(int? scheduleId, PageRequest request, CancellationToken cancellationToken);
+    Task<PagedResult<SyncRun>> ListAsync(string marketplaceId, int? scheduleId, PageRequest request, CancellationToken cancellationToken);
 
     /// <summary>Gets the latest run of each schedule.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>

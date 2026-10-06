@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using AERai.Web.Application.Abstractions;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -74,7 +75,7 @@ internal sealed partial class AmazonConnectionTester(
         try
         {
             var client = services.GetRequiredService<ReportsApiClient>();
-            await client.PingAsync(SpApiReportTypes.ToCode(AmazonReportType.Orders), cancellationToken).ConfigureAwait(false);
+            await client.PingAsync(AmazonRegion.NorthAmerica, SpApiReportTypes.ToCode(AmazonReportType.Orders), cancellationToken).ConfigureAwait(false);
             return new ConnectionTestResult(true, $"Connected — Amazon responded in {stopwatch.ElapsedMilliseconds} ms.", clock.GetUtcNow());
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

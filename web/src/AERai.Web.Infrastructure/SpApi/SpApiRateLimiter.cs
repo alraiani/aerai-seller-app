@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading.RateLimiting;
+using AERai.Web.Domain.Core;
 
 namespace AERai.Web.Infrastructure.SpApi;
 
@@ -11,12 +12,13 @@ internal sealed class SpApiRateLimiter : IDisposable
 {
     private readonly ConcurrentDictionary<string, TokenBucketRateLimiter> _buckets = new(StringComparer.Ordinal);
 
-    /// <summary>Waits for permission to call an operation.</summary>
+    /// <summary>Waits for permission to call an operation in a region (each region is quota'd separately).</summary>
+    /// <param name="region">SP-API region.</param>
     /// <param name="operation">Operation name from <see cref="SpApiOperation"/>.</param>
     /// <param name="cancellationToken">Cancels the wait.</param>
     /// <returns>A lease that must be disposed after the call.</returns>
-    public ValueTask<RateLimitLease> AcquireAsync(string operation, CancellationToken cancellationToken) =>
-        _buckets.GetOrAdd(operation, Create).AcquireAsync(1, cancellationToken);
+    public ValueTask<RateLimitLease> AcquireAsync(AmazonRegion region, string operation, CancellationToken cancellationToken) =>
+        _buckets.GetOrAdd($"{region}:{operation}", _ => Create(operation)).AcquireAsync(1, cancellationToken);
 
     /// <inheritdoc/>
     public void Dispose()
