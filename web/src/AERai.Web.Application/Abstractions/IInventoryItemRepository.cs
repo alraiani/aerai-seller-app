@@ -18,23 +18,20 @@ public interface IInventoryItemRepository
     /// <returns>The families.</returns>
     Task<IReadOnlyList<ProductFamily>> ListFamiliesAsync(CancellationToken cancellationToken);
 
-    /// <summary>Finds a family by name (case-insensitively) or creates it.</summary>
-    /// <param name="name">Trimmed, validated family name.</param>
-    /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The family's id.</returns>
-    Task<int> GetOrCreateFamilyAsync(string name, CancellationToken cancellationToken);
-
-    /// <summary>Assigns a SKU to a family, or clears it.</summary>
+    /// <summary>
+    /// Saves a SKU's family (created on first use; null clears it), its home stock, and its lead-time
+    /// overrides in one transaction, then deletes families nothing uses any more.
+    /// </summary>
     /// <param name="sku">Seller SKU.</param>
-    /// <param name="familyId">Family id, or <see langword="null"/> for none.</param>
+    /// <param name="marketplaceId">Marketplace for home stock and lead times.</param>
+    /// <param name="family">Trimmed, validated family name, or <see langword="null"/> for none.</param>
+    /// <param name="homeStock">Units held outside Amazon (0 removes the row).</param>
+    /// <param name="leadTimes">Lead-time overrides (all blank removes the row).</param>
+    /// <param name="updatedAt">Change timestamp.</param>
+    /// <param name="updatedBy">User email.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns><see langword="false"/> when the SKU does not exist.</returns>
-    Task<bool> SetFamilyAsync(string sku, int? familyId, CancellationToken cancellationToken);
-
-    /// <summary>Deletes families no product belongs to any more.</summary>
-    /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when unused families are gone.</returns>
-    Task DeleteUnusedFamiliesAsync(CancellationToken cancellationToken);
+    /// <returns><see langword="false"/> (and nothing saved) when the SKU does not exist.</returns>
+    Task<bool> SaveItemAsync(string sku, string marketplaceId, string? family, int homeStock, LeadTimeSettings leadTimes, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken);
 
     /// <summary>A SKU's picture location.</summary>
     /// <param name="sku">Seller SKU.</param>
@@ -55,16 +52,6 @@ public interface IInventoryItemRepository
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The existing SKUs (ordinal comparison).</returns>
     Task<IReadOnlySet<string>> GetExistingSkusAsync(IReadOnlyCollection<string> skus, CancellationToken cancellationToken);
-
-    /// <summary>Saves a SKU's lead-time overrides in one marketplace; all-blank settings remove the row.</summary>
-    /// <param name="sku">Seller SKU (must exist).</param>
-    /// <param name="marketplaceId">Marketplace the timings apply to.</param>
-    /// <param name="settings">The overrides.</param>
-    /// <param name="updatedAt">Change timestamp.</param>
-    /// <param name="updatedBy">User email.</param>
-    /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when saved.</returns>
-    Task SetLeadTimesAsync(string sku, string marketplaceId, LeadTimeSettings settings, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken);
 
     /// <summary>Sets home stock for several SKUs in one marketplace; a quantity of 0 removes the row.</summary>
     /// <param name="marketplaceId">Marketplace the stock is held for.</param>

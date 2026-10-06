@@ -12,6 +12,9 @@ namespace AERai.Web.Infrastructure.Spreadsheets;
 /// </summary>
 internal sealed class ClosedXmlSpreadsheetReader : ISpreadsheetReader
 {
+    /// <summary>Widest sheet accepted; uploads only need a couple of columns.</summary>
+    internal const int MaxColumns = 50;
+
     /// <inheritdoc/>
     public async Task<Result<ParsedFile>> ReadAsync(Stream content, int maxRows, CancellationToken cancellationToken)
     {
@@ -35,18 +38,26 @@ internal sealed class ClosedXmlSpreadsheetReader : ISpreadsheetReader
         using (workbook)
         {
             var sheet = workbook.Worksheets.FirstOrDefault();
-            var rows = sheet?.RowsUsed().ToList() ?? [];
-            if (rows.Count == 0)
+            if (sheet?.FirstRowUsed() is not { } firstRow || sheet.LastRowUsed() is not { } lastRow)
             {
                 return Result.Failure<ParsedFile>("The workbook's first sheet is empty.");
             }
 
-            var lastColumn = rows.Max(r => r.LastCellUsed()?.Address.ColumnNumber ?? 0);
-            var headers = Cells(rows[0], lastColumn).Select(DelimitedTextParser.NormalizeHeader).ToList();
-            if (rows.Count - 1 > maxRows)
+            // Check the sheet's extent before touching its rows: a small file can describe a huge,
+            // sparse sheet, and enumerating it would be the expensive part.
+            if (lastRow.RowNumber() - firstRow.RowNumber() > maxRows)
             {
                 return Result.Failure<ParsedFile>($"The sheet has more than {maxRows:N0} data rows. Split it into smaller files.");
             }
+
+            var lastColumn = sheet.LastColumnUsed()?.ColumnNumber() ?? 0;
+            if (lastColumn > MaxColumns)
+            {
+                return Result.Failure<ParsedFile>($"The sheet has more than {MaxColumns} columns. Keep just sku and home-stock (plus a few notes at most).");
+            }
+
+            var rows = sheet.RowsUsed().ToList();
+            var headers = Cells(rows[0], lastColumn).Select(DelimitedTextParser.NormalizeHeader).ToList();
 
             var records = new List<ParsedRecord>(rows.Count - 1);
             foreach (var row in rows.Skip(1))
