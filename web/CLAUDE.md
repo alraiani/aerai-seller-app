@@ -4,6 +4,8 @@ Multi-user web app for AERai Group's Amazon seller operations: source files (Ama
 
 **Always load the `web-coding-standards` skill before writing or reviewing code here.** It holds the principles, patterns, practices, and commenting standard this solution follows.
 
+Work tracked on the GitHub project board (https://github.com/users/alraiani/projects/3) is logged with the `github-board-updates` skill: move the item and comment on its issue at start, each phase, and finish.
+
 The WPF desktop app in `../src` is a **reference only** for domain concepts. This solution never references it, never builds it, and does not inherit its SQLite workarounds (`DateTimeOffset` translates fine on SQL Server). Rules in the root `CLAUDE.md` about WPF, WPF-UI, MVVM, DPAPI, and SQLite do not apply here.
 
 ## Solution layout

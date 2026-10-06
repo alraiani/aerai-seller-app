@@ -95,4 +95,5 @@ The "Amazon Workspace" Postman workspace has a collection scoped to exactly the 
 - `add-vertical-feature` — scaffold a new feature end-to-end across all layers.
 - `add-sp-api-endpoint` — add a new typed SP-API client call (+ matching Postman request).
 - `add-report-sync-job` — implement a new Reports-API-backed sync (request → poll → download → parse → upsert).
+- `github-board-updates` — move items on the GitHub project board and log progress (what + why) as comments on the item's issue; use for every board item you work on.
 - `architecture-reviewer` agent — run at the end of each phase/feature to check a change against the rules in this file before moving on.
