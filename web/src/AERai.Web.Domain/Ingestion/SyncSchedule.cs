@@ -59,4 +59,23 @@ public sealed class SyncSchedule
 
     /// <summary>Who last changed the settings.</summary>
     public required string UpdatedBy { get; set; }
+
+    /// <summary>Free-text notes, e.g. why the schedule exists or who relies on it.</summary>
+    public string? Notes { get; set; }
+
+    /// <summary>Email of the user responsible for this schedule; <see langword="null"/> when unassigned.</summary>
+    public string? OwnerEmail { get; set; }
+
+    /// <summary>
+    /// When the schedule was deleted; <see langword="null"/> while active. Deletion is soft so run
+    /// history and the "already ingested" record of each Amazon report survive (and the schedule
+    /// can be restored).
+    /// </summary>
+    public DateTimeOffset? DeletedAt { get; set; }
+
+    /// <summary>Who deleted the schedule.</summary>
+    public string? DeletedBy { get; set; }
+
+    /// <summary>Whether the schedule has been deleted.</summary>
+    public bool IsDeleted => DeletedAt is not null;
 }

@@ -138,6 +138,18 @@ public sealed class DashboardServiceTests
     }
 
     [Fact]
+    public async Task Attention_SyncPaused_WarnsThatDataWontRefresh()
+    {
+        _queries.SyncPaused = true;
+
+        var snapshot = await CreateService().GetSnapshotAsync(DashboardPeriod.Last7Days, CancellationToken.None);
+
+        var item = Assert.Single(snapshot.Attention);
+        Assert.Equal(AttentionSeverity.Warning, item.Severity);
+        Assert.Equal(AttentionTarget.Sync, item.Target);
+    }
+
+    [Fact]
     public async Task Attention_OrdersCriticalFirstAndNamesSkus()
     {
         _queries.MissingCost.AddRange(["C1", "C2", "C3", "C4"]);

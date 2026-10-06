@@ -3,9 +3,31 @@
 @{
     ViewData["Title"] = "Sync run history";
 }
-<div class="d-flex justify-content-between mb-3">
-    <a asp-page="Index" class="btn btn-sm btn-outline-secondary">Back to schedules</a>
-    <a asp-page="Runs" asp-route-scheduleId="@Model.ScheduleId" class="btn btn-sm btn-outline-primary">Refresh</a>
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">Amazon sync</a>
+    <span aria-hidden="true">/</span>
+    <span>Run history@(Model.ScheduleId is { } sid ? $" · {Model.ScheduleNames.GetValueOrDefault(sid, $"#{sid}")}" : "")</span>
+</nav>
+<div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+    @if (Model.AnyRunning)
+    {
+        <div class="auto-refresh" data-auto-refresh="10">
+            <span class="status-light status-running" aria-hidden="true"></span>
+            <span>A run is in progress — refreshing every 10 s.</span>
+            <button type="button" class="btn btn-sm btn-link p-0" data-auto-refresh-stop>Stop</button>
+        </div>
+    }
+    else
+    {
+        <span></span>
+    }
+    <div class="d-flex gap-2">
+        @if (Model.ScheduleId is not null)
+        {
+            <a asp-page="Runs" class="btn btn-sm btn-soft">All schedules</a>
+        }
+        <a asp-page="Runs" asp-route-scheduleId="@Model.ScheduleId" class="btn btn-sm btn-soft"><partial name="_Icon" model='"refresh"' /> Refresh</a>
+    </div>
 </div>
 <div class="card">
     <div class="card-body p-0">
@@ -18,10 +40,10 @@
                 <tr>
                     <td>@r.Id</td>
                     <td>@Model.ScheduleNames.GetValueOrDefault(r.SyncScheduleId, $"#{r.SyncScheduleId}")</td>
-                    <td>@r.Trigger<div class="small text-body-secondary">@r.TriggeredBy</div></td>
+                    <td>@r.Trigger<div class="cell-sub">@r.TriggeredBy</div></td>
                     <td>@r.StartedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
                     <td>@(r.CompletedAt is { } done ? $"{(done - r.StartedAt).TotalSeconds:0}s" : "running…")</td>
-                    <td><span class="badge @ScheduleDisplay.StatusBadge(r.Status)">@r.Status</span></td>
+                    <td><span class="@ScheduleDisplay.StatusPill(r.Status)">@ScheduleDisplay.StatusLabel(r.Status)</span></td>
                     <td>
                         @foreach (var batchId in (r.ImportBatchIds ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries))
                         {
@@ -29,10 +51,14 @@
                         }
                     </td>
                     <td class="small">
+                        @if (r.DataStart is { } ds && r.DataEnd is { } de)
+                        {
+                            <div class="cell-sub">Window @ds.UtcDateTime.ToString("yyyy-MM-dd HH:mm") → @de.UtcDateTime.ToString("yyyy-MM-dd HH:mm") UTC</div>
+                        }
                         @r.Message
                         @if (r.AmazonReportIds is not null)
                         {
-                            <div class="text-body-secondary">Amazon report: @r.AmazonReportIds</div>
+                            <div class="cell-sub">Amazon report: @r.AmazonReportIds</div>
                         }
                     </td>
                 </tr>
@@ -47,3 +73,7 @@
     </div>
 </div>
 <partial name="_Pager" model="Model.Runs.ToPager(Model.Search)" />
+
+@section Scripts {
+    <script src="~/js/schedules.js" asp-append-version="true"></script>
+}

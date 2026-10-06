@@ -49,6 +49,9 @@
 
     apply(stored());
 
+    // Lets CSS hide no-script fallbacks (e.g. "Apply" buttons) before first paint, so they never flash.
+    document.documentElement.classList.add("js");
+
     // Follow OS changes live while on "System".
     if (media && media.addEventListener) {
         media.addEventListener("change", function () {

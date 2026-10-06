@@ -75,6 +75,19 @@ internal sealed class ReportsApiClient(HttpClient http, IHttpClientFactory httpC
         return results;
     }
 
+    /// <summary>
+    /// Calls <c>getReports</c> for a single page of one report, purely to prove that the token
+    /// exchange and authorization work. The response content is ignored.
+    /// </summary>
+    /// <param name="reportType">SP-API report type code (any type the app is authorized for).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A task that completes when Amazon accepted the call; throws on failure.</returns>
+    public async Task PingAsync(string reportType, CancellationToken cancellationToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{BasePath}/reports?reportTypes={Uri.EscapeDataString(reportType)}&pageSize=1");
+        await SendAndDisposeAsync<GetReportsResponse>(request, SpApiOperation.GetReports, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Calls <c>getReportDocument</c>, then downloads and (if needed) decompresses the document.</summary>
     /// <param name="reportDocumentId">Document id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

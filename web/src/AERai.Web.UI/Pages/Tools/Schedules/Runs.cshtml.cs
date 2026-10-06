@@ -23,12 +23,17 @@ public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository s
     /// <summary>Schedule names by id.</summary>
     public IReadOnlyDictionary<int, string> ScheduleNames { get; private set; } = new Dictionary<int, string>();
 
+    /// <summary>Whether any run on this page is still in progress (the page then refreshes itself).</summary>
+    public bool AnyRunning => Runs.Items.Any(r => r.Status == SyncRunStatus.Running);
+
     /// <summary>Loads the page.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>A task that completes when loaded.</returns>
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         Runs = await runs.ListAsync(ScheduleId, ToPageRequest(), cancellationToken);
-        ScheduleNames = (await schedules.ListAsync(cancellationToken)).ToDictionary(s => s.Id, s => s.Name);
+        // Include deleted schedules so their history stays labeled.
+        ScheduleNames = (await schedules.ListIncludingDeletedAsync(cancellationToken))
+            .ToDictionary(s => s.Id, s => s.IsDeleted ? $"{s.Name} (deleted)" : s.Name);
     }
 }

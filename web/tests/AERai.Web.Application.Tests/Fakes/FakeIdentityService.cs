@@ -4,7 +4,7 @@ using AERai.Web.Application.Security;
 
 namespace AERai.Web.Application.Tests.Fakes;
 
-/// <summary><see cref="IIdentityService"/> with scriptable password-reset behavior; other members are unused.</summary>
+/// <summary><see cref="IIdentityService"/> with scriptable password-reset behavior and user list; other members are unused.</summary>
 internal sealed class FakeIdentityService : IIdentityService
 {
     /// <summary>Tokens issued per email; an email missing here behaves like an unknown or locked account.</summary>
@@ -13,6 +13,8 @@ internal sealed class FakeIdentityService : IIdentityService
     public List<string> RequestedEmails { get; } = [];
 
     public Result NextResetResult { get; set; } = Result.Success();
+
+    public List<UserSummary> Users { get; } = [];
 
     public Task<PasswordResetToken?> CreatePasswordResetTokenAsync(string email, CancellationToken cancellationToken)
     {
@@ -27,7 +29,7 @@ internal sealed class FakeIdentityService : IIdentityService
 
     public Task SignOutAsync() => throw new NotSupportedException();
 
-    public Task<IReadOnlyList<UserSummary>> ListUsersAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<IReadOnlyList<UserSummary>> ListUsersAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<UserSummary>>(Users);
 
     public Task<Result<string>> CreateUserAsync(CreateUserCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
 

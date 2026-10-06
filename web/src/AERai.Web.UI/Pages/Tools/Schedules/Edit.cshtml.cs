@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Ingestion;
+using AERai.Web.Application.Security;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.UI.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -9,38 +10,71 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace AERai.Web.UI.Pages.Tools.Schedules;
 
 /// <summary>
-/// Creates (no id) or edits (with id) an ingestion schedule. Business validation lives in
-/// <see cref="ISyncScheduleService"/>; this page only binds and displays.
+/// Adds (no id), duplicates (<c>?copyFrom=</c>), or edits (with id) an ingestion schedule. Business
+/// validation lives in <see cref="ISyncScheduleService"/>; this page only binds and displays.
 /// </summary>
 /// <param name="schedules">Schedule queries.</param>
 /// <param name="scheduleService">Schedule use cases.</param>
-public sealed class EditModel(ISyncScheduleRepository schedules, ISyncScheduleService scheduleService) : PageModel
+/// <param name="identity">User list for the owner picker.</param>
+/// <param name="clock">Clock for relative times.</param>
+public sealed class EditModel(
+    ISyncScheduleRepository schedules,
+    ISyncScheduleService scheduleService,
+    IIdentityService identity,
+    TimeProvider clock) : PageModel
 {
     /// <summary>Posted form values.</summary>
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
-    /// <summary>Schedule id when editing; <see langword="null"/> when creating.</summary>
+    /// <summary>Schedule id when editing; <see langword="null"/> when adding.</summary>
     [BindProperty(SupportsGet = true)]
     public int? Id { get; set; }
 
-    /// <summary>Shows the form, pre-filled when editing.</summary>
+    /// <summary>Schedule to copy when duplicating (<c>?copyFrom=</c>).</summary>
+    [BindProperty(SupportsGet = true)]
+    public int? CopyFrom { get; set; }
+
+    /// <summary>The stored schedule when editing (for the "next run / last changed" footer).</summary>
+    public SyncSchedule? Existing { get; private set; }
+
+    /// <summary>Users, for the owner picker.</summary>
+    public IReadOnlyList<UserSummary> Users { get; private set; } = [];
+
+    /// <summary>Current time, for relative times.</summary>
+    public DateTimeOffset Now { get; } = clock.GetUtcNow();
+
+    /// <summary>Shows the form: blank, pre-filled for editing, or copied for duplicating.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The page, or 404 for an unknown id.</returns>
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
-        if (Id is not { } id)
+        Users = await identity.ListUsersAsync(cancellationToken);
+
+        if (Id is { } id)
         {
+            Existing = await schedules.GetAsync(id, cancellationToken);
+            if (Existing is null)
+            {
+                return NotFound();
+            }
+
+            Input = InputModel.From(Existing);
             return Page();
         }
 
-        var schedule = await schedules.GetAsync(id, cancellationToken);
-        if (schedule is null)
+        if (CopyFrom is { } sourceId && await schedules.GetAsync(sourceId, cancellationToken) is { } source)
         {
-            return NotFound();
+            // A copy starts off so it can't double-pull alongside the original before it's adjusted.
+            Input = InputModel.From(source);
+            var copyName = $"Copy of {source.Name}";
+            Input.Name = copyName.Length <= 100 ? copyName : copyName[..100];
+            Input.IsEnabled = false;
+            Input.OwnerEmail = User.Identity!.Name;
+            return Page();
         }
 
-        Input = InputModel.From(schedule);
+        Input.OwnerEmail = User.Identity!.Name;
         return Page();
     }
 
@@ -51,7 +85,7 @@ public sealed class EditModel(ISyncScheduleRepository schedules, ISyncScheduleSe
     {
         if (!ModelState.IsValid)
         {
-            return Page();
+            return await RedisplayAsync(cancellationToken);
         }
 
         var input = Input.ToInput();
@@ -63,11 +97,39 @@ public sealed class EditModel(ISyncScheduleRepository schedules, ISyncScheduleSe
         if (result.IsFailure)
         {
             ModelState.AddModelError(string.Empty, result.Error);
-            return Page();
+            return await RedisplayAsync(cancellationToken);
         }
 
-        TempData[StatusMessage.Success] = $"Schedule '{input.Name}' saved.";
+        TempData[StatusMessage.Success] = Id is null ? $"Schedule '{input.Name}' added." : $"Schedule '{input.Name}' saved.";
         return RedirectToPage("Index");
+    }
+
+    /// <summary>Soft-deletes the schedule being edited.</summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect to the list.</returns>
+    public async Task<IActionResult> OnPostDeleteAsync(CancellationToken cancellationToken)
+    {
+        if (Id is not { } id)
+        {
+            return NotFound();
+        }
+
+        var result = await scheduleService.DeleteAsync(id, User.Identity!.Name!, cancellationToken);
+        TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess
+            ? "Schedule deleted. Its run history is kept, and it can be restored from the Deleted tab."
+            : result.Error;
+        return RedirectToPage("Index");
+    }
+
+    private async Task<IActionResult> RedisplayAsync(CancellationToken cancellationToken)
+    {
+        Users = await identity.ListUsersAsync(cancellationToken);
+        if (Id is { } id)
+        {
+            Existing = await schedules.GetAsync(id, cancellationToken);
+        }
+
+        return Page();
     }
 
     /// <summary>Schedule form fields.</summary>
@@ -90,7 +152,7 @@ public sealed class EditModel(ISyncScheduleRepository schedules, ISyncScheduleSe
         public int? IntervalMinutes { get; set; } = 60;
 
         /// <summary>Local time of day.</summary>
-        [Display(Name = "At (local time)")]
+        [Display(Name = "At")]
         [DataType(DataType.Time)]
         public TimeOnly? DailyTime { get; set; } = new(6, 0);
 
@@ -104,12 +166,20 @@ public sealed class EditModel(ISyncScheduleRepository schedules, ISyncScheduleSe
         public int LookbackDays { get; set; } = 7;
 
         /// <summary>Promote immediately.</summary>
-        [Display(Name = "Auto-promote into reports")]
+        [Display(Name = "Send new data straight into reports")]
         public bool AutoPromote { get; set; } = true;
 
-        /// <summary>Run automatically.</summary>
-        [Display(Name = "Enabled")]
-        public bool IsEnabled { get; set; }
+        /// <summary>Run automatically. New schedules start on so adding one actually syncs.</summary>
+        [Display(Name = "Run automatically")]
+        public bool IsEnabled { get; set; } = true;
+
+        /// <summary>Free-text notes.</summary>
+        [StringLength(SyncScheduleService.MaxNotesLength)]
+        public string? Notes { get; set; }
+
+        /// <summary>Responsible user.</summary>
+        [Display(Name = "Owner")]
+        public string? OwnerEmail { get; set; }
 
         /// <summary>Copies a stored schedule into the form.</summary>
         /// <param name="s">The schedule.</param>
@@ -128,12 +198,14 @@ public sealed class EditModel(ISyncScheduleRepository schedules, ISyncScheduleSe
                 LookbackDays = s.LookbackDays,
                 AutoPromote = s.AutoPromote,
                 IsEnabled = s.IsEnabled,
+                Notes = s.Notes,
+                OwnerEmail = s.OwnerEmail,
             };
         }
 
         /// <summary>Converts the form to the Application input.</summary>
         /// <returns>The schedule input.</returns>
         public SyncScheduleInput ToInput() =>
-            new(Name, ReportType, IsEnabled, Frequency, IntervalMinutes, DailyTime, TimeZoneId, LookbackDays, AutoPromote);
+            new(Name, ReportType, IsEnabled, Frequency, IntervalMinutes, DailyTime, TimeZoneId, LookbackDays, AutoPromote, Notes, OwnerEmail);
     }
 }

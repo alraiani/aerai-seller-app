@@ -44,6 +44,11 @@ public interface IDashboardQueries
     /// <returns>One entry per report type that has a schedule.</returns>
     Task<IReadOnlyList<SyncGlance>> GetSyncHealthAsync(CancellationToken cancellationToken);
 
+    /// <summary>Whether an operator has paused all scheduled syncs.</summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns><see langword="true"/> when paused.</returns>
+    Task<bool> IsSyncPausedAsync(CancellationToken cancellationToken);
+
     /// <summary>Earliest data-window start of any successful Orders run (how far back sales history reaches).</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The earliest start, or <see langword="null"/> when Orders have never synced.</returns>

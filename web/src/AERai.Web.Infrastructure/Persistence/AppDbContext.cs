@@ -54,6 +54,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Ingestion run history.</summary>
     public DbSet<SyncRun> SyncRuns => Set<SyncRun>();
 
+    /// <summary>App-wide sync settings (single row).</summary>
+    public DbSet<SyncSettings> SyncSettings => Set<SyncSettings>();
+
     /// <summary>Ledger of Amazon reports already ingested.</summary>
     public DbSet<IngestedReport> IngestedReports => Set<IngestedReport>();
 

@@ -88,7 +88,7 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
 
         await using var scope = fixture.Services.CreateAsyncScope();
         var summary = await scope.ServiceProvider.GetRequiredService<IReportIngestionService>()
-            .RunAsync(id, SyncTrigger.Manual, "tests@aeraigroup.com", backfillDays: null, CancellationToken.None);
+            .RunAsync(id, SyncTrigger.Manual, "tests@aeraigroup.com", backfill: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
         var batchId = Assert.Single(summary.ImportBatchIds);
@@ -113,8 +113,8 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         await using var scope = fixture.Services.CreateAsyncScope();
         var ingestion = scope.ServiceProvider.GetRequiredService<IReportIngestionService>();
 
-        var first = await ingestion.RunAsync(id, SyncTrigger.Manual, "tests", backfillDays: null, CancellationToken.None);
-        var second = await ingestion.RunAsync(id, SyncTrigger.Manual, "tests", backfillDays: null, CancellationToken.None);
+        var first = await ingestion.RunAsync(id, SyncTrigger.Manual, "tests", backfill: null, CancellationToken.None);
+        var second = await ingestion.RunAsync(id, SyncTrigger.Manual, "tests", backfill: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Succeeded, first.Status);
         Assert.Equal(SyncRunStatus.NoData, second.Status);

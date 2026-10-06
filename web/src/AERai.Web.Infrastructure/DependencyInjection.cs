@@ -87,6 +87,7 @@ public static class DependencyInjection
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<ISyncScheduleRepository, SyncScheduleRepository>();
         services.AddScoped<ISyncRunRepository, SyncRunRepository>();
+        services.AddScoped<ISyncSettingsRepository, SyncSettingsRepository>();
 
         AddSpApi(services, configuration);
 
@@ -109,6 +110,7 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.AddSingleton<IAmazonConnectionInfo, AmazonConnectionInfo>();
+        services.AddSingleton<IAmazonConnectionTester, AmazonConnectionTester>();
 
         var mode = configuration.GetSection(SpApiOptions.SectionName).GetValue(nameof(SpApiOptions.Mode), SpApiMode.Disabled);
         switch (mode)

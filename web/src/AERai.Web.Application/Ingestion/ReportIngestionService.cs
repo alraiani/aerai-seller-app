@@ -78,7 +78,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     }
 
     /// <inheritdoc/>
-    public async Task<SyncRunSummary> RunAsync(int scheduleId, SyncTrigger trigger, string triggeredBy, int? backfillDays, CancellationToken cancellationToken)
+    public async Task<SyncRunSummary> RunAsync(int scheduleId, SyncTrigger trigger, string triggeredBy, BackfillWindow? backfill, CancellationToken cancellationToken)
     {
         var schedule = await _schedules.GetAsync(scheduleId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"Sync schedule {scheduleId} does not exist.");
@@ -93,12 +93,12 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         };
         run.Id = await _runs.StartAsync(run, cancellationToken).ConfigureAwait(false);
         LogRunStarted(run.Id, schedule.Name, trigger);
-        if (backfillDays is { } days)
+        if (backfill is not null)
         {
-            LogBackfill(run.Id, days);
+            LogBackfill(run.Id, backfill.Start, backfill.End);
         }
 
-        var context = new RunContext(schedule, run, backfillDays);
+        var context = new RunContext(schedule, run, backfill);
         try
         {
             if (schedule.ReportType == AmazonReportType.Settlements)
@@ -133,9 +133,9 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         }
 
         run.CompletedAt = _clock.GetUtcNow();
-        if (backfillDays is { } backfilled && run.Status != SyncRunStatus.Failed)
+        if (backfill is not null && run.Status != SyncRunStatus.Failed)
         {
-            context.Notes.Insert(0, $"Backfill of {backfilled} days.");
+            context.Notes.Insert(0, $"Backfill {backfill}.");
         }
 
         run.Message ??= string.Join(" ", context.Notes);
@@ -158,9 +158,10 @@ public sealed partial class ReportIngestionService : IReportIngestionService
 
         if (context.Schedule.ReportType == AmazonReportType.Orders)
         {
-            end = now - DataEndSafetyMargin;
-            start = context.BackfillDays is { } backfill
-                ? end.Value.AddDays(-backfill)
+            var latestEnd = now - DataEndSafetyMargin;
+            end = context.Backfill is { } window && window.End < latestEnd ? window.End : latestEnd;
+            start = context.Backfill is { } backfill
+                ? backfill.Start
                 : context.Schedule.LastSuccessfulDataEnd is { } previousEnd
                     ? previousEnd - OrdersOverlap
                     : end.Value.AddDays(-context.Schedule.LookbackDays);
@@ -196,13 +197,17 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     private async Task IngestListedReportsAsync(RunContext context, CancellationToken cancellationToken)
     {
         var now = _clock.GetUtcNow();
-        var since = context.BackfillDays is { } backfill
-            ? now.AddDays(-backfill)
+        var since = context.Backfill is { } backfill
+            ? backfill.Start
             : context.Schedule.LastSuccessfulDataEnd is { } previous
                 ? previous - SettlementListOverlap
                 : now.AddDays(-context.Schedule.LookbackDays);
 
         var reports = await _gateway.ListCompletedReportsAsync(context.Schedule.ReportType, since, cancellationToken).ConfigureAwait(false);
+        var until = context.Backfill?.End ?? now;
+
+        // A date-range backfill only takes reports Amazon created inside the range.
+        reports = [.. reports.Where(r => r.CreatedAt <= until)];
         var skipped = 0;
         foreach (var report in reports)
         {
@@ -221,7 +226,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             context.Notes.Add(skipped > 0 ? $"No new reports ({skipped} already ingested)." : "No new reports available.");
         }
 
-        context.CoveredUntil = now;
+        context.CoveredUntil = until;
     }
 
     /// <summary>Polls a report's status until it leaves the queue or the wait limit is reached.</summary>
@@ -320,9 +325,9 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     }
 
     /// <summary>Mutable state accumulated during one run.</summary>
-    private sealed class RunContext(SyncSchedule schedule, SyncRun run, int? backfillDays)
+    private sealed class RunContext(SyncSchedule schedule, SyncRun run, BackfillWindow? backfill)
     {
-        public int? BackfillDays { get; } = backfillDays;
+        public BackfillWindow? Backfill { get; } = backfill;
 
         public SyncSchedule Schedule { get; } = schedule;
 
@@ -340,8 +345,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} started for schedule '{ScheduleName}' ({Trigger})")]
     private partial void LogRunStarted(long runId, string scheduleName, SyncTrigger trigger);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} is a {BackfillDays}-day backfill")]
-    private partial void LogBackfill(long runId, int backfillDays);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} is a backfill from {BackfillStart} to {BackfillEnd}")]
+    private partial void LogBackfill(long runId, DateTimeOffset backfillStart, DateTimeOffset backfillEnd);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} finished: {Status} — {Message}")]
     private partial void LogRunCompleted(long runId, SyncRunStatus status, string? message);

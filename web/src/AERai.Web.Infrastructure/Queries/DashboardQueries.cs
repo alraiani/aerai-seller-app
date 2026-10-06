@@ -84,6 +84,10 @@ internal sealed class DashboardQueries(AppDbContext dbContext) : IDashboardQueri
     }
 
     /// <inheritdoc/>
+    public Task<bool> IsSyncPausedAsync(CancellationToken cancellationToken) =>
+        dbContext.SyncSettings.AnyAsync(s => s.IsPaused, cancellationToken);
+
+    /// <inheritdoc/>
     public Task<DateTimeOffset?> GetOrdersCoverageStartAsync(CancellationToken cancellationToken) =>
         dbContext.SyncRuns
             .Where(r => r.ReportType == AmazonReportType.Orders && r.Status != SyncRunStatus.Failed && r.Status != SyncRunStatus.Running)

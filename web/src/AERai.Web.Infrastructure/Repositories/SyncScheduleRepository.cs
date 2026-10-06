@@ -16,8 +16,54 @@ internal sealed class SyncScheduleRepository(AppDbContext dbContext) : ISyncSche
         await dbContext.SyncSchedules.AsNoTracking().OrderBy(s => s.Name).ToListAsync(cancellationToken).ConfigureAwait(false);
 
     /// <inheritdoc/>
+    public async Task<IReadOnlyList<SyncSchedule>> ListIncludingDeletedAsync(CancellationToken cancellationToken) =>
+        await dbContext.SyncSchedules.IgnoreQueryFilters().AsNoTracking().OrderBy(s => s.Name).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public Task<SyncSchedule?> GetAsync(int id, CancellationToken cancellationToken) =>
         dbContext.SyncSchedules.AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<SyncSchedule?> GetIncludingDeletedAsync(int id, CancellationToken cancellationToken) =>
+        dbContext.SyncSchedules.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<bool> NameExistsAsync(string name, int? excludeId, CancellationToken cancellationToken) =>
+        dbContext.SyncSchedules.AnyAsync(s => s.Name == name && (excludeId == null || s.Id != excludeId), cancellationToken);
+
+    /// <inheritdoc/>
+    public async Task<bool> SoftDeleteAsync(int id, string user, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        // The query filter limits this to active schedules, so deleting twice reports "not found".
+        var affected = await dbContext.SyncSchedules
+            .Where(s => s.Id == id)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(s => s.DeletedAt, at)
+                .SetProperty(s => s.DeletedBy, user)
+                .SetProperty(s => s.IsEnabled, false)
+                .SetProperty(s => s.NextRunAt, (DateTimeOffset?)null)
+                .SetProperty(s => s.UpdatedAt, at)
+                .SetProperty(s => s.UpdatedBy, user),
+                cancellationToken)
+            .ConfigureAwait(false);
+        return affected == 1;
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> RestoreAsync(int id, string user, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        var affected = await dbContext.SyncSchedules
+            .IgnoreQueryFilters()
+            .Where(s => s.Id == id && s.DeletedAt != null)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(s => s.DeletedAt, (DateTimeOffset?)null)
+                .SetProperty(s => s.DeletedBy, (string?)null)
+                .SetProperty(s => s.UpdatedAt, at)
+                .SetProperty(s => s.UpdatedBy, user),
+                cancellationToken)
+            .ConfigureAwait(false);
+        return affected == 1;
+    }
 
     /// <inheritdoc/>
     public async Task<int> AddAsync(SyncSchedule schedule, CancellationToken cancellationToken)
@@ -46,6 +92,8 @@ internal sealed class SyncScheduleRepository(AppDbContext dbContext) : ISyncSche
                 .SetProperty(s => s.TimeZoneId, schedule.TimeZoneId)
                 .SetProperty(s => s.LookbackDays, schedule.LookbackDays)
                 .SetProperty(s => s.AutoPromote, schedule.AutoPromote)
+                .SetProperty(s => s.Notes, schedule.Notes)
+                .SetProperty(s => s.OwnerEmail, schedule.OwnerEmail)
                 .SetProperty(s => s.NextRunAt, schedule.NextRunAt)
                 .SetProperty(s => s.LastSuccessfulDataEnd, schedule.LastSuccessfulDataEnd)
                 .SetProperty(s => s.UpdatedAt, schedule.UpdatedAt)

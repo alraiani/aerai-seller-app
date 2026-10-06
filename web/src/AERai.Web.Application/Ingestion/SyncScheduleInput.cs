@@ -12,6 +12,8 @@ namespace AERai.Web.Application.Ingestion;
 /// <param name="TimeZoneId">IANA time zone for <paramref name="DailyTime"/>.</param>
 /// <param name="LookbackDays">How far back the first run reaches.</param>
 /// <param name="AutoPromote">Promote staged batches immediately.</param>
+/// <param name="Notes">Optional free-text notes.</param>
+/// <param name="OwnerEmail">Optional responsible user's email.</param>
 public sealed record SyncScheduleInput(
     string Name,
     AmazonReportType ReportType,
@@ -21,4 +23,6 @@ public sealed record SyncScheduleInput(
     TimeOnly? DailyTime,
     string TimeZoneId,
     int LookbackDays,
-    bool AutoPromote);
+    bool AutoPromote,
+    string? Notes = null,
+    string? OwnerEmail = null);

@@ -21,6 +21,8 @@ internal sealed class FakeDashboardQueries : IDashboardQueries
 
     public DateTimeOffset? CoverageStart { get; set; }
 
+    public bool SyncPaused { get; set; }
+
     /// <summary>The window the service asked for, to assert it fetches enough history.</summary>
     public (DateTimeOffset From, DateTimeOffset To)? RequestedWindow { get; private set; }
 
@@ -43,6 +45,8 @@ internal sealed class FakeDashboardQueries : IDashboardQueries
 
     public Task<IReadOnlyList<SyncGlance>> GetSyncHealthAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<SyncGlance>>(Sync);
+
+    public Task<bool> IsSyncPausedAsync(CancellationToken cancellationToken) => Task.FromResult(SyncPaused);
 
     public Task<DateTimeOffset?> GetOrdersCoverageStartAsync(CancellationToken cancellationToken) => Task.FromResult(CoverageStart);
 }

@@ -82,7 +82,8 @@ public static partial class DatabaseInitializer
     /// </summary>
     private static async Task SeedDefaultSchedulesAsync(AppDbContext db, TimeProvider clock, CancellationToken cancellationToken)
     {
-        if (await db.SyncSchedules.AnyAsync(cancellationToken).ConfigureAwait(false))
+        // Include deleted schedules: an operator who deleted every default must not get them back.
+        if (await db.SyncSchedules.IgnoreQueryFilters().AnyAsync(cancellationToken).ConfigureAwait(false))
         {
             return;
         }

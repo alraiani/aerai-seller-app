@@ -53,7 +53,7 @@ internal sealed partial class SyncSchedulerWorker(
             {
                 if (await channel.DequeueAsync(settings.SchedulerTick, stoppingToken).ConfigureAwait(false) is { } manual)
                 {
-                    await RunAsync(manual.ScheduleId, SyncTrigger.Manual, manual.RequestedBy, manual.BackfillDays, stoppingToken).ConfigureAwait(false);
+                    await RunAsync(manual.ScheduleId, SyncTrigger.Manual, manual.RequestedBy, manual.Backfill, stoppingToken).ConfigureAwait(false);
                 }
 
                 await RunDueSchedulesAsync(stoppingToken).ConfigureAwait(false);
@@ -82,6 +82,13 @@ internal sealed partial class SyncSchedulerWorker(
         IReadOnlyList<SyncSchedule> due;
         await using (var scope = scopes.CreateAsyncScope())
         {
+            // Pausing only stops scheduled slots; "Run now" and backfills are dequeued separately.
+            // Overdue slots run once on resume, like after downtime.
+            if ((await scope.ServiceProvider.GetRequiredService<ISyncSettingsRepository>().GetAsync(cancellationToken).ConfigureAwait(false)).IsPaused)
+            {
+                return;
+            }
+
             due = await scope.ServiceProvider.GetRequiredService<ISyncScheduleRepository>()
                 .GetDueAsync(clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
         }
@@ -100,16 +107,16 @@ internal sealed partial class SyncSchedulerWorker(
 
             if (claimed)
             {
-                await RunAsync(schedule.Id, SyncTrigger.Scheduled, SchedulerUser, backfillDays: null, cancellationToken).ConfigureAwait(false);
+                await RunAsync(schedule.Id, SyncTrigger.Scheduled, SchedulerUser, backfill: null, cancellationToken).ConfigureAwait(false);
             }
         }
     }
 
-    private async Task RunAsync(int scheduleId, SyncTrigger trigger, string triggeredBy, int? backfillDays, CancellationToken cancellationToken)
+    private async Task RunAsync(int scheduleId, SyncTrigger trigger, string triggeredBy, BackfillWindow? backfill, CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<IReportIngestionService>()
-            .RunAsync(scheduleId, trigger, triggeredBy, backfillDays, cancellationToken).ConfigureAwait(false);
+            .RunAsync(scheduleId, trigger, triggeredBy, backfill, cancellationToken).ConfigureAwait(false);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync scheduler started (SP-API mode {Mode}, tick {TickSeconds}s)")]

@@ -3,37 +3,101 @@
 @using AERai.Web.Domain.Ingestion
 @model AERai.Web.UI.Pages.Tools.Schedules.EditModel
 @{
-    ViewData["Title"] = Model.Id is null ? "New schedule" : "Edit schedule";
+    var adding = Model.Id is null;
+    ViewData["Title"] = adding ? (Model.CopyFrom is null ? "Add schedule" : "Duplicate schedule") : "Edit schedule";
+    var me = User.Identity!.Name!;
+    var presets = new (string Label, string Frequency, int? Minutes, string? Time)[]
+    {
+        ("Every 15 min", "Interval", 15, null),
+        ("Hourly", "Interval", 60, null),
+        ("Every 6 h", "Interval", 360, null),
+        ("Daily 6 AM", "Daily", null, "06:00"),
+    };
 }
-<div class="row g-3">
-    <div class="col-lg-7">
-        <div class="card">
-            <div class="card-body">
-                <form method="post">
-                    <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
-                    <div class="mb-3">
-                        <label asp-for="Input.Name" class="form-label"></label>
-                        <input asp-for="Input.Name" class="form-control" />
+
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">Amazon sync</a>
+    <span aria-hidden="true">/</span>
+    <span>@(adding ? ViewData["Title"] : Model.Input.Name)</span>
+</nav>
+
+<form method="post" class="schedule-form" data-schedule-form>
+    <div class="row g-3">
+        <div class="col-xl-8">
+            <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
+
+            @* ---------- 1. What ---------- *@
+            <section class="card form-section mb-3">
+                <div class="form-section-head">
+                    <span class="step">1</span>
+                    <div>
+                        <h2>What to pull</h2>
+                        <p>Name the schedule and choose the Amazon report.</p>
                     </div>
+                </div>
+                <div class="form-section-body">
                     <div class="mb-3">
-                        <label asp-for="Input.ReportType" class="form-label"></label>
-                        <select asp-for="Input.ReportType" asp-items="Html.GetEnumSelectList<AmazonReportType>()" class="form-select"></select>
+                        <label asp-for="Input.Name" class="form-label">Name</label>
+                        <input asp-for="Input.Name" class="form-control" placeholder="e.g. Orders — hourly" />
                     </div>
+                    <fieldset>
+                        <legend class="form-label">Amazon report</legend>
+                        <div class="choice-grid">
+                            @foreach (var (type, description) in ScheduleDisplay.ReportTypes)
+                            {
+                                <label class="choice">
+                                    <input type="radio" asp-for="Input.ReportType" value="@type" data-report-label="@ScheduleDisplay.ReportLabel(type)" />
+                                    <span class="choice-body">
+                                        <span class="@ScheduleDisplay.ReportTag(type)">@ScheduleDisplay.ReportLabel(type)</span>
+                                        <span class="choice-desc">@description</span>
+                                    </span>
+                                </label>
+                            }
+                        </div>
+                    </fieldset>
+                </div>
+            </section>
+
+            @* ---------- 2. When ---------- *@
+            <section class="card form-section mb-3">
+                <div class="form-section-head">
+                    <span class="step">2</span>
+                    <div>
+                        <h2>When to run</h2>
+                        <p>Repeat on an interval, or once a day at a set local time.</p>
+                    </div>
+                </div>
+                <div class="form-section-body">
                     <div class="mb-3">
-                        <label asp-for="Input.Frequency" class="form-label"></label>
-                        <select asp-for="Input.Frequency" asp-items="Html.GetEnumSelectList<ScheduleFrequency>()" class="form-select"></select>
-                        <div class="form-text">Interval uses "Every (minutes)". Daily uses "At (local time)" and the time zone.</div>
+                        <div class="form-label">Quick presets</div>
+                        <div class="quick-picks">
+                            @foreach (var p in presets)
+                            {
+                                <button type="button" class="btn btn-sm btn-soft" data-preset-frequency="@p.Frequency"
+                                        data-preset-minutes="@p.Minutes" data-preset-time="@p.Time">@p.Label</button>
+                            }
+                        </div>
                     </div>
-                    <div class="row g-3 mb-3">
-                        <div class="col-sm-4">
+
+                    <fieldset class="mb-3">
+                        <legend class="form-label">Repeat</legend>
+                        <div class="segmented segmented-radio">
+                            <label><input type="radio" asp-for="Input.Frequency" value="@ScheduleFrequency.Interval" /><span>On an interval</span></label>
+                            <label><input type="radio" asp-for="Input.Frequency" value="@ScheduleFrequency.Daily" /><span>Daily at a time</span></label>
+                        </div>
+                    </fieldset>
+
+                    <div class="row g-3">
+                        <div class="col-sm-6" data-frequency-field="Interval">
                             <label asp-for="Input.IntervalMinutes" class="form-label"></label>
                             <input asp-for="Input.IntervalMinutes" class="form-control" min="@SyncScheduleService.MinIntervalMinutes" step="15" />
+                            <div class="form-text">At least @SyncScheduleService.MinIntervalMinutes minutes — Amazon limits how often reports can be requested.</div>
                         </div>
-                        <div class="col-sm-4">
+                        <div class="col-sm-6" data-frequency-field="Daily">
                             <label asp-for="Input.DailyTime" class="form-label"></label>
                             <input asp-for="Input.DailyTime" type="time" class="form-control" />
                         </div>
-                        <div class="col-sm-4">
+                        <div class="col-sm-6" data-frequency-field="Daily">
                             <label asp-for="Input.TimeZoneId" class="form-label"></label>
                             <select asp-for="Input.TimeZoneId" class="form-select">
                                 @foreach (var (id, label) in ScheduleDisplay.TimeZones)
@@ -43,43 +107,130 @@
                             </select>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label asp-for="Input.LookbackDays" class="form-label"></label>
-                        <input asp-for="Input.LookbackDays" class="form-control" min="1" max="@SyncScheduleService.MaxLookbackDays" />
-                        <div class="form-text">How far back the very first run reaches. Later runs pick up where the last successful run ended.</div>
+                </div>
+            </section>
+
+            @* ---------- 3. Options ---------- *@
+            <section class="card form-section mb-3">
+                <div class="form-section-head">
+                    <span class="step">3</span>
+                    <div>
+                        <h2>Options</h2>
+                        <p>How much history to start with, where new data goes, and who looks after it.</p>
                     </div>
-                    <div class="form-check mb-2">
-                        <input asp-for="Input.AutoPromote" class="form-check-input" />
-                        <label asp-for="Input.AutoPromote" class="form-check-label"></label>
+                </div>
+                <div class="form-section-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label asp-for="Input.LookbackDays" class="form-label"></label>
+                            <input asp-for="Input.LookbackDays" class="form-control" min="1" max="@SyncScheduleService.MaxLookbackDays" />
+                            <div class="form-text">How far back the very first run reaches. Later runs continue where the last one ended.</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label asp-for="Input.OwnerEmail" class="form-label"></label>
+                            <select asp-for="Input.OwnerEmail" class="form-select">
+                                <option value="">Unassigned</option>
+                                @foreach (var user in Model.Users)
+                                {
+                                    <option value="@user.Email">@user.Email@(string.Equals(user.Email, me, StringComparison.OrdinalIgnoreCase) ? " (you)" : "")</option>
+                                }
+                            </select>
+                            <div class="form-text">Who to ask about this schedule.</div>
+                        </div>
                     </div>
-                    <div class="form-check mb-4">
-                        <input asp-for="Input.IsEnabled" class="form-check-input" />
-                        <label asp-for="Input.IsEnabled" class="form-check-label"></label>
+
+                    <div class="switch-row">
+                        <div class="form-check form-switch">
+                            <input asp-for="Input.IsEnabled" class="form-check-input" role="switch" />
+                            <label asp-for="Input.IsEnabled" class="form-check-label"></label>
+                        </div>
+                        <div class="form-text">Off: the schedule only runs when someone clicks Run.</div>
                     </div>
-                    <button type="submit" class="btn btn-primary">Save</button>
-                    <a asp-page="Index" class="btn btn-link">Cancel</a>
-                </form>
+                    <div class="switch-row">
+                        <div class="form-check form-switch">
+                            <input asp-for="Input.AutoPromote" class="form-check-input" role="switch" />
+                            <label asp-for="Input.AutoPromote" class="form-check-label"></label>
+                        </div>
+                        <div class="form-text">
+                            Off: each pull stops at staging so someone can review it under
+                            <a asp-page="/Tools/Batches/Index">Import batches</a> and promote it manually.
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <label asp-for="Input.Notes" class="form-label">Notes <span class="text-muted-token">(optional)</span></label>
+                        <textarea asp-for="Input.Notes" class="form-control" rows="2" maxlength="@SyncScheduleService.MaxNotesLength"
+                                  placeholder="Why this schedule exists, who relies on it, anything unusual…"></textarea>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        @* ---------- Summary + save (sticky on wide screens) ---------- *@
+        <div class="col-xl-4">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="kpi-label mb-1">Summary</div>
+                    <p class="summary-text" data-schedule-summary>
+                        @ScheduleDisplay.ReportLabel(Model.Input.ReportType) ·
+                        @(Model.Input.Frequency == ScheduleFrequency.Daily && Model.Input.DailyTime is { } t
+                            ? $"daily at {t:h:mm tt} {ScheduleDisplay.ShortZone(Model.Input.TimeZoneId)}"
+                            : ScheduleDisplay.Interval(Model.Input.IntervalMinutes ?? 60).ToLowerInvariant())
+                    </p>
+                    <ul class="summary-facts">
+                        <li data-summary-enabled>@(Model.Input.IsEnabled ? "Runs automatically" : "Manual only")</li>
+                        <li data-summary-promote>@(Model.Input.AutoPromote ? "New data goes straight into reports" : "New data waits for review")</li>
+                    </ul>
+                    @if (Model.Existing is { } existing)
+                    {
+                        <dl class="summary-meta">
+                            <dt>Next run</dt>
+                            <dd>@(existing.NextRunAt is { } next ? $"{ScheduleDisplay.Relative(next, Model.Now)} · {ScheduleDisplay.Local(next, existing.TimeZoneId)}" : "Not scheduled")</dd>
+                            <dt>Last changed</dt>
+                            <dd>@ScheduleDisplay.Relative(existing.UpdatedAt, Model.Now) by @existing.UpdatedBy</dd>
+                        </dl>
+                    }
+                    <div class="d-grid gap-2 mt-3">
+                        <button type="submit" class="btn btn-primary">@(adding ? "Add schedule" : "Save changes")</button>
+                        <a asp-page="Index" class="btn btn-soft">Cancel</a>
+                    </div>
+                    @if (!adding)
+                    {
+                        <div class="danger-zone">
+                            <button type="button" class="btn btn-sm btn-link text-bad p-0" data-bs-toggle="modal" data-bs-target="#delete-schedule">
+                                <partial name="_Icon" model='"trash"' /> Delete this schedule
+                            </button>
+                        </div>
+                    }
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-lg-5">
-        <div class="card">
-            <div class="card-header">Report types</div>
-            <div class="card-body small">
-                <p><strong>Orders</strong> — orders created or updated in the window. Hourly is typical; minimum @SyncScheduleService.MinIntervalMinutes minutes because Amazon limits report requests.</p>
-                <p><strong>FbaInventory</strong> — a snapshot of FBA stock by state. Once or twice a day is plenty.</p>
-                <p class="mb-0"><strong>Settlements</strong> — Amazon publishes these every ~14 days on its own schedule; a daily check picks up new ones and never ingests the same report twice.</p>
-            </div>
-        </div>
-        <div class="card mt-3">
-            <div class="card-header">Auto-promote</div>
-            <div class="card-body small">
-                On: each pulled report flows straight into the dashboards and reports. Off: it stops at staging so someone can review it
-                under <a asp-page="/Tools/Batches/Index">Import batches</a> and promote it manually.
-            </div>
+</form>
+
+@if (!adding)
+{
+    <div class="modal fade" id="delete-schedule" tabindex="-1" aria-labelledby="delete-schedule-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form method="post" asp-page-handler="Delete" asp-route-id="@Model.Id" class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5" id="delete-schedule-title">Delete “@Model.Input.Name”?</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    It stops running and moves to the <strong>Deleted</strong> tab. Its run history and imported data are kept,
+                    and you can restore it later.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-soft" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-danger">Delete schedule</button>
+                </div>
+            </form>
         </div>
     </div>
-</div>
+}
+
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/schedules.js" asp-append-version="true"></script>
 }

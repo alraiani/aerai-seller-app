@@ -52,6 +52,7 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
         var missingCost = await queries.GetSoldSkusMissingCostAsync(now.AddDays(-SellingWindowDays), cancellationToken).ConfigureAwait(false);
         var awaitingPromotion = await queries.CountBatchesAwaitingPromotionAsync(cancellationToken).ConfigureAwait(false);
         var sync = await queries.GetSyncHealthAsync(cancellationToken).ConfigureAwait(false);
+        var syncPaused = await queries.IsSyncPausedAsync(cancellationToken).ConfigureAwait(false);
         var coverageStart = await queries.GetOrdersCoverageStartAsync(cancellationToken).ConfigureAwait(false);
 
         // A comparison is only meaningful if synced order history covers the whole comparison window;
@@ -83,7 +84,7 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
             Granularity: granularity,
             Chart: BuildChart(current, granularity, firstDay, days, localNow, zone),
             TopProducts: TopProducts(current, previous, settings.TopProductCount),
-            Attention: BuildAttention(positions, inventory, sync, missingCost, awaitingPromotion, coverageStart, start, comparable, now, settings, zone),
+            Attention: BuildAttention(positions, inventory, sync, syncPaused, missingCost, awaitingPromotion, coverageStart, start, comparable, now, settings, zone),
             Inventory: inventory,
             LatestPayout: settlement is null
                 ? null
@@ -175,6 +176,7 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
         IReadOnlyList<InventoryPosition> positions,
         InventoryGlance inventory,
         IReadOnlyList<SyncGlance> sync,
+        bool syncPaused,
         IReadOnlyList<string> missingCost,
         int awaitingPromotion,
         DateTimeOffset? coverageStart,
@@ -197,6 +199,12 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
             var skus = positions.Where(IsOutOfStockSelling).OrderByDescending(p => p.UnitsSold30d).Select(p => p.Sku).ToList();
             items.Add(new AttentionItem(AttentionSeverity.Critical, Plural(inventory.OutOfStockSelling, "SKU") + " out of stock",
                 "Selling recently but nothing available: " + NameList(skus), AttentionTarget.Inventory));
+        }
+
+        if (syncPaused)
+        {
+            items.Add(new AttentionItem(AttentionSeverity.Warning, "Amazon syncs are paused",
+                "Scheduled pulls won't run until an operator resumes them.", AttentionTarget.Sync));
         }
 
         var orders = sync.FirstOrDefault(s => s.ReportType == AmazonReportType.Orders);
