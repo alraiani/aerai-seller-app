@@ -116,5 +116,5 @@ printf '%s' "$json" | dotnet user-secrets --project "$project" set >/dev/null
 # Confirm by key name only — values are never printed.
 printf '%s' "$json" | python3 -c 'import json, sys; print("Saved:", ", ".join(sorted(json.load(sys.stdin))))'
 
-unset json db_connection db_password env_password sp_client_id sp_client_secret sp_refresh_token ads_client_id ads_client_secret ads_refresh_token ads_profile_id
+unset json db_connection db_password env_password sp_client_id sp_client_secret sp_refresh_token sp_eu_refresh_token ads_client_id ads_client_secret ads_refresh_token ads_profile_id
 echo "Done. Restart the app (F5) to pick up the changes. If SP-API was saved, local runs are now Live (Tools → Amazon sync)."
