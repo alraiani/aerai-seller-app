@@ -81,6 +81,7 @@ public static class DependencyInjection
         services.AddScoped<IStagingRepository, StagingRepository>();
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IImportBatchQueries, ImportBatchQueries>();
+        services.AddScoped<IMarketplaceQueries, MarketplaceQueries>();
         services.AddScoped<IReportingQueries, ReportingQueries>();
         services.AddScoped<IDashboardQueries, DashboardQueries>();
         services.AddScoped<IPromotionService, SqlPromotionService>();

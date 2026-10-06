@@ -30,6 +30,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Raw settlement lines.</summary>
     public DbSet<StgSettlementLine> StgSettlementLines => Set<StgSettlementLine>();
 
+    /// <summary>Marketplaces the business sells in (<c>core.Marketplace</c>).</summary>
+    public DbSet<Marketplace> Marketplaces => Set<Marketplace>();
+
     /// <summary>Curated products.</summary>
     public DbSet<Product> Products => Set<Product>();
 
