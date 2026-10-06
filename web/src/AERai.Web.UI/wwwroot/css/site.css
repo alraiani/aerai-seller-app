@@ -484,3 +484,17 @@ th .tip { text-transform: none; }
 .home-stock-col { width: 9rem; }
 .inventory-table td.restock-cell { white-space: normal; min-width: 11rem; font-size: 0.82rem; }
 .restock-cell .pill { margin-bottom: 0.15rem; }
+
+/* ---------- Notifications ---------- */
+.notify-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 999px; color: var(--muted); text-decoration: none; }
+.notify-bell:hover, .notify-bell.has-unread { color: var(--text); }
+.notify-bell .icon { width: 1.15rem; height: 1.15rem; }
+.notify-count { position: absolute; top: -0.15rem; right: -0.25rem; min-width: 1.1rem; padding: 0 0.3rem; border-radius: 999px; font-size: 0.68rem; font-weight: 700; line-height: 1.1rem; text-align: center; color: var(--surface); background: var(--negative); }
+.alert-list { list-style: none; margin: 0; padding: 0; }
+.alert-row { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.75rem 1rem; border-top: 1px solid var(--border); }
+.alert-row:first-child { border-top: 0; }
+.alert-row.is-unread { background: var(--surface-2); }
+.alert-row.is-unread .alert-title a { font-weight: 650; }
+.alert-row .pill { flex: 0 0 auto; margin-top: 0.1rem; }
+.alert-body { flex: 1 1 auto; min-width: 0; }
+.alert-message { font-size: 0.875rem; }

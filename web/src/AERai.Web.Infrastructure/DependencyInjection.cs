@@ -1,5 +1,6 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Security;
+using AERai.Web.Infrastructure.Alerts;
 using AERai.Web.Infrastructure.Email;
 using AERai.Web.Infrastructure.Identity;
 using AERai.Web.Infrastructure.Ingestion;
@@ -87,6 +88,7 @@ public static class DependencyInjection
         services.AddScoped<IDashboardQueries, DashboardQueries>();
         services.AddScoped<IInventoryQueries, InventoryQueries>();
         services.AddScoped<IInventoryItemRepository, InventoryItemRepository>();
+        services.AddScoped<IStockAlertRepository, StockAlertRepository>();
         services.AddSingleton<ISpreadsheetReader, ClosedXmlSpreadsheetReader>();
         services.AddScoped<IPromotionService, SqlPromotionService>();
         services.AddScoped<IIdentityService, IdentityService>();
@@ -98,6 +100,7 @@ public static class DependencyInjection
 
         services.AddSingleton<IManualRunChannel, ManualRunChannel>();
         services.AddHostedService<SyncSchedulerWorker>();
+        services.AddHostedService<StockAlertWorker>();
 
         return services;
     }

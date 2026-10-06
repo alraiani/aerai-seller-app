@@ -1,0 +1,77 @@
+@page
+@using AERai.Web.Domain.Alerts
+@model AERai.Web.UI.Pages.Notifications.IndexModel
+@{
+    ViewData["Title"] = "Notifications";
+    var zone = TimeZoneInfo.FindSystemTimeZoneById(Model.Marketplace.TimeZoneId);
+    string Local(DateTimeOffset at) => TimeZoneInfo.ConvertTime(at, zone).ToString("MMM d, h:mm tt", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    var open = Model.Alerts.Where(a => a.ResolvedAt is null).ToList();
+    var resolved = Model.Alerts.Where(a => a.ResolvedAt is not null).ToList();
+}
+<div class="list-toolbar mb-3">
+    <p class="text-muted-token small mb-0">Stock alerts for @Model.Marketplace.Name. They update every few minutes from the latest inventory and sales; switch marketplace in the top bar to see others.</p>
+    @if (open.Any(a => !a.IsRead))
+    {
+        <form method="post" asp-page-handler="ReadAll">
+            <button type="submit" class="btn btn-sm btn-soft"><partial name="_Icon" model='"check"' /> Mark all read</button>
+        </form>
+    }
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">Open (@open.Count)</div>
+    @if (open.Count == 0)
+    {
+        <div class="card-body">
+            <div class="empty-state">
+                <div class="empty-title">All clear</div>
+                <div class="empty-detail">No SKU in @Model.Marketplace.Name is out of stock or due for a restock within the alert window.</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <ul class="alert-list">
+            @foreach (var a in open)
+            {
+                <li class="alert-row @(a.IsRead ? "is-read" : "is-unread")">
+                    <span class="@(a.Level == StockAlertLevel.Out ? "pill pill-bad" : "pill pill-warn")">@(a.Level == StockAlertLevel.Out ? "Out of stock" : "Low")</span>
+                    <div class="alert-body">
+                        <div class="alert-title">
+                            <a asp-page="/Inventory/Index" asp-route-q="@a.Sku">@(a.Title ?? a.Sku)</a>
+                            <span class="product-sku">@a.Sku</span>
+                        </div>
+                        <div class="alert-message">@a.Message</div>
+                        <div class="cell-sub">Raised @Local(a.RaisedAt)</div>
+                    </div>
+                    @if (!a.IsRead)
+                    {
+                        <form method="post" asp-page-handler="Read" asp-route-id="@a.Id">
+                            <button type="submit" class="btn btn-sm btn-soft" aria-label="Mark @a.Sku alert read">Mark read</button>
+                        </form>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@if (resolved.Count > 0)
+{
+    <div class="card">
+        <div class="card-header">Resolved in the last week</div>
+        <ul class="alert-list">
+            @foreach (var a in resolved)
+            {
+                <li class="alert-row is-read">
+                    <span class="pill pill-ok">Resolved</span>
+                    <div class="alert-body">
+                        <div class="alert-title">@(a.Title ?? a.Sku) <span class="product-sku">@a.Sku</span></div>
+                        <div class="alert-message">Was @(a.Level == StockAlertLevel.Out ? "out of stock" : "low"): @a.Message</div>
+                        <div class="cell-sub">Raised @Local(a.RaisedAt) · resolved @Local(a.ResolvedAt!.Value)</div>
+                    </div>
+                </li>
+            }
+        </ul>
+    </div>
+}

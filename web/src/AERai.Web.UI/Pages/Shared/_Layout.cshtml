@@ -34,6 +34,7 @@
             <div class="nav-links">
             <div class="nav-section">Overview</div>
             <a class="nav-link @Active("/")" asp-page="/Index">Dashboard</a>
+            <a class="nav-link @Active("/Notifications")" asp-page="/Notifications/Index">Notifications</a>
             <div class="nav-section">Operations</div>
             <a class="nav-link @Active("/Inventory")" asp-page="/Inventory/Index">Inventory</a>
             <a class="nav-link @Active("/Orders")" asp-page="/Orders/Index">Orders</a>
@@ -58,6 +59,7 @@
             <header class="app-topbar">
                 <h1 class="h5 mb-0">@ViewData["Title"]</h1>
                 <div class="topbar-actions">
+                    <partial name="_NotificationBell" />
                     <partial name="_MarketplaceSwitch" />
                     <partial name="_ThemeToggle" />
                     <a asp-page="/Account/ChangePassword" class="text-body-secondary small d-none d-md-inline" title="Change password">@User.Identity!.Name</a>

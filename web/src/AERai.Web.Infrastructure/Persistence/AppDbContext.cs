@@ -1,3 +1,4 @@
+using AERai.Web.Domain.Alerts;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.Domain.Reporting;
@@ -50,6 +51,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
 
     /// <summary>Per-marketplace lead-time overrides for restock planning.</summary>
     public DbSet<LeadTimeProfile> LeadTimeProfiles => Set<LeadTimeProfile>();
+
+    /// <summary>Low/out-of-stock alerts.</summary>
+    public DbSet<StockAlert> StockAlerts => Set<StockAlert>();
+
+    /// <summary>Which users have read which alerts.</summary>
+    public DbSet<StockAlertRead> StockAlertReads => Set<StockAlertRead>();
 
     /// <summary>Curated orders.</summary>
     public DbSet<Order> Orders => Set<Order>();
