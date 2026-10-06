@@ -80,21 +80,54 @@ public static class DashboardFormat
         };
     }
 
-    /// <summary>Health dot for a sync source.</summary>
+    /// <summary>Status light for the header: how fresh the sales (Orders) data is.</summary>
+    /// <param name="orders">Orders sync glance, or <see langword="null"/> when Orders has never been set up.</param>
+    /// <param name="now">Reference time.</param>
+    /// <param name="staleAfter">Age after which data counts as stale.</param>
+    /// <returns>A status-light class: live (fresh), paused (stale or never synced), or down (last run failed).</returns>
+    public static string SyncLight(SyncGlance? orders, DateTimeOffset now, TimeSpan staleAfter) =>
+        orders is null ? "status-paused" : Health(orders, now, staleAfter) switch
+        {
+            SyncHealth.Failed => "status-down",
+            SyncHealth.Fresh => "status-live",
+            _ => "status-paused",
+        };
+
+    /// <summary>Pill class for a sync source.</summary>
     /// <param name="glance">Sync glance.</param>
     /// <param name="now">Reference time.</param>
     /// <param name="staleAfter">Age after which data counts as stale.</param>
-    /// <returns>A dot class.</returns>
-    public static string SyncDot(SyncGlance glance, DateTimeOffset now, TimeSpan staleAfter)
+    /// <returns>A pill class.</returns>
+    public static string SyncPill(SyncGlance glance, DateTimeOffset now, TimeSpan staleAfter) => Health(glance, now, staleAfter) switch
+    {
+        SyncHealth.Failed => "pill pill-bad",
+        SyncHealth.Fresh => "pill pill-ok",
+        _ => "pill pill-warn",
+    };
+
+    /// <summary>Pill text for a sync source.</summary>
+    /// <param name="glance">Sync glance.</param>
+    /// <param name="now">Reference time.</param>
+    /// <param name="staleAfter">Age after which data counts as stale.</param>
+    /// <returns>"Fresh", "Stale", "Failed", or "Never".</returns>
+    public static string SyncPillLabel(SyncGlance glance, DateTimeOffset now, TimeSpan staleAfter) => Health(glance, now, staleAfter) switch
+    {
+        SyncHealth.Failed => "Failed",
+        SyncHealth.Fresh => "Fresh",
+        _ => glance.LastSuccessAt is null ? "Never" : "Stale",
+    };
+
+    // A failed latest run outranks freshness: the data may look recent but the next pull is broken.
+    private static SyncHealth Health(SyncGlance glance, DateTimeOffset now, TimeSpan staleAfter)
     {
         ArgumentNullException.ThrowIfNull(glance);
 
         if (glance.LastStatus == SyncRunStatus.Failed)
         {
-            return "dot-bad";
+            return SyncHealth.Failed;
         }
 
-        return glance.LastSuccessAt is { } success && now - success <= staleAfter ? "dot-ok" : "dot-warn";
+        return glance.LastSuccessAt is { } success && now - success <= staleAfter ? SyncHealth.Fresh : SyncHealth.Stale;
     }
 
     /// <summary>Human label for a report type.</summary>
@@ -113,13 +146,20 @@ public static class DashboardFormat
         _ => "/Tools/Schedules/Index",
     };
 
-    /// <summary>Dot class for an attention severity.</summary>
+    /// <summary>Status light for an attention severity (same colors as the Amazon sync page).</summary>
     /// <param name="severity">Severity.</param>
-    /// <returns>A dot class.</returns>
-    public static string SeverityDot(AttentionSeverity severity) => severity switch
+    /// <returns>A status-light class.</returns>
+    public static string SeverityLight(AttentionSeverity severity) => severity switch
     {
-        AttentionSeverity.Critical => "dot-bad",
-        AttentionSeverity.Warning => "dot-warn",
-        _ => "dot-info",
+        AttentionSeverity.Critical => "status-down",
+        AttentionSeverity.Warning => "status-paused",
+        _ => "status-sim",
     };
+
+    private enum SyncHealth
+    {
+        Fresh,
+        Stale,
+        Failed,
+    }
 }
