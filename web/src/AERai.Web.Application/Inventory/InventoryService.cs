@@ -2,6 +2,7 @@ using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Reporting;
+using Microsoft.Extensions.Options;
 
 namespace AERai.Web.Application.Inventory;
 
@@ -18,14 +19,20 @@ namespace AERai.Web.Application.Inventory;
 /// velocity is unknown rather than a misleadingly precise guess.
 /// </para>
 /// <para>
+/// Each SKU also gets a <see cref="RestockPlan"/> (see <see cref="RestockPlanner"/>) from its lead
+/// times, which fall back to <see cref="InventoryOptions"/> where the SKU has none. "Most urgent"
+/// means the soonest restock action, then the fewest days of inventory.
+/// </para>
+/// <para>
 /// Days are the marketplace's local days (<see cref="Marketplace.TimeZoneId"/>). Search, sorting,
 /// and paging run in memory after the computation, because the sort key (days of inventory) is
 /// computed here and a marketplace holds a catalog-sized number of SKUs, not millions.
 /// </para>
 /// </remarks>
 /// <param name="queries">Inventory read queries.</param>
+/// <param name="options">Restock-planning defaults.</param>
 /// <param name="clock">Clock that defines "today".</param>
-public sealed class InventoryService(IInventoryQueries queries, TimeProvider clock) : IInventoryService
+public sealed class InventoryService(IInventoryQueries queries, IOptions<InventoryOptions> options, TimeProvider clock) : IInventoryService
 {
     /// <summary>Sales history used to estimate velocity, in local days including today.</summary>
     public const int VelocityWindowDays = 90;
@@ -50,6 +57,8 @@ public sealed class InventoryService(IInventoryQueries queries, TimeProvider clo
 
         var positions = await queries.GetPositionsAsync(marketplace.MarketplaceId, cancellationToken).ConfigureAwait(false);
         var sold = await queries.GetUnitsSoldAsync(marketplace.MarketplaceId, LocalTime.StartOfDay(windowStart, zone), cancellationToken).ConfigureAwait(false);
+        var leadTimes = await queries.GetLeadTimesAsync(marketplace.MarketplaceId, cancellationToken).ConfigureAwait(false);
+        var settings = options.Value;
 
         var salesBySku = sold
             .Select(s => (s.Sku, Day: LocalTime.DateOf(s.PurchaseDate, zone), s.Quantity))
@@ -63,9 +72,13 @@ public sealed class InventoryService(IInventoryQueries queries, TimeProvider clo
                 var units90 = sales.Sum(s => s.Quantity);
                 var units30 = sales.Where(s => s.Day >= recentStart).Sum(s => s.Quantity);
                 var velocity = Velocity(sales.Select(s => s.Day).DefaultIfEmpty().Min(), units90, today);
-                return new InventoryItem(p, units30, units90, velocity, DaysOfInventory(p, velocity));
+                var times = settings.Resolve(leadTimes.GetValueOrDefault(p.Sku));
+                var plan = RestockPlanner.Plan(today, velocity, p.SellThroughStock, p.HomeStock, times);
+                return new InventoryItem(p, units30, units90, velocity, DaysOfInventory(p, velocity), times, plan);
             })
-            .OrderBy(i => i.DaysOfInventory is null)
+            .OrderBy(i => i.Restock?.DaysUntilAction is null)
+            .ThenBy(i => i.Restock?.DaysUntilAction)
+            .ThenBy(i => i.DaysOfInventory is null)
             .ThenBy(i => i.DaysOfInventory)
             .ThenBy(i => i.Sku, StringComparer.Ordinal)
             .ToList();

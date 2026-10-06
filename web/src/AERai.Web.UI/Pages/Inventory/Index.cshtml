@@ -70,6 +70,7 @@
                     <th rowspan="2" class="text-end">Sold 90d</th>
                     <th rowspan="2" class="text-end">Per day <partial name="_Tip" model="@($"Units sold in the last {InventoryService.VelocityWindowDays} days divided by the days covered since the first sale in that window. Blank until there are {InventoryService.MinCoverageDays} days and {InventoryService.MinUnitsSold} units of history.")" /></th>
                     <th rowspan="2" class="text-end">Days of inventory <partial name="_Tip" model='"How long sellable, inbound, and FC-transfer/processing stock lasts at the current sales rate. Home stock is not counted."' /></th>
+                    <th rowspan="2" class="col-divider">Restock <partial name="_Tip" model='"What to do to stay in stock: send home stock first, order the rest from your supplier, each by the last day it can still arrive before the safety buffer runs out. Quantities top stock up to the target cover. Set lead times per SKU with Edit."' /></th>
                     @if (Model.CanEdit)
                     {
                         <th rowspan="2"></th>
@@ -133,6 +134,33 @@
                     <td class="text-end">@item.UnitsSold90d.ToString("N0", en)</td>
                     <td class="text-end">@(item.DailyVelocity?.ToString("0.00", en) ?? "—")</td>
                     <td class="text-end">@(item.DaysOfInventory?.ToString("N1", en) ?? "—")</td>
+                    <td class="col-divider restock-cell">
+                        @if (item.Restock is not { } plan)
+                        {
+                            <span class="cell-sub" title="Needs @InventoryService.MinCoverageDays days and @InventoryService.MinUnitsSold units of sales history.">Not enough sales data</span>
+                        }
+                        else if (plan.DaysUntilAction is not { } due)
+                        {
+                            <span class="cell-sub">Covered until @InventoryFormat.ShortDate(plan.ProjectedStockout)</span>
+                        }
+                        else
+                        {
+                            var pill = InventoryFormat.ActionPill(due, Model.SoonDays);
+                            <span class="@pill.CssClass">@pill.Text</span>
+                            @if (plan.SendFromHome > 0)
+                            {
+                                <div>Send <strong>@plan.SendFromHome.ToString("N0", en)</strong> by @InventoryFormat.ShortDate(plan.SendBy)</div>
+                            }
+                            @if (plan.OrderFromSupplier > 0)
+                            {
+                                <div>Order <strong>@plan.OrderFromSupplier.ToString("N0", en)</strong> by @InventoryFormat.ShortDate(plan.OrderBy)</div>
+                            }
+                        }
+                        @if (!item.LeadTimes.IsCustom)
+                        {
+                            <div class="cell-sub">default lead times</div>
+                        }
+                    </td>
                     @if (Model.CanEdit)
                     {
                         <td class="text-end"><a asp-page="Edit" asp-route-sku="@p.Sku" class="btn btn-sm btn-soft">Edit</a></td>
@@ -141,7 +169,7 @@
             }
             @if (Model.Overview.Items.Items.Count == 0)
             {
-                <tr><td colspan="17" class="text-body-secondary p-3">@(string.IsNullOrWhiteSpace(Model.Search) && Model.FamilyId is null ? "No inventory yet. Turn on the FBA inventory sync in Tools → Amazon sync, or import an inventory file." : "No SKUs match your filter.")</td></tr>
+                <tr><td colspan="18" class="text-body-secondary p-3">@(string.IsNullOrWhiteSpace(Model.Search) && Model.FamilyId is null ? "No inventory yet. Turn on the FBA inventory sync in Tools → Amazon sync, or import an inventory file." : "No SKUs match your filter.")</td></tr>
             }
             </tbody>
         </table>
@@ -149,4 +177,4 @@
     </div>
 </div>
 <partial name="_Pager" model="Model.Overview.Items.ToPager(Model.Search, Model.PagerFilters)" />
-<p class="page-footnote">Search matches SKU, ASIN, product name, or family. Totals cover every SKU that matches, not just this page. Days are @Model.Marketplace.Name local days.</p>
+<p class="page-footnote">Sorted by the soonest restock action. Search matches SKU, ASIN, product name, or family. Totals cover every SKU that matches, not just this page. Days are @Model.Marketplace.Name local days.</p>

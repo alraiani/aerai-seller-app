@@ -36,6 +36,9 @@ public sealed partial class InventoryItemService(
     /// <summary>Most rows accepted in one home-stock upload.</summary>
     public const int MaxHomeStockRows = 10_000;
 
+    /// <summary>Longest lead time or target accepted, in days (two years).</summary>
+    public const int MaxLeadTimeDays = 730;
+
     /// <summary>Required columns of a home-stock upload (normalized header names).</summary>
     public static IReadOnlyList<string> HomeStockColumns { get; } = ["sku", "home-stock"];
 
@@ -48,35 +51,45 @@ public sealed partial class InventoryItemService(
         repository.ListFamiliesAsync(cancellationToken);
 
     /// <inheritdoc/>
-    public async Task<Result> UpdateAsync(string sku, string marketplaceId, string? family, int homeStock, string user, CancellationToken cancellationToken)
+    public async Task<Result> UpdateAsync(string sku, string marketplaceId, InventoryItemUpdate update, string user, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(update);
         ArgumentException.ThrowIfNullOrWhiteSpace(user);
 
-        var name = NormalizeFamily(family);
+        var name = NormalizeFamily(update.Family);
         if (name is { Length: > MaxFamilyNameLength })
         {
             return Result.Failure($"Family names can be at most {MaxFamilyNameLength} characters.");
         }
 
-        if (homeStock is < 0 or > MaxHomeStock)
+        if (update.HomeStock is < 0 or > MaxHomeStock)
         {
             return Result.Failure($"Home stock must be between 0 and {MaxHomeStock:N0}.");
         }
 
-        var familyId = name is null ? (int?)null : await repository.GetOrCreateFamilyAsync(name, cancellationToken).ConfigureAwait(false);
-        if (!await repository.SetFamilyAsync(sku, familyId, cancellationToken).ConfigureAwait(false))
+        if (ValidateLeadTimes(update.LeadTimes) is { } leadTimeError)
+        {
+            return Result.Failure(leadTimeError);
+        }
+
+        if (await repository.GetAsync(sku, marketplaceId, cancellationToken).ConfigureAwait(false) is null)
         {
             return Result.Failure($"Product '{sku}' was not found.");
         }
 
-        await repository.SetHomeStockAsync(marketplaceId, [new HomeStockEntry(sku, homeStock)], clock.GetUtcNow(), user, cancellationToken).ConfigureAwait(false);
+        var familyId = name is null ? (int?)null : await repository.GetOrCreateFamilyAsync(name, cancellationToken).ConfigureAwait(false);
+        await repository.SetFamilyAsync(sku, familyId, cancellationToken).ConfigureAwait(false);
+
+        var now = clock.GetUtcNow();
+        await repository.SetHomeStockAsync(marketplaceId, [new HomeStockEntry(sku, update.HomeStock)], now, user, cancellationToken).ConfigureAwait(false);
+        await repository.SetLeadTimesAsync(sku, marketplaceId, update.LeadTimes, now, user, cancellationToken).ConfigureAwait(false);
 
         // A family is only a label; once nothing uses it, it would just clutter the picker.
         await repository.DeleteUnusedFamiliesAsync(cancellationToken).ConfigureAwait(false);
 
-        LogItemUpdated(sku, marketplaceId, name, homeStock);
+        LogItemUpdated(sku, marketplaceId, name, update.HomeStock);
         return Result.Success();
     }
 
@@ -241,6 +254,23 @@ public sealed partial class InventoryItemService(
 
         LogHomeStockImported(fileName, unique.Count, rejected.Count, marketplaceId);
         return Result.Success(new HomeStockImportResult(unique.Count, rejected));
+    }
+
+    /// <summary>Checks that every set lead-time field is in range; the target must also be at least a day.</summary>
+    private static string? ValidateLeadTimes(LeadTimeSettings settings)
+    {
+        (string Name, int? Value, int Min)[] fields =
+        [
+            ("Supplier lead time", settings.SupplierLeadTimeDays, 0),
+            ("Prep time", settings.PrepTimeDays, 0),
+            ("Transit time", settings.TransitDays, 0),
+            ("Safety stock", settings.SafetyStockDays, 0),
+            ("Target cover", settings.TargetStockDays, 1),
+        ];
+
+        return fields.FirstOrDefault(f => f.Value is { } v && (v < f.Min || v > MaxLeadTimeDays)) is { Name: { } bad } field
+            ? $"{bad} must be between {field.Min} and {MaxLeadTimeDays} days."
+            : null;
     }
 
     /// <summary>Trims and collapses inner whitespace; blank means no family.</summary>

@@ -29,4 +29,16 @@ internal sealed class InventoryQueries(AppDbContext dbContext) : IInventoryQueri
             .Select(l => new UnitsSold(l.Sku, l.PurchaseDate, l.Quantity))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyDictionary<string, LeadTimeSettings>> GetLeadTimesAsync(string marketplaceId, CancellationToken cancellationToken) =>
+        await dbContext.LeadTimeProfiles
+            .AsNoTracking()
+            .Where(p => p.MarketplaceId == marketplaceId)
+            .ToDictionaryAsync(
+                p => p.Sku,
+                p => new LeadTimeSettings(p.SupplierLeadTimeDays, p.PrepTimeDays, p.TransitDays, p.SafetyStockDays, p.TargetStockDays),
+                StringComparer.Ordinal,
+                cancellationToken)
+            .ConfigureAwait(false);
 }

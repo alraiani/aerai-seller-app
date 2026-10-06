@@ -48,6 +48,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Stock held outside Amazon, per marketplace.</summary>
     public DbSet<HomeStock> HomeStocks => Set<HomeStock>();
 
+    /// <summary>Per-marketplace lead-time overrides for restock planning.</summary>
+    public DbSet<LeadTimeProfile> LeadTimeProfiles => Set<LeadTimeProfile>();
+
     /// <summary>Curated orders.</summary>
     public DbSet<Order> Orders => Set<Order>();
 

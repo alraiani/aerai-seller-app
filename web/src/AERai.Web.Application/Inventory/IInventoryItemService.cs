@@ -18,15 +18,17 @@ public interface IInventoryItemService
     /// <returns>The families.</returns>
     Task<IReadOnlyList<ProductFamily>> ListFamiliesAsync(CancellationToken cancellationToken);
 
-    /// <summary>Saves a SKU's family (created on first use; blank clears it) and home stock.</summary>
+    /// <summary>
+    /// Saves a SKU's family (created on first use; blank clears it), its home stock, and its
+    /// lead-time overrides in a marketplace.
+    /// </summary>
     /// <param name="sku">Seller SKU.</param>
-    /// <param name="marketplaceId">Marketplace for home stock.</param>
-    /// <param name="family">Family name; blank for none.</param>
-    /// <param name="homeStock">Units held outside Amazon.</param>
+    /// <param name="marketplaceId">Marketplace for home stock and lead times.</param>
+    /// <param name="update">The submitted values.</param>
     /// <param name="user">Email of the user making the change.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>Success, or a validation failure.</returns>
-    Task<Result> UpdateAsync(string sku, string marketplaceId, string? family, int homeStock, string user, CancellationToken cancellationToken);
+    /// <returns>Success, or a validation failure (nothing is saved then).</returns>
+    Task<Result> UpdateAsync(string sku, string marketplaceId, InventoryItemUpdate update, string user, CancellationToken cancellationToken);
 
     /// <summary>Validates and stores a new picture for a SKU, replacing any previous one.</summary>
     /// <param name="sku">Seller SKU.</param>

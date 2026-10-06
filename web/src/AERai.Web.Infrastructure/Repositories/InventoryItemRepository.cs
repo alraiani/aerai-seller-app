@@ -20,7 +20,18 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
          from f in families.DefaultIfEmpty()
          join h in dbContext.HomeStocks.Where(h => h.MarketplaceId == marketplaceId) on p.Sku equals h.Sku into stock
          from h in stock.DefaultIfEmpty()
-         select new InventoryItemDetails(p.Sku, p.Asin, p.Title, f == null ? null : f.Name, p.ImagePath, h == null ? 0 : h.Quantity))
+         join l in dbContext.LeadTimeProfiles.Where(l => l.MarketplaceId == marketplaceId) on p.Sku equals l.Sku into leadTimes
+         from l in leadTimes.DefaultIfEmpty()
+         select new InventoryItemDetails(
+             p.Sku,
+             p.Asin,
+             p.Title,
+             f == null ? null : f.Name,
+             p.ImagePath,
+             h == null ? 0 : h.Quantity,
+             l == null
+                 ? LeadTimeSettings.None
+                 : new LeadTimeSettings(l.SupplierLeadTimeDays, l.PrepTimeDays, l.TransitDays, l.SafetyStockDays, l.TargetStockDays)))
         .SingleOrDefaultAsync(cancellationToken);
 
     /// <inheritdoc/>
@@ -103,6 +114,51 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
         }
 
         return found;
+    }
+
+    /// <inheritdoc/>
+    public async Task SetLeadTimesAsync(string sku, string marketplaceId, LeadTimeSettings settings, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var profiles = dbContext.LeadTimeProfiles.Where(p => p.Sku == sku && p.MarketplaceId == marketplaceId);
+
+        // All blank means "use the defaults", which is represented by having no row.
+        if (settings.IsEmpty)
+        {
+            await profiles.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var updated = await profiles
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(p => p.SupplierLeadTimeDays, settings.SupplierLeadTimeDays)
+                    .SetProperty(p => p.PrepTimeDays, settings.PrepTimeDays)
+                    .SetProperty(p => p.TransitDays, settings.TransitDays)
+                    .SetProperty(p => p.SafetyStockDays, settings.SafetyStockDays)
+                    .SetProperty(p => p.TargetStockDays, settings.TargetStockDays)
+                    .SetProperty(p => p.UpdatedAt, updatedAt)
+                    .SetProperty(p => p.UpdatedBy, updatedBy),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (updated == 0)
+        {
+            dbContext.LeadTimeProfiles.Add(new LeadTimeProfile
+            {
+                Sku = sku,
+                MarketplaceId = marketplaceId,
+                SupplierLeadTimeDays = settings.SupplierLeadTimeDays,
+                PrepTimeDays = settings.PrepTimeDays,
+                TransitDays = settings.TransitDays,
+                SafetyStockDays = settings.SafetyStockDays,
+                TargetStockDays = settings.TargetStockDays,
+                UpdatedAt = updatedAt,
+                UpdatedBy = updatedBy,
+            });
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc/>

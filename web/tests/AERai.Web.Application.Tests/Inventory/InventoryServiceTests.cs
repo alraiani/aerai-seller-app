@@ -3,6 +3,7 @@ using AERai.Web.Application.Inventory;
 using AERai.Web.Application.Tests.Fakes;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Reporting;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
 namespace AERai.Web.Application.Tests.Inventory;
@@ -16,7 +17,9 @@ public sealed class InventoryServiceTests
 
     private readonly FakeInventoryQueries _queries = new();
 
-    private InventoryService CreateService() => new(_queries, new FakeTimeProvider(Now));
+    private readonly InventoryOptions _options = new();
+
+    private InventoryService CreateService() => new(_queries, Options.Create(_options), new FakeTimeProvider(Now));
 
     private static DateTimeOffset Eastern(int month, int day, int hour, int minute = 0) =>
         new(2026, month, day, hour, minute, 0, TimeSpan.FromHours(-4));
@@ -100,17 +103,34 @@ public sealed class InventoryServiceTests
     }
 
     [Fact]
-    public async Task GetItemsAsync_MostUrgentFirstAndUnknownVelocityLast()
+    public async Task GetItemsAsync_SoonestActionFirstThenCoveredThenUnknownVelocity()
     {
-        Stock("SLOW", available: 300);
-        Sold("SLOW", Eastern(9, 6, 12), 30);
-        Stock("NEW", available: 1);
+        Stock("COVERED", available: 300);            // 300 days at 1/day: above the 90-day target
+        Sold("COVERED", Eastern(9, 6, 12), 30);
+        Stock("NEW", available: 1);                  // no sales history
         Stock("URGENT", available: 3);
         Sold("URGENT", Eastern(9, 6, 12), 30);
+        Stock("LATER", available: 80);
+        Sold("LATER", Eastern(9, 6, 12), 30);
 
         var items = await CreateService().GetItemsAsync(Us, CancellationToken.None);
 
-        Assert.Equal(["URGENT", "SLOW", "NEW"], items.Select(i => i.Sku));
+        Assert.Equal(["URGENT", "LATER", "COVERED", "NEW"], items.Select(i => i.Sku));
+    }
+
+    [Fact]
+    public async Task GetItemsAsync_UsesSkuLeadTimesWithDefaultsForBlankFields()
+    {
+        Stock("A", available: 30, p => p.HomeStock = 10);
+        Sold("A", Eastern(9, 6, 12), 30); // 1 per day
+        _queries.LeadTimes["A"] = new LeadTimeSettings(null, null, 5, 0, 60);
+
+        var item = await SingleItemAsync();
+
+        Assert.True(item.LeadTimes.IsCustom);
+        Assert.Equal((_options.SupplierLeadTimeDays, 5, 0, 60), (item.LeadTimes.SupplierLeadTimeDays, item.LeadTimes.TransitDays, item.LeadTimes.SafetyStockDays, item.LeadTimes.TargetStockDays));
+        Assert.NotNull(item.Restock);
+        Assert.Equal((30, 10, 20), (item.Restock.UnitsNeeded, item.Restock.SendFromHome, item.Restock.OrderFromSupplier));
     }
 
     [Fact]
@@ -121,6 +141,7 @@ public sealed class InventoryServiceTests
         Stock("STRAP", available: 99, p => p.Asin = "B0STR1");
 
         var overview = await CreateService().GetOverviewAsync(Us, new PageRequest(1, 1, "b0mat"), null, InventorySort.Urgency, CancellationToken.None);
+
 
         Assert.Equal(2, overview.Items.TotalCount);
         Assert.Single(overview.Items.Items);

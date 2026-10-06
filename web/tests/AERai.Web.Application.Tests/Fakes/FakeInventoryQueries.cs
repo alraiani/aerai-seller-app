@@ -11,6 +11,8 @@ internal sealed class FakeInventoryQueries : IInventoryQueries
 
     public List<UnitsSold> Sold { get; } = [];
 
+    public Dictionary<string, LeadTimeSettings> LeadTimes { get; } = new(StringComparer.Ordinal);
+
     /// <summary>The lower bound the service asked sales for, to assert it fetches the whole window.</summary>
     public DateTimeOffset? RequestedSince { get; private set; }
 
@@ -22,4 +24,7 @@ internal sealed class FakeInventoryQueries : IInventoryQueries
         RequestedSince = since;
         return Task.FromResult<IReadOnlyList<UnitsSold>>(Sold.Where(s => s.PurchaseDate >= since).ToList());
     }
+
+    public Task<IReadOnlyDictionary<string, LeadTimeSettings>> GetLeadTimesAsync(string marketplaceId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<string, LeadTimeSettings>>(LeadTimes);
 }

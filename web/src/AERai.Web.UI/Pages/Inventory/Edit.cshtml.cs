@@ -8,20 +8,22 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Options;
 
 namespace AERai.Web.UI.Pages.Inventory;
 
 /// <summary>
 /// Edits the user-maintained parts of one SKU: its family and picture (shared by all marketplaces)
-/// and its home stock in the current marketplace. Operators and Admins only.
+/// and its home stock and lead times in the current marketplace. Operators and Admins only.
 /// </summary>
 /// <param name="items">Item editing service.</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
+/// <param name="options">Restock-planning defaults (shown as placeholders).</param>
 [Authorize(Policy = AppPolicies.RequireOperator)]
 // The service enforces the 2 MB picture limit precisely; this outer cap stops larger bodies early.
 [RequestFormLimits(MultipartBodyLengthLimit = MaxRequestBytes)]
 [RequestSizeLimit(MaxRequestBytes)]
-public sealed class EditModel(IInventoryItemService items, ICurrentMarketplace currentMarketplace) : PageModel
+public sealed class EditModel(IInventoryItemService items, ICurrentMarketplace currentMarketplace, IOptions<InventoryOptions> options) : PageModel
 {
     private const int MaxRequestBytes = InventoryItemService.MaxImageBytes + (256 * 1024);
 
@@ -30,6 +32,9 @@ public sealed class EditModel(IInventoryItemService items, ICurrentMarketplace c
 
     /// <summary>The SKU being edited.</summary>
     public InventoryItemDetails Item { get; private set; } = default!;
+
+    /// <summary>The app-wide lead-time defaults, shown as placeholders.</summary>
+    public InventoryOptions Defaults => options.Value;
 
     /// <summary>Existing families, offered as suggestions.</summary>
     public IReadOnlyList<ProductFamily> Families { get; private set; } = [];
@@ -55,6 +60,8 @@ public sealed class EditModel(IInventoryItemService items, ICurrentMarketplace c
 
         Input.Family = Item.Family;
         Input.HomeStock = Item.HomeStock;
+        (Input.SupplierLeadTimeDays, Input.PrepTimeDays, Input.TransitDays, Input.SafetyStockDays, Input.TargetStockDays) =
+            (Item.LeadTimes.SupplierLeadTimeDays, Item.LeadTimes.PrepTimeDays, Item.LeadTimes.TransitDays, Item.LeadTimes.SafetyStockDays, Item.LeadTimes.TargetStockDays);
         return Page();
     }
 
@@ -76,7 +83,11 @@ public sealed class EditModel(IInventoryItemService items, ICurrentMarketplace c
             return Page();
         }
 
-        var result = await items.UpdateAsync(sku, Marketplace.MarketplaceId, Input.Family, Input.HomeStock, User.Identity!.Name!, cancellationToken);
+        var update = new InventoryItemUpdate(
+            Input.Family,
+            Input.HomeStock,
+            new LeadTimeSettings(Input.SupplierLeadTimeDays, Input.PrepTimeDays, Input.TransitDays, Input.SafetyStockDays, Input.TargetStockDays));
+        var result = await items.UpdateAsync(sku, Marketplace.MarketplaceId, update, User.Identity!.Name!, cancellationToken);
         if (result.IsFailure)
         {
             ModelState.AddModelError(string.Empty, result.Error);
@@ -141,5 +152,30 @@ public sealed class EditModel(IInventoryItemService items, ICurrentMarketplace c
         [Display(Name = "Home stock (units)")]
         [Range(0, InventoryItemService.MaxHomeStock)]
         public int HomeStock { get; set; }
+
+        /// <summary>Days from ordering to arrival; blank uses the default.</summary>
+        [Display(Name = "Supplier lead time")]
+        [Range(0, InventoryItemService.MaxLeadTimeDays)]
+        public int? SupplierLeadTimeDays { get; set; }
+
+        /// <summary>Days to prepare for shipping; blank uses the default.</summary>
+        [Display(Name = "Prep time")]
+        [Range(0, InventoryItemService.MaxLeadTimeDays)]
+        public int? PrepTimeDays { get; set; }
+
+        /// <summary>Days from shipping until sellable at Amazon; blank uses the default.</summary>
+        [Display(Name = "Transit to Amazon")]
+        [Range(0, InventoryItemService.MaxLeadTimeDays)]
+        public int? TransitDays { get; set; }
+
+        /// <summary>Buffer days before the projected stockout; blank uses the default.</summary>
+        [Display(Name = "Safety stock")]
+        [Range(0, InventoryItemService.MaxLeadTimeDays)]
+        public int? SafetyStockDays { get; set; }
+
+        /// <summary>Days of sales a restock should cover; blank uses the default.</summary>
+        [Display(Name = "Target cover")]
+        [Range(1, InventoryItemService.MaxLeadTimeDays)]
+        public int? TargetStockDays { get; set; }
     }
 }

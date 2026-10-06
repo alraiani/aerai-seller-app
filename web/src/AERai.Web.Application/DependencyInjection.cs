@@ -34,6 +34,11 @@ public static class DependencyInjection
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        services.AddOptions<InventoryOptions>()
+            .BindConfiguration(InventoryOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         services.AddOptions<IngestionOptions>()
             .BindConfiguration(IngestionOptions.SectionName)
             .ValidateDataAnnotations()

@@ -30,7 +30,7 @@ public sealed class DashboardServiceTests
     }
 
     private DashboardService CreateService(DashboardOptions? options = null) =>
-        new(_queries, new InventoryService(_inventory, _clock), Options.Create(options ?? new DashboardOptions()), _clock);
+        new(_queries, new InventoryService(_inventory, Options.Create(new InventoryOptions()), _clock), Options.Create(options ?? new DashboardOptions()), _clock);
 
     private void Sale(DateTimeOffset at, string sku, decimal price, int quantity = 1, string order = "", string status = "Shipped") =>
         _queries.Lines.Add(new SalesLine
