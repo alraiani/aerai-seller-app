@@ -5,51 +5,77 @@
     ViewData["Title"] = "Edit home stock";
     var en = CultureInfo.GetCultureInfo("en-US");
 }
-<nav class="crumbs" aria-label="Breadcrumb"><a asp-page="../Index">Inventory</a><span>/</span><span>Home stock</span></nav>
+
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="../Index">Inventory</a>
+    <span aria-hidden="true">/</span>
+    <span>Home stock</span>
+</nav>
+
 <div class="list-toolbar mb-3">
-    <partial name="_SearchForm" model="Model.Search" />
-    <a asp-page="Upload" class="btn btn-sm btn-soft">Upload a spreadsheet instead</a>
+    <form method="get" class="filters" role="search">
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search SKU, ASIN, name, family…" aria-label="Search SKUs" />
+        </div>
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Search</button>
+        @if (!string.IsNullOrWhiteSpace(Model.Search))
+        {
+            <a asp-page="Index" class="btn btn-sm btn-link">Clear</a>
+        }
+    </form>
+    <a asp-page="Upload" class="btn btn-sm btn-soft"><partial name="_Icon" model='"upload"' /> Upload a spreadsheet instead</a>
 </div>
-<p class="text-muted-token small">
-    Units you hold outside Amazon for @Model.Marketplace.Name. Change any numbers, then save once; only changed rows are saved, and 0 clears a SKU.
-    SKUs appear here once Amazon reports them for this marketplace; for others, use the upload.
-</p>
+
 <form method="post" asp-route-p="@Model.PageNumber" asp-route-q="@Model.Search">
     <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
     <div class="card">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>Product</th><th class="text-end">At Amazon</th><th class="text-end home-stock-col">Home stock</th></tr></thead>
-                <tbody>
-                @for (var i = 0; i < Model.Skus.Items.Count; i++)
-                {
-                    var p = Model.Skus.Items[i].Position;
-                    <tr>
-                        <td>
-                            <div class="product-title" title="@p.Title">@(p.Title ?? p.Sku)</div>
-                            <div class="product-sku">@p.Sku</div>
-                        </td>
-                        <td class="text-end">@p.AmazonTotal.ToString("N0", en)</td>
-                        <td class="text-end">
-                            <input type="hidden" name="Rows[@i].Sku" value="@p.Sku" />
-                            <input type="hidden" name="Rows[@i].Original" value="@p.HomeStock" />
-                            <input type="number" name="Rows[@i].Quantity" value="@Model.ValueFor(Model.Skus.Items[i])" min="0" step="1" class="form-control form-control-sm text-end" aria-label="Home stock for @p.Sku" />
-                        </td>
-                    </tr>
-                }
-                @if (Model.Skus.Items.Count == 0)
-                {
-                    <tr><td colspan="3" class="text-body-secondary p-3">No SKUs match.</td></tr>
-                }
-                </tbody>
-            </table>
-            </div>
+        <div class="card-toolbar">
+            <span class="card-toolbar-title">
+                Units held outside Amazon for @Model.Marketplace.Name
+                <partial name="_Tip" model='"Change any numbers, then save once. Only changed rows are saved; 0 clears a SKU. SKUs appear here once Amazon reports them for this marketplace; for others, use the spreadsheet upload."' />
+            </span>
+            <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"check"' /> Save home stock</button>
         </div>
-    </div>
-    <div class="d-flex gap-2 mt-3">
-        <button type="submit" class="btn btn-primary">Save home stock</button>
-        <a asp-page="../Index" class="btn btn-link">Back to inventory</a>
+        @if (Model.Skus.Items.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-title">No SKUs match</div>
+                <div class="empty-detail">Try a different search, or upload a spreadsheet for SKUs that aren't at Amazon yet.</div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table data-table inventory-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="product-col">Product</th>
+                            <th class="text-end">At Amazon</th>
+                            <th class="text-end">Sold 30d</th>
+                            <th class="text-end home-stock-col">Home stock</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @for (var i = 0; i < Model.Skus.Items.Count; i++)
+                    {
+                        var item = Model.Skus.Items[i];
+                        var p = item.Position;
+                        <tr>
+                            <td class="product-col"><partial name="../_InventoryProduct" model="item" /></td>
+                            <td class="text-end">@p.AmazonTotal.ToString("N0", en)</td>
+                            <td class="text-end">@item.UnitsSold30d.ToString("N0", en)</td>
+                            <td class="text-end">
+                                <input type="hidden" name="Rows[@i].Sku" value="@p.Sku" />
+                                <input type="hidden" name="Rows[@i].Original" value="@p.HomeStock" />
+                                <input type="number" name="Rows[@i].Quantity" value="@Model.ValueFor(item)" min="0" step="1" class="form-control form-control-sm text-end" aria-label="Home stock for @p.Sku" />
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
     </div>
 </form>
 <partial name="_Pager" model="Model.Skus.ToPager(Model.Search)" />

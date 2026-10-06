@@ -16,6 +16,7 @@ namespace AERai.Web.Application.Inventory;
 /// </param>
 /// <param name="LeadTimes">The SKU's effective lead times in this marketplace.</param>
 /// <param name="Restock">What to send or order and by when, or <see langword="null"/> when velocity is unknown.</param>
+/// <param name="Status">The SKU's stock state (see <see cref="StockStatus"/>).</param>
 public sealed record InventoryItem(
     InventoryPosition Position,
     int UnitsSold30d,
@@ -23,7 +24,8 @@ public sealed record InventoryItem(
     decimal? DailyVelocity,
     decimal? DaysOfInventory,
     LeadTimes LeadTimes,
-    RestockPlan? Restock)
+    RestockPlan? Restock,
+    StockStatus Status)
 {
     /// <summary>Seller SKU.</summary>
     public string Sku => Position.Sku;

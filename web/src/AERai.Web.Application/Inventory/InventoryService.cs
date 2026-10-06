@@ -20,8 +20,9 @@ namespace AERai.Web.Application.Inventory;
 /// </para>
 /// <para>
 /// Each SKU also gets a <see cref="RestockPlan"/> (see <see cref="RestockPlanner"/>) from its lead
-/// times, which fall back to <see cref="InventoryOptions"/> where the SKU has none. "Most urgent"
-/// means the soonest restock action, then the fewest days of inventory.
+/// times, which fall back to <see cref="InventoryOptions"/> where the SKU has none, and a
+/// <see cref="StockStatus"/>. "Most urgent" means status first, then the soonest restock action,
+/// then the fewest days of inventory.
 /// </para>
 /// <para>
 /// Days are the marketplace's local days (<see cref="Marketplace.TimeZoneId"/>). Search, sorting,
@@ -74,9 +75,11 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
                 var velocity = Velocity(sales.Select(s => s.Day).DefaultIfEmpty().Min(), units90, today);
                 var times = settings.Resolve(leadTimes.GetValueOrDefault(p.Sku));
                 var plan = RestockPlanner.Plan(today, velocity, p.SellThroughStock, p.HomeStock, times);
-                return new InventoryItem(p, units30, units90, velocity, DaysOfInventory(p, velocity), times, plan);
+                var status = StatusOf(p, units30, velocity, plan, settings.AlertLeadDays);
+                return new InventoryItem(p, units30, units90, velocity, DaysOfInventory(p, velocity), times, plan, status);
             })
-            .OrderBy(i => i.Restock?.DaysUntilAction is null)
+            .OrderBy(i => i.Status)
+            .ThenBy(i => i.Restock?.DaysUntilAction is null)
             .ThenBy(i => i.Restock?.DaysUntilAction)
             .ThenBy(i => i.DaysOfInventory is null)
             .ThenBy(i => i.DaysOfInventory)
@@ -85,22 +88,69 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
     }
 
     /// <inheritdoc/>
-    public async Task<InventoryOverview> GetOverviewAsync(Marketplace marketplace, PageRequest request, int? familyId, InventorySort sort, CancellationToken cancellationToken)
+    public async Task<InventoryOverview> GetOverviewAsync(Marketplace marketplace, PageRequest request, InventoryFilter filter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(filter);
 
         var items = await GetItemsAsync(marketplace, cancellationToken).ConfigureAwait(false);
-        var filtered = items
-            .Where(i => familyId is null || i.Position.FamilyId == familyId)
-            .Where(i => request.SafeSearch is not { } search || Matches(i.Position, search));
+        var scoped = items
+            .Where(i => filter.FamilyId is null || i.Position.FamilyId == filter.FamilyId)
+            .Where(i => request.SafeSearch is not { } search || Matches(i.Position, search))
+            .ToList();
 
-        // Items arrive in urgency order; the SKU order is for working down a list while counting.
-        var matching = (sort == InventorySort.Sku ? filtered.OrderBy(i => i.Sku, StringComparer.Ordinal) : filtered).ToList();
-
+        var matching = Sort(scoped.Where(i => InGroup(i.Status, filter.Status)), filter.Sort, filter.Descending).ToList();
         var page = matching.Skip(request.Skip).Take(request.SafePageSize).ToList();
         return new InventoryOverview(
-            Totals(matching),
+            Totals(scoped),
             new PagedResult<InventoryItem>(page, matching.Count, request.SafePage, request.SafePageSize));
+    }
+
+    /// <summary>The SKU's stock state; the order of the checks is the order of urgency.</summary>
+    private static StockStatus StatusOf(InventoryPosition position, int unitsSold30d, decimal? velocity, RestockPlan? plan, int soonDays) =>
+        position.SnapshotDate is null ? StockStatus.NotAtAmazon
+        : position.Available == 0 && unitsSold30d > 0 ? StockStatus.OutOfStock
+        : plan?.DaysUntilAction is < 0 ? StockStatus.RestockOverdue
+        : plan?.DaysUntilAction is { } due && due <= soonDays ? StockStatus.RestockSoon
+        : velocity is null ? StockStatus.NoSalesData
+        : StockStatus.Healthy;
+
+    private static bool InGroup(StockStatus status, StockStatusFilter group) => group switch
+    {
+        StockStatusFilter.All => true,
+        StockStatusFilter.NeedsAction => status is StockStatus.RestockOverdue or StockStatus.RestockSoon,
+        StockStatusFilter.OutOfStock => status == StockStatus.OutOfStock,
+        StockStatusFilter.Healthy => status == StockStatus.Healthy,
+        StockStatusFilter.NoSalesData => status == StockStatus.NoSalesData,
+        StockStatusFilter.NotAtAmazon => status == StockStatus.NotAtAmazon,
+        _ => true,
+    };
+
+    /// <summary>
+    /// Orders items. Each sort has a natural direction (most urgent, fewest days, best sellers, most
+    /// stock, A→Z); <paramref name="descending"/> reverses it. Unknown values stay last either way.
+    /// </summary>
+    private static IEnumerable<InventoryItem> Sort(IEnumerable<InventoryItem> items, InventorySort sort, bool descending)
+    {
+        // Items arrive in urgency order, so that sort is just the input (or its reverse).
+        if (sort == InventorySort.Urgency)
+        {
+            return descending ? items.Reverse() : items;
+        }
+
+        var ordered = sort switch
+        {
+            InventorySort.Sku => descending
+                ? items.OrderByDescending(i => i.Sku, StringComparer.Ordinal)
+                : items.OrderBy(i => i.Sku, StringComparer.Ordinal),
+            InventorySort.DaysOfInventory => descending
+                ? items.OrderBy(i => i.DaysOfInventory is null).ThenByDescending(i => i.DaysOfInventory)
+                : items.OrderBy(i => i.DaysOfInventory is null).ThenBy(i => i.DaysOfInventory),
+            InventorySort.Sold30d => descending ? items.OrderBy(i => i.UnitsSold30d) : items.OrderByDescending(i => i.UnitsSold30d),
+            InventorySort.Available => descending ? items.OrderBy(i => i.Position.Available) : items.OrderByDescending(i => i.Position.Available),
+            _ => items.OrderBy(i => 0),
+        };
+        return ordered.ThenBy(i => i.Sku, StringComparer.Ordinal);
     }
 
     /// <summary>Average units per day over the days the SKU's sales history covers, or null when too thin.</summary>
@@ -131,5 +181,8 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
         Reserved: items.Sum(i => i.Position.Reserved),
         Unfulfillable: items.Sum(i => i.Position.Unfulfillable),
         HomeStock: items.Sum(i => i.Position.HomeStock),
+        OutOfStock: items.Count(i => i.Status == StockStatus.OutOfStock),
+        RestockOverdue: items.Count(i => i.Status == StockStatus.RestockOverdue),
+        RestockSoon: items.Count(i => i.Status == StockStatus.RestockSoon),
         SnapshotDate: items.Count == 0 ? null : items.Max(i => i.Position.SnapshotDate));
 }

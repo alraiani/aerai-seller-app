@@ -4,7 +4,6 @@ using AERai.Web.Application.Inventory;
 using AERai.Web.Domain.Alerts;
 using AERai.Web.Domain.Core;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace AERai.Web.Application.Alerts;
 
@@ -13,23 +12,21 @@ namespace AERai.Web.Application.Alerts;
 /// (<see cref="IInventoryService"/>), so an alert always matches what the page shows.
 /// </summary>
 /// <remarks>
-/// <para>Rules, for SKUs that Amazon reports in the marketplace:</para>
+/// <para>Rules come from each SKU's <see cref="StockStatus"/>:</para>
 /// <list type="bullet">
-/// <item><b>Out</b>: nothing available and the SKU sold in the last 30 days.</item>
-/// <item><b>Low</b>: still available, but its next restock action (send or order) is due within
-/// <see cref="InventoryOptions.AlertLeadDays"/> days or is overdue.</item>
+/// <item><b>Out</b>: <see cref="StockStatus.OutOfStock"/> (nothing available and sold in the last 30 days).</item>
+/// <item><b>Low</b>: <see cref="StockStatus.RestockOverdue"/> or <see cref="StockStatus.RestockSoon"/>
+/// (the next send or order is overdue or due within <see cref="InventoryOptions.AlertLeadDays"/> days).</item>
 /// </list>
 /// <para>Refreshing is idempotent: running it twice, or on two instances, ends in the same state.</para>
 /// </remarks>
 /// <param name="inventory">Inventory numbers and restock plans.</param>
 /// <param name="repository">Alert persistence.</param>
-/// <param name="options">Restock settings (the "soon" window).</param>
 /// <param name="clock">Clock.</param>
 /// <param name="logger">Logger.</param>
 public sealed partial class StockAlertService(
     IInventoryService inventory,
     IStockAlertRepository repository,
-    IOptions<InventoryOptions> options,
     TimeProvider clock,
     ILogger<StockAlertService> logger) : IStockAlertService
 {
@@ -46,7 +43,7 @@ public sealed partial class StockAlertService(
         var now = clock.GetUtcNow();
         var items = await inventory.GetItemsAsync(marketplace, cancellationToken).ConfigureAwait(false);
         var wanted = items
-            .Select(i => (i.Sku, Alert: Evaluate(i, options.Value.AlertLeadDays)))
+            .Select(i => (i.Sku, Alert: Evaluate(i)))
             .Where(x => x.Alert is not null)
             .ToDictionary(x => x.Sku, x => x.Alert!.Value, StringComparer.Ordinal); // Non-null: filtered above.
 
@@ -122,32 +119,26 @@ public sealed partial class StockAlertService(
     public Task<int> MarkAllReadAsync(string marketplaceId, string userEmail, CancellationToken cancellationToken) =>
         repository.MarkReadAsync(marketplaceId, null, userEmail, clock.GetUtcNow(), cancellationToken);
 
-    /// <summary>The alert a SKU should have right now, or null when it is fine.</summary>
-    private static (StockAlertLevel Level, string Message)? Evaluate(InventoryItem item, int soonDays)
+    /// <summary>The alert a SKU should have right now (from its shared <see cref="StockStatus"/>), or null when it is fine.</summary>
+    private static (StockAlertLevel Level, string Message)? Evaluate(InventoryItem item)
     {
-        // SKUs only held at home have nothing at Amazon to run out of yet.
-        if (item.Position.SnapshotDate is null)
+        switch (item.Status)
         {
-            return null;
-        }
+            case StockStatus.OutOfStock:
+                return (StockAlertLevel.Out, Join(string.Create(En, $"Out of stock at Amazon; sold {item.UnitsSold30d:N0} in the last 30 days."), Actions(item.Restock)));
 
-        if (item.Position.Available == 0 && item.IsSelling)
-        {
-            return (StockAlertLevel.Out, Join(string.Create(En, $"Out of stock at Amazon; sold {item.UnitsSold30d:N0} in the last 30 days."), Actions(item.Restock)));
-        }
+            case StockStatus.RestockOverdue or StockStatus.RestockSoon when item.Restock?.DaysUntilAction is { } due:
+                var when = due switch
+                {
+                    < 0 => $"{-due} day{(due == -1 ? "" : "s")} overdue",
+                    0 => "due today",
+                    _ => $"due in {due} day{(due == 1 ? "" : "s")}",
+                };
+                return (StockAlertLevel.Low, Join(string.Create(En, $"Restock {when}; about {item.DaysOfInventory:N0} days of stock left."), Actions(item.Restock)));
 
-        if (item.Position.Available > 0 && item.Restock?.DaysUntilAction is { } due && due <= soonDays)
-        {
-            var when = due switch
-            {
-                < 0 => $"{-due} day{(due == -1 ? "" : "s")} overdue",
-                0 => "due today",
-                _ => $"due in {due} day{(due == 1 ? "" : "s")}",
-            };
-            return (StockAlertLevel.Low, Join(string.Create(En, $"Restock {when}; about {item.DaysOfInventory:N0} days of stock left."), Actions(item.Restock)));
+            default:
+                return null;
         }
-
-        return null;
     }
 
     private static string? Actions(RestockPlan? plan)

@@ -473,17 +473,41 @@ th .tip { text-transform: none; }
     .kpi-value { font-size: 1.4rem; }
 }
 
-/* ---------- Inventory table ---------- */
-.inventory-table th.th-group { text-align: center; border-bottom: 1px solid var(--border); }
-.inventory-table .col-divider { border-left: 1px solid var(--border); }
+/* Positioned so absolutely positioned children (e.g. .visually-hidden header labels) stay inside the
+   scroll container instead of widening the page on phones. */
+.table-responsive { position: relative; }
+
+/* ---------- Inventory ---------- */
 .inventory-table td, .inventory-table th { white-space: nowrap; }
-.inventory-table .thumb-cell { width: 3rem; padding-right: 0; }
-.product-thumb { display: block; width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--surface-2); border: 1px solid var(--border); }
+/* The product column stays put while the numbers scroll sideways on narrow screens. */
+.inventory-table .product-col { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 15rem; max-width: 22rem; white-space: normal; }
+.inventory-table thead .product-col { background: var(--surface-2); z-index: 2; }
+.inventory-table tbody tr:hover .product-col { background: var(--surface-2); }
+.inventory-table .col-group { border-left: 1px solid var(--border); }
+.inventory-table .th-group { display: block; font-size: 0.65rem; letter-spacing: 0.06em; opacity: 0.75; }
+.inventory-table .zero { color: var(--muted); opacity: 0.6; }
+.product-cell { display: flex; align-items: center; gap: 0.7rem; }
+.product-link { display: block; color: var(--text); text-decoration: none; }
+.product-link:hover { color: var(--brand); text-decoration: underline; }
+.product-sku { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.tag-family { color: var(--teal); background: var(--teal-soft); }
+.product-thumb { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
 .product-thumb-lg { width: 120px; height: 120px; }
-.product-thumb-empty { background: var(--surface-2); }
+.product-thumb-empty .icon { width: 18px; height: 18px; opacity: 0.7; }
+.cover { display: flex; flex-direction: column; gap: 0.3rem; }
+.cover-days { font-weight: 600; }
+.cover-track { fill: var(--surface-2); }
+.cover-ok { fill: var(--positive); }
+.cover-warn { fill: var(--warning); }
+.cover-bad { fill: var(--negative); }
+.next-step { line-height: 1.35; cursor: help; }
+.list-count { flex-wrap: wrap; column-gap: 0.35rem; }
 .home-stock-col { width: 9rem; }
-.inventory-table td.restock-cell { white-space: normal; min-width: 11rem; font-size: 0.82rem; }
-.restock-cell .pill { margin-bottom: 0.15rem; }
+@media (max-width: 767.98px) {
+    .inventory-table .product-col { min-width: 11rem; max-width: 13rem; }
+    .inventory-table .product-col .product-thumb { display: none; }
+    .inventory-table .col-sold { display: none; }
+}
 
 /* ---------- Notifications ---------- */
 .notify-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 999px; color: var(--muted); text-decoration: none; }

@@ -1,0 +1,39 @@
+@using AERai.Web.Application.Inventory
+@using AERai.Web.Application.Security
+@model InventoryItem
+@{
+    var p = Model.Position;
+    var canEdit = User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator);
+}
+@* Product cell shared by both Inventory views: picture, title (links to Edit for operators), SKU · ASIN, family. *@
+<div class="product-cell">
+    @if (p.ImagePath is { } image)
+    {
+        <img class="product-thumb" src="@Url.Page("/Inventory/Image", new { sku = p.Sku, v = System.IO.Path.GetFileNameWithoutExtension(image) })" alt="" loading="lazy" width="40" height="40" />
+    }
+    else
+    {
+        <span class="product-thumb product-thumb-empty" aria-hidden="true"><partial name="_Icon" model='"box"' /></span>
+    }
+    <div class="min-w-0">
+        @if (canEdit)
+        {
+            <a class="product-title product-link" asp-page="/Inventory/Edit" asp-route-sku="@p.Sku" title="@(p.Title ?? p.Sku)">@(p.Title ?? p.Sku)</a>
+        }
+        else
+        {
+            <div class="product-title" title="@(p.Title ?? p.Sku)">@(p.Title ?? p.Sku)</div>
+        }
+        <div class="product-sku">
+            <span>@p.Sku</span>
+            @if (p.Asin is { } asin)
+            {
+                <span>· @asin</span>
+            }
+            @if (p.Family is { } family)
+            {
+                <span class="tag tag-family">@family</span>
+            }
+        </div>
+    </div>
+</div>

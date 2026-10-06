@@ -14,4 +14,16 @@
     }
 
     document.addEventListener("DOMContentLoaded", setupTooltips);
+
+    // ---------- Toggles and filters submit as soon as they change ----------
+    // A [data-autosubmit] control, or any select inside a [data-autosubmit-form], submits its form on
+    // change. Every such form also has a submit button (hidden via .js-hide), so it works without script.
+    document.addEventListener("change", function (event) {
+        var target = event.target;
+        var form = target.form;
+        if (!form) { return; }
+        if (target.matches("[data-autosubmit]") || (form.hasAttribute("data-autosubmit-form") && target.tagName === "SELECT")) {
+            if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }
+        }
+    });
 })();

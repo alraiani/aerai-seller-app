@@ -140,11 +140,70 @@ public sealed class InventoryServiceTests
         Stock("MAT-BLU", available: 20, p => p.Asin = "B0MAT2");
         Stock("STRAP", available: 99, p => p.Asin = "B0STR1");
 
-        var overview = await CreateService().GetOverviewAsync(Us, new PageRequest(1, 1, "b0mat"), null, InventorySort.Urgency, CancellationToken.None);
-
+        var overview = await CreateService().GetOverviewAsync(Us, new PageRequest(1, 1, "b0mat"), InventoryFilter.Default, CancellationToken.None);
 
         Assert.Equal(2, overview.Items.TotalCount);
         Assert.Single(overview.Items.Items);
         Assert.Equal((30, 4, 2, 32, 36), (overview.Totals.Available, overview.Totals.Inbound, overview.Totals.Reserved, overview.Totals.InWarehouse, overview.Totals.AmazonTotal));
+    }
+
+    [Fact]
+    public async Task GetItemsAsync_AssignsOneStatusPerSku()
+    {
+        // 1 per day; default lead times: order 61 days ahead, send 24; alert window 7 days.
+        Stock("OUT");
+        Sold("OUT", Eastern(9, 6, 12), 30);
+        Stock("OVERDUE", available: 10);
+        Sold("OVERDUE", Eastern(9, 6, 12), 30);
+        Stock("SOON", available: 66);           // order due in 5 days
+        Sold("SOON", Eastern(9, 6, 12), 30);
+        Stock("HEALTHY", available: 120);
+        Sold("HEALTHY", Eastern(9, 6, 12), 30);
+        Stock("NEW", available: 5);
+        Stock("HOME", configure: p => { p.SnapshotDate = null; p.HomeStock = 9; });
+
+        var items = await CreateService().GetItemsAsync(Us, CancellationToken.None);
+
+        Assert.Equal(
+            [("OUT", StockStatus.OutOfStock), ("OVERDUE", StockStatus.RestockOverdue), ("SOON", StockStatus.RestockSoon),
+             ("HEALTHY", StockStatus.Healthy), ("NEW", StockStatus.NoSalesData), ("HOME", StockStatus.NotAtAmazon)],
+            items.Select(i => (i.Sku, i.Status)));
+    }
+
+    [Fact]
+    public async Task GetOverviewAsync_StatusFilterNarrowsRowsButNotTheCounts()
+    {
+        Stock("OUT");
+        Sold("OUT", Eastern(9, 6, 12), 30);
+        Stock("OVERDUE", available: 10);
+        Sold("OVERDUE", Eastern(9, 6, 12), 30);
+        Stock("SOON", available: 66);
+        Sold("SOON", Eastern(9, 6, 12), 30);
+        Stock("HEALTHY", available: 120);
+        Sold("HEALTHY", Eastern(9, 6, 12), 30);
+
+        var overview = await CreateService().GetOverviewAsync(Us, new PageRequest(), new InventoryFilter(Status: StockStatusFilter.NeedsAction), CancellationToken.None);
+
+        Assert.Equal(["OVERDUE", "SOON"], overview.Items.Items.Select(i => i.Sku));
+        Assert.Equal((4, 1, 1, 1, 2), (overview.Totals.SkuCount, overview.Totals.OutOfStock, overview.Totals.RestockOverdue, overview.Totals.RestockSoon, overview.Totals.NeedsAction));
+    }
+
+    [Theory]
+    [InlineData(InventorySort.Sold30d, false, new[] { "FAST", "SLOW", "NONE" })]
+    [InlineData(InventorySort.Sold30d, true, new[] { "NONE", "SLOW", "FAST" })]
+    [InlineData(InventorySort.DaysOfInventory, false, new[] { "FAST", "SLOW", "NONE" })]
+    [InlineData(InventorySort.Available, false, new[] { "NONE", "SLOW", "FAST" })]
+    [InlineData(InventorySort.Sku, true, new[] { "SLOW", "NONE", "FAST" })]
+    public async Task GetOverviewAsync_SortsEachWayWithUnknownsLast(InventorySort sort, bool descending, string[] expected)
+    {
+        Stock("FAST", available: 10);
+        Sold("FAST", Eastern(9, 6, 12), 60);    // 2/day -> 5 days
+        Stock("SLOW", available: 40);
+        Sold("SLOW", Eastern(9, 6, 12), 30);    // 1/day -> 40 days
+        Stock("NONE", available: 90);           // no sales: unknown cover
+
+        var overview = await CreateService().GetOverviewAsync(Us, new PageRequest(), new InventoryFilter(Sort: sort, Descending: descending), CancellationToken.None);
+
+        Assert.Equal(expected, overview.Items.Items.Select(i => i.Sku));
     }
 }
