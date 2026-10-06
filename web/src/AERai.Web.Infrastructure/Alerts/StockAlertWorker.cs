@@ -14,8 +14,11 @@ namespace AERai.Web.Infrastructure.Alerts;
 /// (from scheduled syncs or manual imports) turn into alerts without anyone opening a page.
 /// </summary>
 /// <remarks>
-/// Safe on several instances: a refresh is idempotent and the database allows only one open alert
-/// per SKU, so concurrent refreshes converge on the same state.
+/// Unlike <see cref="Ingestion.SyncSchedulerWorker"/>, there is no claim between instances: every
+/// instance refreshes every marketplace each interval. That is deliberate — a refresh is a few reads
+/// and a compare, writes only differences, and is idempotent, and the database allows only one open
+/// alert per SKU — so concurrent refreshes converge on the same state and a claim would add a table
+/// and a failure mode for no real saving.
 /// </remarks>
 /// <param name="scopes">Creates a DI scope per refresh (services are scoped to the DbContext).</param>
 /// <param name="options">Refresh interval.</param>

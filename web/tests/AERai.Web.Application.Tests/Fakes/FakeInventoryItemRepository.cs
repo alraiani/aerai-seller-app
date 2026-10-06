@@ -30,33 +30,42 @@ internal sealed class FakeInventoryItemRepository : IInventoryItemRepository
     public Task<IReadOnlyList<ProductFamily>> ListFamiliesAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<ProductFamily>>(Families.OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ToList());
 
-    public Task<int> GetOrCreateFamilyAsync(string name, CancellationToken cancellationToken)
+    public Task<bool> SaveItemAsync(string sku, string marketplaceId, string? family, int homeStock, LeadTimeSettings leadTimes, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken)
     {
-        var family = Families.FirstOrDefault(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (family is null)
-        {
-            family = new ProductFamily { Id = Families.Count + 1, Name = name };
-            Families.Add(family);
-        }
-
-        return Task.FromResult(family.Id);
-    }
-
-    public Task<bool> SetFamilyAsync(string sku, int? familyId, CancellationToken cancellationToken)
-    {
-        if (!Products.TryGetValue(sku, out var p))
+        if (!Products.TryGetValue(sku, out var product))
         {
             return Task.FromResult(false);
         }
 
-        p.FamilyId = familyId;
-        return Task.FromResult(true);
-    }
+        SaveCalls++;
+        if (family is null)
+        {
+            product.FamilyId = null;
+        }
+        else
+        {
+            var existing = Families.FirstOrDefault(f => string.Equals(f.Name, family, StringComparison.OrdinalIgnoreCase));
+            if (existing is null)
+            {
+                existing = new ProductFamily { Id = Families.Count + 1, Name = family };
+                Families.Add(existing);
+            }
 
-    public Task DeleteUnusedFamiliesAsync(CancellationToken cancellationToken)
-    {
+            product.FamilyId = existing.Id;
+        }
+
+        ApplyHomeStock(marketplaceId, [new HomeStockEntry(sku, homeStock)]);
+        if (leadTimes.IsEmpty)
+        {
+            LeadTimes.Remove((marketplaceId, sku));
+        }
+        else
+        {
+            LeadTimes[(marketplaceId, sku)] = leadTimes;
+        }
+
         Families.RemoveAll(f => !Products.Values.Any(p => p.FamilyId == f.Id));
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 
     public Task<(string Path, string ContentType)?> GetImageAsync(string sku, CancellationToken cancellationToken) =>
@@ -78,23 +87,15 @@ internal sealed class FakeInventoryItemRepository : IInventoryItemRepository
     public Task<IReadOnlySet<string>> GetExistingSkusAsync(IReadOnlyCollection<string> skus, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlySet<string>>(skus.Where(Products.ContainsKey).ToHashSet(StringComparer.Ordinal));
 
-    public Task SetLeadTimesAsync(string sku, string marketplaceId, LeadTimeSettings settings, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken)
-    {
-        if (settings.IsEmpty)
-        {
-            LeadTimes.Remove((marketplaceId, sku));
-        }
-        else
-        {
-            LeadTimes[(marketplaceId, sku)] = settings;
-        }
-
-        return Task.CompletedTask;
-    }
-
     public Task SetHomeStockAsync(string marketplaceId, IReadOnlyList<HomeStockEntry> entries, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken)
     {
         SaveCalls++;
+        ApplyHomeStock(marketplaceId, entries);
+        return Task.CompletedTask;
+    }
+
+    private void ApplyHomeStock(string marketplaceId, IEnumerable<HomeStockEntry> entries)
+    {
         foreach (var entry in entries)
         {
             if (entry.Quantity == 0)
@@ -106,7 +107,5 @@ internal sealed class FakeInventoryItemRepository : IInventoryItemRepository
                 HomeStock[(marketplaceId, entry.Sku)] = entry.Quantity;
             }
         }
-
-        return Task.CompletedTask;
     }
 }

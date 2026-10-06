@@ -58,7 +58,7 @@ public sealed class UploadModel(IInventoryService inventory, IInventoryItemServi
         var csv = new StringBuilder("sku,home-stock,product-name\n");
         foreach (var item in all.OrderBy(i => i.Sku, StringComparer.Ordinal))
         {
-            csv.Append(CultureInfo.InvariantCulture, $"{Csv(item.Sku)},{item.Position.HomeStock},{Csv(item.Position.Title ?? string.Empty)}\n");
+            csv.Append(CultureInfo.InvariantCulture, $"{Csv(item.Sku)},{item.Position.HomeStock},{Csv(NeutralizeFormula(item.Position.Title ?? string.Empty))}\n");
         }
 
         return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray(), "text/csv", $"home-stock-{Marketplace.Code}.csv");
@@ -98,4 +98,11 @@ public sealed class UploadModel(IInventoryService inventory, IInventoryItemServi
     /// <summary>Quotes a CSV field when it contains a delimiter, quote, or line break (RFC 4180).</summary>
     private static string Csv(string value) =>
         value.AsSpan().IndexOfAny(",\"\r\n") >= 0 ? $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"" : value;
+
+    /// <summary>
+    /// Stops Excel from running a value as a formula by prefixing an apostrophe. Used for product
+    /// titles, which come from Amazon and are not trusted; never for SKUs, which must round-trip.
+    /// </summary>
+    private static string NeutralizeFormula(string value) =>
+        value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r' ? "'" + value : value;
 }

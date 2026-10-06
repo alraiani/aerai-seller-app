@@ -62,4 +62,28 @@ public sealed class ClosedXmlSpreadsheetReaderTests
 
         Assert.Equal("The file is not a readable Excel workbook (.xlsx).", result.Error);
     }
+
+    [Fact]
+    public async Task ReadAsync_SparseSheetFarBeyondTheRowCap_FailsWithoutReadingEveryRow()
+    {
+        using var file = Workbook(sheet =>
+        {
+            sheet.Cell(1, 1).Value = "sku";
+            sheet.Cell(1_000_000, 1).Value = "far away";
+        });
+
+        var result = await new ClosedXmlSpreadsheetReader().ReadAsync(file, 10_000, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task ReadAsync_TooManyColumns_Fails()
+    {
+        using var file = Workbook(sheet => sheet.Cell(1, ClosedXmlSpreadsheetReader.MaxColumns + 1).Value = "x");
+
+        var result = await new ClosedXmlSpreadsheetReader().ReadAsync(file, 10, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
 }

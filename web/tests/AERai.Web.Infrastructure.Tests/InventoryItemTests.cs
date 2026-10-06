@@ -25,10 +25,7 @@ public sealed class InventoryItemTests(SqlDatabaseFixture fixture) : IClassFixtu
         await using var scope = fixture.Services.CreateAsyncScope();
         var repository = scope.ServiceProvider.GetRequiredService<IInventoryItemRepository>();
 
-        var familyId = await repository.GetOrCreateFamilyAsync("Test Mats", CancellationToken.None);
-        Assert.Equal(familyId, await repository.GetOrCreateFamilyAsync("test mats", CancellationToken.None)); // case-insensitive
-        await repository.SetFamilyAsync("T-HOME-1", familyId, CancellationToken.None);
-        await repository.SetHomeStockAsync(MarketplaceIds.UnitedStates, [new HomeStockEntry("T-HOME-1", 25)], DateTimeOffset.UtcNow, "tests", CancellationToken.None);
+        Assert.True(await repository.SaveItemAsync("T-HOME-1", MarketplaceIds.UnitedStates, "Test Mats", 25, LeadTimeSettings.None, DateTimeOffset.UtcNow, "tests", CancellationToken.None));
 
         var position = await scope.ServiceProvider.GetRequiredService<AppDbContext>().InventoryPositions.AsNoTracking()
             .SingleAsync(p => p.Sku == "T-HOME-1" && p.MarketplaceId == MarketplaceIds.UnitedStates);
@@ -57,24 +54,37 @@ public sealed class InventoryItemTests(SqlDatabaseFixture fixture) : IClassFixtu
     }
 
     [SqlFact]
-    public async Task DeleteUnusedFamiliesAsync_KeepsFamiliesInUse()
+    public async Task SaveItemAsync_ReusesFamilyCaseInsensitivelyAndDropsUnusedOnes()
     {
         await AddProductAsync("T-FAM-1");
+        await AddProductAsync("T-FAM-2");
         await using var scope = fixture.Services.CreateAsyncScope();
         var repository = scope.ServiceProvider.GetRequiredService<IInventoryItemRepository>();
-        var used = await repository.GetOrCreateFamilyAsync("Used family", CancellationToken.None);
-        await repository.GetOrCreateFamilyAsync("Orphan family", CancellationToken.None);
-        await repository.SetFamilyAsync("T-FAM-1", used, CancellationToken.None);
+        var now = DateTimeOffset.UtcNow;
 
-        await repository.DeleteUnusedFamiliesAsync(CancellationToken.None);
+        await repository.SaveItemAsync("T-FAM-1", MarketplaceIds.UnitedStates, "Shared family", 0, LeadTimeSettings.None, now, "tests", CancellationToken.None);
+        await repository.SaveItemAsync("T-FAM-2", MarketplaceIds.UnitedStates, "shared FAMILY", 0, LeadTimeSettings.None, now, "tests", CancellationToken.None);
+        await repository.SaveItemAsync("T-FAM-2", MarketplaceIds.UnitedStates, "Orphan family", 0, LeadTimeSettings.None, now, "tests", CancellationToken.None);
+        await repository.SaveItemAsync("T-FAM-2", MarketplaceIds.UnitedStates, null, 0, LeadTimeSettings.None, now, "tests", CancellationToken.None);
 
         var names = (await repository.ListFamiliesAsync(CancellationToken.None)).Select(f => f.Name).ToList();
-        Assert.Contains("Used family", names);
+        Assert.Single(names, n => n.Equals("Shared family", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain("Orphan family", names);
+        Assert.Equal("Shared family", (await repository.GetAsync("T-FAM-1", MarketplaceIds.UnitedStates, CancellationToken.None))!.Family);
     }
 
     [SqlFact]
-    public async Task SetLeadTimesAsync_RoundTripsPerMarketplaceAndBlankDeletes()
+    public async Task SaveItemAsync_UnknownSku_SavesNothing()
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IInventoryItemRepository>();
+
+        Assert.False(await repository.SaveItemAsync("T-NOPE", MarketplaceIds.UnitedStates, "Never created", 5, LeadTimeSettings.None, DateTimeOffset.UtcNow, "tests", CancellationToken.None));
+        Assert.DoesNotContain(await repository.ListFamiliesAsync(CancellationToken.None), f => f.Name == "Never created");
+    }
+
+    [SqlFact]
+    public async Task SaveItemAsync_LeadTimesRoundTripPerMarketplaceAndBlankDeletes()
     {
         await AddProductAsync("T-LEAD-1");
         await using var scope = fixture.Services.CreateAsyncScope();
@@ -82,13 +92,13 @@ public sealed class InventoryItemTests(SqlDatabaseFixture fixture) : IClassFixtu
         var queries = scope.ServiceProvider.GetRequiredService<IInventoryQueries>();
         var custom = new LeadTimeSettings(45, null, 12, 7, 120);
 
-        await repository.SetLeadTimesAsync("T-LEAD-1", MarketplaceIds.Canada, custom, DateTimeOffset.UtcNow, "tests", CancellationToken.None);
-        await repository.SetLeadTimesAsync("T-LEAD-1", MarketplaceIds.Canada, custom with { PrepTimeDays = 3 }, DateTimeOffset.UtcNow, "tests", CancellationToken.None);
+        await repository.SaveItemAsync("T-LEAD-1", MarketplaceIds.Canada, null, 0, custom, DateTimeOffset.UtcNow, "tests", CancellationToken.None);
+        await repository.SaveItemAsync("T-LEAD-1", MarketplaceIds.Canada, null, 0, custom with { PrepTimeDays = 3 }, DateTimeOffset.UtcNow, "tests", CancellationToken.None);
 
         Assert.Equal(custom with { PrepTimeDays = 3 }, (await queries.GetLeadTimesAsync(MarketplaceIds.Canada, CancellationToken.None))["T-LEAD-1"]);
         Assert.Equal(LeadTimeSettings.None, (await repository.GetAsync("T-LEAD-1", MarketplaceIds.UnitedStates, CancellationToken.None))!.LeadTimes);
 
-        await repository.SetLeadTimesAsync("T-LEAD-1", MarketplaceIds.Canada, LeadTimeSettings.None, DateTimeOffset.UtcNow, "tests", CancellationToken.None);
+        await repository.SaveItemAsync("T-LEAD-1", MarketplaceIds.Canada, null, 0, LeadTimeSettings.None, DateTimeOffset.UtcNow, "tests", CancellationToken.None);
 
         Assert.False((await queries.GetLeadTimesAsync(MarketplaceIds.Canada, CancellationToken.None)).ContainsKey("T-LEAD-1"));
     }

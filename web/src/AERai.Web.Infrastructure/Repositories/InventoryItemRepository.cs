@@ -39,10 +39,40 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
         await dbContext.ProductFamilies.AsNoTracking().OrderBy(f => f.Name).ToListAsync(cancellationToken).ConfigureAwait(false);
 
     /// <inheritdoc/>
-    public async Task<int> GetOrCreateFamilyAsync(string name, CancellationToken cancellationToken)
+    public async Task<bool> SaveItemAsync(string sku, string marketplaceId, string? family, int homeStock, LeadTimeSettings leadTimes, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(leadTimes);
 
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            dbContext.ChangeTracker.Clear();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            var familyId = family is null ? (int?)null : await GetOrCreateFamilyAsync(family, cancellationToken).ConfigureAwait(false);
+            if (!await SetFamilyAsync(sku, familyId, cancellationToken).ConfigureAwait(false))
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return false;
+            }
+
+            await ApplyHomeStockAsync(marketplaceId, [new HomeStockEntry(sku, homeStock)], updatedAt, updatedBy, cancellationToken).ConfigureAwait(false);
+            await SetLeadTimesAsync(sku, marketplaceId, leadTimes, updatedAt, updatedBy, cancellationToken).ConfigureAwait(false);
+
+            // A family is only a label; once nothing uses it, it would just clutter the picker.
+            await dbContext.ProductFamilies
+                .Where(f => !dbContext.Products.Any(p => p.FamilyId == f.Id))
+                .ExecuteDeleteAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }).ConfigureAwait(false);
+    }
+
+    /// <summary>Finds a family by name (case-insensitively) or creates it, within the caller's transaction.</summary>
+    private async Task<int> GetOrCreateFamilyAsync(string name, CancellationToken cancellationToken)
+    {
         // The column's collation is case-insensitive, so this equality matches "mats" to "Mats".
         var existing = await dbContext.ProductFamilies.Where(f => f.Name == name).Select(f => (int?)f.Id).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         if (existing is { } id)
@@ -65,17 +95,11 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
         }
     }
 
-    /// <inheritdoc/>
-    public async Task<bool> SetFamilyAsync(string sku, int? familyId, CancellationToken cancellationToken) =>
+    /// <summary>Assigns a SKU to a family or clears it; false when the SKU does not exist.</summary>
+    private async Task<bool> SetFamilyAsync(string sku, int? familyId, CancellationToken cancellationToken) =>
         await dbContext.Products.Where(p => p.Sku == sku)
             .ExecuteUpdateAsync(setters => setters.SetProperty(p => p.FamilyId, familyId), cancellationToken)
             .ConfigureAwait(false) > 0;
-
-    /// <inheritdoc/>
-    public Task DeleteUnusedFamiliesAsync(CancellationToken cancellationToken) =>
-        dbContext.ProductFamilies
-            .Where(f => !dbContext.Products.Any(p => p.FamilyId == f.Id))
-            .ExecuteDeleteAsync(cancellationToken);
 
     /// <inheritdoc/>
     public async Task<(string Path, string ContentType)?> GetImageAsync(string sku, CancellationToken cancellationToken)
@@ -116,11 +140,9 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
         return found;
     }
 
-    /// <inheritdoc/>
-    public async Task SetLeadTimesAsync(string sku, string marketplaceId, LeadTimeSettings settings, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken)
+    /// <summary>Saves a SKU's lead-time overrides; all-blank settings remove the row (defaults apply).</summary>
+    private async Task SetLeadTimesAsync(string sku, string marketplaceId, LeadTimeSettings settings, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(settings);
-
         var profiles = dbContext.LeadTimeProfiles.Where(p => p.Sku == sku && p.MarketplaceId == marketplaceId);
 
         // All blank means "use the defaults", which is represented by having no row.
@@ -171,43 +193,47 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
         {
             dbContext.ChangeTracker.Clear();
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-            var skus = entries.Select(e => e.Sku).ToList();
-            var existing = new Dictionary<string, HomeStock>(StringComparer.Ordinal);
-            foreach (var chunk in skus.Chunk(1000))
-            {
-                foreach (var row in await dbContext.HomeStocks.Where(h => h.MarketplaceId == marketplaceId && chunk.Contains(h.Sku)).ToListAsync(cancellationToken).ConfigureAwait(false))
-                {
-                    existing[row.Sku] = row;
-                }
-            }
-
-            foreach (var entry in entries)
-            {
-                existing.TryGetValue(entry.Sku, out var row);
-
-                // Zero is stored as "no row", the same way an unset cost of goods is.
-                if (entry.Quantity == 0)
-                {
-                    if (row is not null)
-                    {
-                        dbContext.HomeStocks.Remove(row);
-                    }
-                }
-                else if (row is null)
-                {
-                    dbContext.HomeStocks.Add(new HomeStock { Sku = entry.Sku, MarketplaceId = marketplaceId, Quantity = entry.Quantity, UpdatedAt = updatedAt, UpdatedBy = updatedBy });
-                }
-                else if (row.Quantity != entry.Quantity)
-                {
-                    row.Quantity = entry.Quantity;
-                    row.UpdatedAt = updatedAt;
-                    row.UpdatedBy = updatedBy;
-                }
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await ApplyHomeStockAsync(marketplaceId, entries, updatedAt, updatedBy, cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>Upserts home-stock rows within the caller's transaction; a quantity of 0 removes the row.</summary>
+    private async Task ApplyHomeStockAsync(string marketplaceId, IReadOnlyList<HomeStockEntry> entries, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken)
+    {
+        var existing = new Dictionary<string, HomeStock>(StringComparer.Ordinal);
+        foreach (var chunk in entries.Select(e => e.Sku).Chunk(1000))
+        {
+            foreach (var row in await dbContext.HomeStocks.Where(h => h.MarketplaceId == marketplaceId && chunk.Contains(h.Sku)).ToListAsync(cancellationToken).ConfigureAwait(false))
+            {
+                existing[row.Sku] = row;
+            }
+        }
+
+        foreach (var entry in entries)
+        {
+            existing.TryGetValue(entry.Sku, out var row);
+
+            // Zero is stored as "no row", the same way an unset cost of goods is.
+            if (entry.Quantity == 0)
+            {
+                if (row is not null)
+                {
+                    dbContext.HomeStocks.Remove(row);
+                }
+            }
+            else if (row is null)
+            {
+                dbContext.HomeStocks.Add(new HomeStock { Sku = entry.Sku, MarketplaceId = marketplaceId, Quantity = entry.Quantity, UpdatedAt = updatedAt, UpdatedBy = updatedBy });
+            }
+            else if (row.Quantity != entry.Quantity)
+            {
+                row.Quantity = entry.Quantity;
+                row.UpdatedAt = updatedAt;
+                row.UpdatedBy = updatedBy;
+            }
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

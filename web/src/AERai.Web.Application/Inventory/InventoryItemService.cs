@@ -74,20 +74,10 @@ public sealed partial class InventoryItemService(
             return Result.Failure(leadTimeError);
         }
 
-        if (await repository.GetAsync(sku, marketplaceId, cancellationToken).ConfigureAwait(false) is null)
+        if (!await repository.SaveItemAsync(sku, marketplaceId, name, update.HomeStock, update.LeadTimes, clock.GetUtcNow(), user, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure($"Product '{sku}' was not found.");
         }
-
-        var familyId = name is null ? (int?)null : await repository.GetOrCreateFamilyAsync(name, cancellationToken).ConfigureAwait(false);
-        await repository.SetFamilyAsync(sku, familyId, cancellationToken).ConfigureAwait(false);
-
-        var now = clock.GetUtcNow();
-        await repository.SetHomeStockAsync(marketplaceId, [new HomeStockEntry(sku, update.HomeStock)], now, user, cancellationToken).ConfigureAwait(false);
-        await repository.SetLeadTimesAsync(sku, marketplaceId, update.LeadTimes, now, user, cancellationToken).ConfigureAwait(false);
-
-        // A family is only a label; once nothing uses it, it would just clutter the picker.
-        await repository.DeleteUnusedFamiliesAsync(cancellationToken).ConfigureAwait(false);
 
         LogItemUpdated(sku, marketplaceId, name, update.HomeStock);
         return Result.Success();
@@ -123,7 +113,19 @@ public sealed partial class InventoryItemService(
         buffer.Position = 0;
         await images.SaveAsync(path, buffer, type.ContentType, cancellationToken).ConfigureAwait(false);
 
-        if (!await repository.SetImageAsync(sku, path, type.ContentType, cancellationToken).ConfigureAwait(false))
+        bool pointed;
+        try
+        {
+            pointed = await repository.SetImageAsync(sku, path, type.ContentType, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // The product still points at its old picture; don't leave the new blob behind.
+            await images.DeleteAsync(path, CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+
+        if (!pointed)
         {
             await images.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
             return Result.Failure($"Product '{sku}' was not found.");
@@ -200,7 +202,9 @@ public sealed partial class InventoryItemService(
     public async Task<Result<HomeStockImportResult>> ImportHomeStockAsync(string marketplaceId, string fileName, Stream content, string user, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         ArgumentNullException.ThrowIfNull(content);
+        ArgumentException.ThrowIfNullOrWhiteSpace(user);
 
         var parsed = Path.GetExtension(fileName).ToLowerInvariant() switch
         {
