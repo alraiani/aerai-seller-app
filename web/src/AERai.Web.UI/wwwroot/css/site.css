@@ -482,3 +482,5 @@ th .tip { text-transform: none; }
 .product-thumb-lg { width: 120px; height: 120px; }
 .product-thumb-empty { background: var(--surface-2); }
 .home-stock-col { width: 9rem; }
+.inventory-table td.restock-cell { white-space: normal; min-width: 11rem; font-size: 0.82rem; }
+.restock-cell .pill { margin-bottom: 0.15rem; }

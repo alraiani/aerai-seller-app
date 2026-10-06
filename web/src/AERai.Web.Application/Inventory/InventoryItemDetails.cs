@@ -7,4 +7,5 @@ namespace AERai.Web.Application.Inventory;
 /// <param name="Family">Family name, if assigned.</param>
 /// <param name="ImagePath">Blob path of the picture, if one was uploaded.</param>
 /// <param name="HomeStock">Units held outside Amazon for the marketplace.</param>
-public sealed record InventoryItemDetails(string Sku, string? Asin, string? Title, string? Family, string? ImagePath, int HomeStock);
+/// <param name="LeadTimes">The SKU's own lead-time overrides in the marketplace (blank fields use the defaults).</param>
+public sealed record InventoryItemDetails(string Sku, string? Asin, string? Title, string? Family, string? ImagePath, int HomeStock, LeadTimeSettings LeadTimes);

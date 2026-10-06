@@ -21,4 +21,10 @@ public interface IInventoryQueries
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>Matching lines.</returns>
     Task<IReadOnlyList<UnitsSold>> GetUnitsSoldAsync(string marketplaceId, DateTimeOffset since, CancellationToken cancellationToken);
+
+    /// <summary>Every SKU's own lead-time overrides in a marketplace (SKUs without any are absent).</summary>
+    /// <param name="marketplaceId">Marketplace to report on.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Overrides keyed by SKU.</returns>
+    Task<IReadOnlyDictionary<string, LeadTimeSettings>> GetLeadTimesAsync(string marketplaceId, CancellationToken cancellationToken);
 }

@@ -56,6 +56,16 @@ public interface IInventoryItemRepository
     /// <returns>The existing SKUs (ordinal comparison).</returns>
     Task<IReadOnlySet<string>> GetExistingSkusAsync(IReadOnlyCollection<string> skus, CancellationToken cancellationToken);
 
+    /// <summary>Saves a SKU's lead-time overrides in one marketplace; all-blank settings remove the row.</summary>
+    /// <param name="sku">Seller SKU (must exist).</param>
+    /// <param name="marketplaceId">Marketplace the timings apply to.</param>
+    /// <param name="settings">The overrides.</param>
+    /// <param name="updatedAt">Change timestamp.</param>
+    /// <param name="updatedBy">User email.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A task that completes when saved.</returns>
+    Task SetLeadTimesAsync(string sku, string marketplaceId, LeadTimeSettings settings, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken);
+
     /// <summary>Sets home stock for several SKUs in one marketplace; a quantity of 0 removes the row.</summary>
     /// <param name="marketplaceId">Marketplace the stock is held for.</param>
     /// <param name="entries">Validated entries for existing SKUs, one per SKU.</param>

@@ -72,4 +72,24 @@ public sealed class InventoryItemTests(SqlDatabaseFixture fixture) : IClassFixtu
         Assert.Contains("Used family", names);
         Assert.DoesNotContain("Orphan family", names);
     }
+
+    [SqlFact]
+    public async Task SetLeadTimesAsync_RoundTripsPerMarketplaceAndBlankDeletes()
+    {
+        await AddProductAsync("T-LEAD-1");
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IInventoryItemRepository>();
+        var queries = scope.ServiceProvider.GetRequiredService<IInventoryQueries>();
+        var custom = new LeadTimeSettings(45, null, 12, 7, 120);
+
+        await repository.SetLeadTimesAsync("T-LEAD-1", MarketplaceIds.Canada, custom, DateTimeOffset.UtcNow, "tests", CancellationToken.None);
+        await repository.SetLeadTimesAsync("T-LEAD-1", MarketplaceIds.Canada, custom with { PrepTimeDays = 3 }, DateTimeOffset.UtcNow, "tests", CancellationToken.None);
+
+        Assert.Equal(custom with { PrepTimeDays = 3 }, (await queries.GetLeadTimesAsync(MarketplaceIds.Canada, CancellationToken.None))["T-LEAD-1"]);
+        Assert.Equal(LeadTimeSettings.None, (await repository.GetAsync("T-LEAD-1", MarketplaceIds.UnitedStates, CancellationToken.None))!.LeadTimes);
+
+        await repository.SetLeadTimesAsync("T-LEAD-1", MarketplaceIds.Canada, LeadTimeSettings.None, DateTimeOffset.UtcNow, "tests", CancellationToken.None);
+
+        Assert.False((await queries.GetLeadTimesAsync(MarketplaceIds.Canada, CancellationToken.None)).ContainsKey("T-LEAD-1"));
+    }
 }

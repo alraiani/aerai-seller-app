@@ -5,17 +5,19 @@ using AERai.Web.Application.Security;
 using AERai.Web.Domain.Core;
 using AERai.Web.UI.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace AERai.Web.UI.Pages.Inventory;
 
 /// <summary>
 /// Each SKU's stock in the selected marketplace, broken down by state, with home stock, recent
-/// sales, and days of inventory, most urgent first. Filterable by family.
+/// sales, days of inventory, and what to send or order by when, most urgent first. Filterable by family.
 /// </summary>
 /// <param name="inventory">Inventory service.</param>
 /// <param name="items">Item editing service (for the family list).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
-public sealed class IndexModel(IInventoryService inventory, IInventoryItemService items, ICurrentMarketplace currentMarketplace) : ListPageModel
+/// <param name="options">Restock settings (what counts as "soon").</param>
+public sealed class IndexModel(IInventoryService inventory, IInventoryItemService items, ICurrentMarketplace currentMarketplace, IOptions<InventoryOptions> options) : ListPageModel
 {
     /// <summary>Family filter from <c>?family=</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "family")]
@@ -29,6 +31,9 @@ public sealed class IndexModel(IInventoryService inventory, IInventoryItemServic
 
     /// <summary>Families for the filter.</summary>
     public IReadOnlyList<ProductFamily> Families { get; private set; } = [];
+
+    /// <summary>Restock actions due within this many days are highlighted.</summary>
+    public int SoonDays => options.Value.AlertLeadDays;
 
     /// <summary>Whether the user may edit items and home stock.</summary>
     public bool CanEdit => User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator);

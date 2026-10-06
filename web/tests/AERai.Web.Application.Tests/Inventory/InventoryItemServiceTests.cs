@@ -36,8 +36,8 @@ public sealed class InventoryItemServiceTests
     {
         var service = CreateService();
 
-        await service.UpdateAsync("MAT-BLK", Us, "  Yoga   mats ", 5, User, CancellationToken.None);
-        await service.UpdateAsync("MAT-BLU", Us, "yoga mats", 0, User, CancellationToken.None);
+        await service.UpdateAsync("MAT-BLK", Us, new InventoryItemUpdate("  Yoga   mats ", 5, LeadTimeSettings.None), User, CancellationToken.None);
+        await service.UpdateAsync("MAT-BLU", Us, new InventoryItemUpdate("yoga mats", 0, LeadTimeSettings.None), User, CancellationToken.None);
 
         var family = Assert.Single(_repository.Families);
         Assert.Equal("Yoga mats", family.Name);
@@ -49,9 +49,9 @@ public sealed class InventoryItemServiceTests
     public async Task UpdateAsync_BlankFamily_ClearsAndRemovesUnusedFamily()
     {
         var service = CreateService();
-        await service.UpdateAsync("MAT-BLK", Us, "Mats", 0, User, CancellationToken.None);
+        await service.UpdateAsync("MAT-BLK", Us, new InventoryItemUpdate("Mats", 0, LeadTimeSettings.None), User, CancellationToken.None);
 
-        var result = await service.UpdateAsync("MAT-BLK", Us, " ", 0, User, CancellationToken.None);
+        var result = await service.UpdateAsync("MAT-BLK", Us, new InventoryItemUpdate(" ", 0, LeadTimeSettings.None), User, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Null(_repository.Products["MAT-BLK"].FamilyId);
@@ -63,16 +63,45 @@ public sealed class InventoryItemServiceTests
     [InlineData(InventoryItemService.MaxHomeStock + 1)]
     public async Task UpdateAsync_HomeStockOutOfRange_Fails(int homeStock)
     {
-        var result = await CreateService().UpdateAsync("MAT-BLK", Us, null, homeStock, User, CancellationToken.None);
+        var result = await CreateService().UpdateAsync("MAT-BLK", Us, new InventoryItemUpdate(null, homeStock, LeadTimeSettings.None), User, CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(0, _repository.SaveCalls);
     }
 
     [Fact]
+    public async Task UpdateAsync_LeadTimes_SavedPerMarketplaceAndBlankRemovesThem()
+    {
+        var service = CreateService();
+        var custom = new LeadTimeSettings(45, null, 12, null, 120);
+
+        await service.UpdateAsync("MAT-BLK", Us, new InventoryItemUpdate(null, 0, custom), User, CancellationToken.None);
+        Assert.Equal(custom, _repository.LeadTimes[(Us, "MAT-BLK")]);
+        Assert.False(_repository.LeadTimes.ContainsKey((MarketplaceIds.Canada, "MAT-BLK")));
+
+        await service.UpdateAsync("MAT-BLK", Us, new InventoryItemUpdate(null, 0, LeadTimeSettings.None), User, CancellationToken.None);
+        Assert.Empty(_repository.LeadTimes);
+    }
+
+    [Theory]
+    [InlineData(-1, null)]
+    [InlineData(InventoryItemService.MaxLeadTimeDays + 1, null)]
+    [InlineData(null, 0)]
+    public async Task UpdateAsync_LeadTimeOutOfRange_FailsAndSavesNothing(int? supplierDays, int? targetDays)
+    {
+        var update = new InventoryItemUpdate("Mats", 5, new LeadTimeSettings(supplierDays, null, null, null, targetDays));
+
+        var result = await CreateService().UpdateAsync("MAT-BLK", Us, update, User, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(_repository.Families);
+        Assert.Equal(0, _repository.SaveCalls);
+    }
+
+    [Fact]
     public async Task UpdateAsync_UnknownSku_Fails()
     {
-        var result = await CreateService().UpdateAsync("NOPE", Us, null, 1, User, CancellationToken.None);
+        var result = await CreateService().UpdateAsync("NOPE", Us, new InventoryItemUpdate(null, 1, LeadTimeSettings.None), User, CancellationToken.None);
 
         Assert.Equal("Product 'NOPE' was not found.", result.Error);
     }

@@ -31,6 +31,37 @@
                         <span asp-validation-for="Input.HomeStock" class="text-danger small"></span>
                         <div class="form-text">Units you hold outside Amazon for @Model.Marketplace.Name. Not counted in days of inventory.</div>
                     </div>
+                    <fieldset class="mb-3">
+                        <legend class="form-label fw-semibold mb-1">Restock timing in @Model.Marketplace.Name (days)</legend>
+                        <div class="form-text mt-0 mb-2">Used to work out how much to send or order and by when. Leave a box blank to use the default shown.</div>
+                        <div class="row g-2">
+                            <div class="col-6 col-md-4">
+                                <label asp-for="Input.SupplierLeadTimeDays" class="form-label small mb-1"></label>
+                                <input asp-for="Input.SupplierLeadTimeDays" type="number" min="0" step="1" placeholder="@Model.Defaults.SupplierLeadTimeDays" class="form-control form-control-sm" />
+                                <span asp-validation-for="Input.SupplierLeadTimeDays" class="text-danger small"></span>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label asp-for="Input.PrepTimeDays" class="form-label small mb-1"></label>
+                                <input asp-for="Input.PrepTimeDays" type="number" min="0" step="1" placeholder="@Model.Defaults.PrepTimeDays" class="form-control form-control-sm" />
+                                <span asp-validation-for="Input.PrepTimeDays" class="text-danger small"></span>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label asp-for="Input.TransitDays" class="form-label small mb-1"></label>
+                                <input asp-for="Input.TransitDays" type="number" min="0" step="1" placeholder="@Model.Defaults.TransitDays" class="form-control form-control-sm" />
+                                <span asp-validation-for="Input.TransitDays" class="text-danger small"></span>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label asp-for="Input.SafetyStockDays" class="form-label small mb-1"></label>
+                                <input asp-for="Input.SafetyStockDays" type="number" min="0" step="1" placeholder="@Model.Defaults.SafetyStockDays" class="form-control form-control-sm" />
+                                <span asp-validation-for="Input.SafetyStockDays" class="text-danger small"></span>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label asp-for="Input.TargetStockDays" class="form-label small mb-1"></label>
+                                <input asp-for="Input.TargetStockDays" type="number" min="1" step="1" placeholder="@Model.Defaults.TargetStockDays" class="form-control form-control-sm" />
+                                <span asp-validation-for="Input.TargetStockDays" class="text-danger small"></span>
+                            </div>
+                        </div>
+                    </fieldset>
                     <button type="submit" class="btn btn-primary">Save</button>
                     <a asp-page="Index" class="btn btn-link">Cancel</a>
                 </form>
