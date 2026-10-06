@@ -17,12 +17,6 @@ public interface IDashboardQueries
     /// <returns>Matching lines.</returns>
     Task<IReadOnlyList<SalesLine>> GetSalesLinesAsync(string marketplaceId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken);
 
-    /// <summary>Every SKU's current inventory position.</summary>
-    /// <param name="marketplaceId">Marketplace to report on.</param>
-    /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>All positions.</returns>
-    Task<IReadOnlyList<InventoryPosition>> GetInventoryPositionsAsync(string marketplaceId, CancellationToken cancellationToken);
-
     /// <summary>The settlement with the latest period end.</summary>
     /// <param name="marketplaceId">Marketplace to report on.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

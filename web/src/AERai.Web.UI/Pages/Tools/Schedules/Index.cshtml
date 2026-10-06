@@ -371,7 +371,7 @@
                                             <partial name="_Icon" model='"more"' />
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end">
-                                            @if (s.ReportType != AmazonReportType.FbaInventory)
+                                            @if (!s.ReportType.IsSnapshot())
                                             {
                                                 <li>
                                                     <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#backfill-@s.Id" disabled="@(!canRun)">
@@ -488,7 +488,7 @@
             </div>
         </div>
 
-        if (s.ReportType != AmazonReportType.FbaInventory)
+        if (!s.ReportType.IsSnapshot())
         {
             <div class="modal fade" id="backfill-@s.Id" tabindex="-1" aria-labelledby="backfill-title-@s.Id" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered">

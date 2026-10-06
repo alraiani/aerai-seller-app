@@ -472,3 +472,8 @@ th .tip { text-transform: none; }
     /* Two KPI tiles share a phone-width row; longer symbols such as "CA$" must still fit on one line. */
     .kpi-value { font-size: 1.4rem; }
 }
+
+/* ---------- Inventory table ---------- */
+.inventory-table th.th-group { text-align: center; border-bottom: 1px solid var(--border); }
+.inventory-table .col-divider { border-left: 1px solid var(--border); }
+.inventory-table td, .inventory-table th { white-space: nowrap; }

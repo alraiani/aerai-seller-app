@@ -172,9 +172,9 @@ public sealed partial class SyncScheduleService(
             return Result.Failure("Schedule not found.");
         }
 
-        if (schedule.ReportType == AmazonReportType.FbaInventory)
+        if (schedule.ReportType.IsSnapshot())
         {
-            return Result.Failure("FBA inventory is a current snapshot, so there is no history to backfill.");
+            return Result.Failure("Inventory reports are a current snapshot, so there is no history to backfill.");
         }
 
         var clamped = window.End > now ? window with { End = now } : window;

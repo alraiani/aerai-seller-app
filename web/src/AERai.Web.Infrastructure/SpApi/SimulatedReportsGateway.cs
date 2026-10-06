@@ -57,6 +57,7 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
         {
             AmazonReportType.Orders => () => OrdersReport(marketplace, reportId, start, end),
             AmazonReportType.FbaInventory => () => InventoryReport(marketplace, reportId),
+            AmazonReportType.FbaReservedInventory => () => ReservedInventoryReport(reportId),
             _ => throw new InvalidOperationException($"{reportType} reports cannot be requested; they are listed."),
         };
 
@@ -154,6 +155,23 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
             int working = random.Next(0, 3) == 0 ? random.Next(10, 100) : 0, shipped = random.Next(0, 60), receiving = random.Next(0, 20);
             builder.Append(CultureInfo.InvariantCulture,
                 $"{sku}\tX00{asin[4..]}\t{asin}\t{title}\tNew\t{price * priceFactor:0.00}\t{fulfillable}\t{unsellable}\t{reserved}\t{fulfillable + unsellable + reserved}\t{working}\t{shipped}\t{receiving}\n");
+        }
+#pragma warning restore CA5394
+
+        return builder.ToString();
+    }
+
+    private static string ReservedInventoryReport(string reportId)
+    {
+        var random = Seeded(reportId);
+        var builder = new StringBuilder("sku\tfnsku\tasin\tproduct-name\treserved_qty\treserved_customerorders\treserved_fc-transfers\treserved_fc-processing\n");
+
+#pragma warning disable CA5394 // Simulated data; randomness is not security-sensitive.
+        foreach (var (sku, asin, title, _) in Catalog)
+        {
+            int customerOrders = random.Next(0, 8), transfers = random.Next(0, 3) == 0 ? random.Next(5, 40) : 0, processing = random.Next(0, 4);
+            builder.Append(CultureInfo.InvariantCulture,
+                $"{sku}\tX00{asin[4..]}\t{asin}\t{title}\t{customerOrders + transfers + processing}\t{customerOrders}\t{transfers}\t{processing}\n");
         }
 #pragma warning restore CA5394
 

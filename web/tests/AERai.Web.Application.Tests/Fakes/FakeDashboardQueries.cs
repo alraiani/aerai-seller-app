@@ -9,8 +9,6 @@ internal sealed class FakeDashboardQueries : IDashboardQueries
 {
     public List<SalesLine> Lines { get; } = [];
 
-    public List<InventoryPosition> Positions { get; } = [];
-
     public SettlementSummary? LatestSettlement { get; set; }
 
     public List<string> MissingCost { get; } = [];
@@ -36,9 +34,6 @@ internal sealed class FakeDashboardQueries : IDashboardQueries
         return Task.FromResult<IReadOnlyList<SalesLine>>(
             Lines.Where(l => l.MarketplaceId == marketplaceId && l.PurchaseDate >= from && l.PurchaseDate < to).ToList());
     }
-
-    public Task<IReadOnlyList<InventoryPosition>> GetInventoryPositionsAsync(string marketplaceId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<InventoryPosition>>(Positions);
 
     public Task<SettlementSummary?> GetLatestSettlementAsync(string marketplaceId, CancellationToken cancellationToken) =>
         Task.FromResult(LatestSettlement);

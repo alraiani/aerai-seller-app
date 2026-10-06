@@ -1,5 +1,7 @@
 using System.Globalization;
 using AERai.Web.Application.Abstractions;
+using AERai.Web.Application.Common;
+using AERai.Web.Application.Inventory;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.Domain.Reporting;
@@ -18,11 +20,12 @@ namespace AERai.Web.Application.Dashboard;
 /// compared with a full one.
 /// </remarks>
 /// <param name="queries">Dashboard read queries.</param>
+/// <param name="inventory">Stock, velocity, and days of inventory (shared with the Inventory page).</param>
 /// <param name="options">Dashboard settings.</param>
 /// <param name="clock">Clock that defines "now".</param>
-public sealed class DashboardService(IDashboardQueries queries, IOptions<DashboardOptions> options, TimeProvider clock) : IDashboardService
+public sealed class DashboardService(IDashboardQueries queries, IInventoryService inventory, IOptions<DashboardOptions> options, TimeProvider clock) : IDashboardService
 {
-    /// <summary>Velocity window used by the inventory view; "selling" SKUs sold within it.</summary>
+    /// <summary>Window for "selling" SKUs and for SKUs missing a cost.</summary>
     private const int SellingWindowDays = 30;
 
     /// <summary>How many SKUs to name in an attention item before summarizing the rest.</summary>
@@ -43,15 +46,15 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
         // Current window: local midnight N-1 days ago → now. Comparison: the same span shifted back N days.
         var today = DateOnly.FromDateTime(localNow.DateTime);
         var firstDay = today.AddDays(-(days - 1));
-        var start = LocalInstant(firstDay.ToDateTime(TimeOnly.MinValue), zone);
-        var previousStart = LocalInstant(firstDay.AddDays(-days).ToDateTime(TimeOnly.MinValue), zone);
-        var previousEnd = LocalInstant(localNow.DateTime.AddDays(-days), zone);
+        var start = LocalTime.ToInstant(firstDay.ToDateTime(TimeOnly.MinValue), zone);
+        var previousStart = LocalTime.ToInstant(firstDay.AddDays(-days).ToDateTime(TimeOnly.MinValue), zone);
+        var previousEnd = LocalTime.ToInstant(localNow.DateTime.AddDays(-days), zone);
 
         var lines = await queries.GetSalesLinesAsync(id, previousStart, now, cancellationToken).ConfigureAwait(false);
         var current = lines.Where(l => l.PurchaseDate >= start).ToList();
         var previous = lines.Where(l => l.PurchaseDate < previousEnd).ToList();
 
-        var positions = await queries.GetInventoryPositionsAsync(id, cancellationToken).ConfigureAwait(false);
+        var items = await inventory.GetItemsAsync(marketplace, cancellationToken).ConfigureAwait(false);
         var settlement = await queries.GetLatestSettlementAsync(id, cancellationToken).ConfigureAwait(false);
         var missingCost = await queries.GetSoldSkusMissingCostAsync(id, now.AddDays(-SellingWindowDays), cancellationToken).ConfigureAwait(false);
         var awaitingPromotion = await queries.CountBatchesAwaitingPromotionAsync(id, cancellationToken).ConfigureAwait(false);
@@ -70,7 +73,7 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
         var revenue = new Metric(Revenue(current), Revenue(previous));
         var orders = new Metric(OrderCount(current), OrderCount(previous));
         var granularity = period == DashboardPeriod.Today ? ChartGranularity.Hour : ChartGranularity.Day;
-        var inventory = Summarize(positions, settings.AtRiskDaysOfSupply);
+        var stock = Summarize(items, settings.AtRiskDaysOfSupply);
 
         return new DashboardSnapshot(
             Period: period,
@@ -88,8 +91,8 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
             Granularity: granularity,
             Chart: BuildChart(current, granularity, firstDay, days, localNow, zone),
             TopProducts: TopProducts(current, previous, settings.TopProductCount),
-            Attention: BuildAttention(positions, inventory, sync, syncPaused, missingCost, awaitingPromotion, coverageStart, start, comparable, now, settings, zone),
-            Inventory: inventory,
+            Attention: BuildAttention(items, stock, sync, syncPaused, missingCost, awaitingPromotion, coverageStart, start, comparable, now, settings, zone),
+            Inventory: stock,
             LatestPayout: settlement is null
                 ? null
                 : new PayoutGlance(settlement.SettlementId, settlement.PeriodStart, settlement.PeriodEnd, settlement.Net, settlement.Sales, settlement.Fees, settlement.Refunds, marketplace.Currency),
@@ -114,7 +117,7 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
             var byHour = local.ToLookup(x => x.Local.Hour);
             return Enumerable.Range(0, 24)
                 .Select(hour => Point(
-                    LocalInstant(firstDay.ToDateTime(new TimeOnly(hour, 0)), zone, toLocal: true),
+                    LocalTime.ToInstant(firstDay.ToDateTime(new TimeOnly(hour, 0)), zone, toLocal: true),
                     byHour[hour].Select(x => x.Line),
                     isFuture: hour > localNow.Hour))
                 .ToList();
@@ -123,7 +126,7 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
         var byDay = local.ToLookup(x => DateOnly.FromDateTime(x.Local.DateTime));
         return Enumerable.Range(0, days)
             .Select(offset => firstDay.AddDays(offset))
-            .Select(day => Point(LocalInstant(day.ToDateTime(TimeOnly.MinValue), zone, toLocal: true), byDay[day].Select(x => x.Line), isFuture: false))
+            .Select(day => Point(LocalTime.ToInstant(day.ToDateTime(TimeOnly.MinValue), zone, toLocal: true), byDay[day].Select(x => x.Line), isFuture: false))
             .ToList();
 
         static ChartPoint Point(DateTimeOffset start, IEnumerable<SalesLine> bucket, bool isFuture)
@@ -158,26 +161,26 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
             .ToList();
     }
 
-    private static InventoryGlance Summarize(IReadOnlyList<InventoryPosition> positions, decimal lowStockDays) => new(
-        SkusTotal: positions.Count,
-        SkusInStock: positions.Count(p => p.Available > 0),
-        AvailableUnits: positions.Sum(p => p.Available),
-        InboundUnits: positions.Sum(p => p.Inbound),
-        OutOfStockSelling: positions.Count(IsOutOfStockSelling),
-        LowStock: positions.Count(p => IsLowStock(p, lowStockDays)),
-        SnapshotDate: positions.Count == 0 ? null : positions.Max(p => p.SnapshotDate));
+    private static InventoryGlance Summarize(IReadOnlyList<InventoryItem> items, decimal lowStockDays) => new(
+        SkusTotal: items.Count,
+        SkusInStock: items.Count(i => i.Position.Available > 0),
+        AvailableUnits: items.Sum(i => i.Position.Available),
+        InboundUnits: items.Sum(i => i.Position.Inbound),
+        OutOfStockSelling: items.Count(IsOutOfStockSelling),
+        LowStock: items.Count(i => IsLowStock(i, lowStockDays)),
+        SnapshotDate: items.Count == 0 ? null : items.Max(i => i.Position.SnapshotDate));
 
-    private static bool IsOutOfStockSelling(InventoryPosition p) => p.Available == 0 && p.UnitsSold30d > 0;
+    private static bool IsOutOfStockSelling(InventoryItem i) => i.Position.Available == 0 && i.IsSelling;
 
-    private static bool IsLowStock(InventoryPosition p, decimal lowStockDays) =>
-        p.Available > 0 && p.DaysOfSupply is { } days && days <= lowStockDays;
+    private static bool IsLowStock(InventoryItem i, decimal lowStockDays) =>
+        i.Position.Available > 0 && i.DaysOfInventory is { } days && days <= lowStockDays;
 
     /// <summary>
     /// Builds the "needs attention" list, most urgent first. Each rule produces at most one item so
     /// the list stays short enough to read at a glance.
     /// </summary>
     private static List<AttentionItem> BuildAttention(
-        IReadOnlyList<InventoryPosition> positions,
+        IReadOnlyList<InventoryItem> stockItems,
         InventoryGlance inventory,
         IReadOnlyList<SyncGlance> sync,
         bool syncPaused,
@@ -200,7 +203,7 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
 
         if (inventory.OutOfStockSelling > 0)
         {
-            var skus = positions.Where(IsOutOfStockSelling).OrderByDescending(p => p.UnitsSold30d).Select(p => p.Sku).ToList();
+            var skus = stockItems.Where(IsOutOfStockSelling).OrderByDescending(i => i.UnitsSold30d).Select(i => i.Sku).ToList();
             items.Add(new AttentionItem(AttentionSeverity.Critical, Plural(inventory.OutOfStockSelling, "SKU") + " out of stock",
                 "Selling recently but nothing available: " + NameList(skus), AttentionTarget.Inventory));
         }
@@ -225,7 +228,7 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
 
         if (inventory.LowStock > 0)
         {
-            var skus = positions.Where(p => IsLowStock(p, settings.AtRiskDaysOfSupply)).OrderBy(p => p.DaysOfSupply).Select(p => p.Sku).ToList();
+            var skus = stockItems.Where(i => IsLowStock(i, settings.AtRiskDaysOfSupply)).OrderBy(i => i.DaysOfInventory).Select(i => i.Sku).ToList();
             items.Add(new AttentionItem(AttentionSeverity.Warning,
                 $"{Plural(inventory.LowStock, "SKU")} under {settings.AtRiskDaysOfSupply:0} days of stock", "Reorder soon: " + NameList(skus), AttentionTarget.Inventory));
         }
@@ -261,6 +264,7 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
     private static string Label(AmazonReportType type) => type switch
     {
         AmazonReportType.FbaInventory => "FBA inventory",
+        AmazonReportType.FbaReservedInventory => "FBA reserved inventory",
         _ => type.ToString(),
     };
 
@@ -273,24 +277,4 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
             : $"{string.Join(", ", skus.Take(NamedSkuLimit))} +{skus.Count - NamedSkuLimit} more";
 
     private static string Truncate(string value, int max) => value.Length <= max ? value : value[..(max - 1)] + "…";
-
-    /// <summary>
-    /// Converts a local wall-clock time to an instant. Times that fall in a daylight-saving gap move
-    /// forward an hour; repeated (fall-back) times take their first occurrence.
-    /// </summary>
-    /// <param name="localWallTime">Local date and time.</param>
-    /// <param name="zone">Business time zone.</param>
-    /// <param name="toLocal">Return the instant expressed with the local offset (for display).</param>
-    private static DateTimeOffset LocalInstant(DateTime localWallTime, TimeZoneInfo zone, bool toLocal = false)
-    {
-        var wall = DateTime.SpecifyKind(localWallTime, DateTimeKind.Unspecified);
-        if (zone.IsInvalidTime(wall))
-        {
-            wall = wall.AddHours(1);
-        }
-
-        var offset = zone.IsAmbiguousTime(wall) ? zone.GetAmbiguousTimeOffsets(wall).Max() : zone.GetUtcOffset(wall);
-        var instant = new DateTimeOffset(wall, offset);
-        return toLocal ? instant : instant.ToUniversalTime();
-    }
 }

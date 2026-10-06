@@ -20,4 +20,10 @@ public enum ImportSource
     /// SKU with a column per quantity state. Promotion unpivots it into per-state snapshots.
     /// </summary>
     FbaInventory = 4,
+
+    /// <summary>
+    /// Amazon's reserved inventory report (<c>GET_RESERVED_INVENTORY_DATA</c>): one row per SKU that
+    /// splits reserved stock into customer orders, FC transfers, and FC processing.
+    /// </summary>
+    FbaReservedInventory = 5,
 }

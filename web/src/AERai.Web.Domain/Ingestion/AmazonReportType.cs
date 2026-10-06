@@ -19,4 +19,10 @@ public enum AmazonReportType
     /// be requested), so runs list newly available reports and ingest any not seen before.
     /// </summary>
     Settlements = 3,
+
+    /// <summary>
+    /// <c>GET_RESERVED_INVENTORY_DATA</c>: requested on demand; a point-in-time snapshot of why stock
+    /// is reserved (customer orders, FC transfers, FC processing).
+    /// </summary>
+    FbaReservedInventory = 4,
 }

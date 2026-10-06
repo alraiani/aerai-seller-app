@@ -151,7 +151,12 @@ public static class DashboardFormat
     /// <summary>Human label for a report type.</summary>
     /// <param name="type">Report type.</param>
     /// <returns>e.g. "FBA inventory".</returns>
-    public static string ReportLabel(AmazonReportType type) => type == AmazonReportType.FbaInventory ? "FBA inventory" : type.ToString();
+    public static string ReportLabel(AmazonReportType type) => type switch
+    {
+        AmazonReportType.FbaInventory => "FBA inventory",
+        AmazonReportType.FbaReservedInventory => "FBA reserved inventory",
+        _ => type.ToString(),
+    };
 
     /// <summary>Razor Page path for an attention target.</summary>
     /// <param name="target">Target.</param>

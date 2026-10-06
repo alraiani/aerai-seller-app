@@ -78,20 +78,23 @@ public static partial class DatabaseInitializer
     }
 
     /// <summary>
-    /// Creates one schedule per report type for each active marketplace that has never had any, so
-    /// the Schedules page starts populated (including for a marketplace activated later). They are
-    /// created <b>disabled</b>: nothing calls Amazon until an operator turns a schedule on.
+    /// Creates the default schedule for each report type an active marketplace has never had a
+    /// schedule for, so the Schedules page starts populated (including for a marketplace activated
+    /// later, or a report type added later). They are created <b>disabled</b>: nothing calls Amazon
+    /// until an operator turns a schedule on.
     /// </summary>
     private static async Task SeedDefaultSchedulesAsync(AppDbContext db, TimeProvider clock, CancellationToken cancellationToken)
     {
-        // Include deleted schedules: an operator who deleted every default must not get them back.
-        var seeded = await db.SyncSchedules.IgnoreQueryFilters()
-            .Select(s => s.MarketplaceId)
-            .Distinct()
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        // Include deleted schedules: an operator who deleted a default must not get it back.
+        var seeded = (await db.SyncSchedules.IgnoreQueryFilters()
+                .Select(s => new { s.MarketplaceId, s.ReportType })
+                .Distinct()
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Select(s => (s.MarketplaceId, s.ReportType))
+            .ToHashSet();
         var marketplaces = await db.Marketplaces
-            .Where(m => m.IsActive && !seeded.Contains(m.MarketplaceId))
+            .Where(m => m.IsActive)
             .OrderBy(m => m.SortOrder)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -99,10 +102,15 @@ public static partial class DatabaseInitializer
         var now = clock.GetUtcNow();
         foreach (var m in marketplaces)
         {
-            db.SyncSchedules.AddRange(
+            SyncSchedule[] defaults =
+            [
                 DefaultSchedule(m, "Orders — hourly", AmazonReportType.Orders, ScheduleFrequency.Interval, 60, null, 7, now),
                 DefaultSchedule(m, "FBA inventory — daily 6:00 AM", AmazonReportType.FbaInventory, ScheduleFrequency.Daily, null, new TimeOnly(6, 0), 1, now),
-                DefaultSchedule(m, "Settlements — daily 7:00 AM", AmazonReportType.Settlements, ScheduleFrequency.Daily, null, new TimeOnly(7, 0), 30, now));
+                // Just after the main inventory snapshot, so both land on the same snapshot date.
+                DefaultSchedule(m, "FBA reserved inventory — daily 6:15 AM", AmazonReportType.FbaReservedInventory, ScheduleFrequency.Daily, null, new TimeOnly(6, 15), 1, now),
+                DefaultSchedule(m, "Settlements — daily 7:00 AM", AmazonReportType.Settlements, ScheduleFrequency.Daily, null, new TimeOnly(7, 0), 30, now),
+            ];
+            db.SyncSchedules.AddRange(defaults.Where(d => !seeded.Contains((d.MarketplaceId, d.ReportType))));
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

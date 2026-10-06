@@ -34,7 +34,7 @@ public sealed class ReportIngestionServiceTests
     private ReportIngestionService CreateService()
     {
         var staging = new StagingImportService(
-            [new OrderLineMapper(), new SettlementLineMapper(), new FbaInventoryRowMapper()],
+            [new OrderLineMapper(), new SettlementLineMapper(), new FbaInventoryRowMapper(), new FbaReservedInventoryRowMapper()],
             _rawFiles, _staged, new FakeImportBatchQueries(), Options.Create(new ImportOptions()), _clock,
             NullLogger<StagingImportService>.Instance);
 
