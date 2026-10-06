@@ -16,7 +16,7 @@ Requires `gh` with the `project` scope (`gh auth status` lists it; if missing, a
 | Repo | `alraiani/aeria-seller-app` |
 | Project | owner `alraiani`, number `3`, id `PVT_kwHOALvtt84Bleat` |
 | Status field | `PVTSSF_lAHOALvtt84BleatzhkLK1Q` |
-| Status options | Todo `f75ad846` · In Progress `47fc9ee4` · Done `98236657` |
+| Status options | Todo `f75ad846` · In Progress `47fc9ee4` · Waiting on Review `7a563279` · Done `98236657` |
 
 If a command fails with an unknown id (the board was rebuilt or a column added), refresh them:
 
@@ -72,6 +72,7 @@ gh project item-edit --id "$ITEM" --project-id PVT_kwHOALvtt84Bleat \
 ```
 
 - **In Progress** when work actually starts (post the Start comment in the same step).
+- **Waiting on Review** once the work is finished and its PR is open, waiting to be reviewed and merged.
 - **Done** only after the PR is merged, or when the user explicitly says so. Pair it with the Done comment.
 - Never move items you aren't working on, and never move an item backwards without telling the user.
 - An issue not on the board: `gh project item-add 3 --owner alraiani --url <issue url>`.
