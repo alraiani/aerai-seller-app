@@ -1,0 +1,17 @@
+@using AERai.Web.Application.Alerts
+@using AERai.Web.Application.Marketplaces
+@inject ICurrentMarketplace CurrentMarketplace
+@inject IStockAlertService Alerts
+@{
+    var marketplace = (await CurrentMarketplace.GetAsync(Context.RequestAborted)).Current;
+    var unread = await Alerts.CountUnreadAsync(marketplace.MarketplaceId, User.Identity!.Name!, Context.RequestAborted);
+    var label = unread == 0 ? $"No new stock alerts in {marketplace.Name}" : $"{unread} new stock alert{(unread == 1 ? "" : "s")} in {marketplace.Name}";
+}
+@* Rendered on the server for the current marketplace, so it needs no script (CSP). *@
+<a asp-page="/Notifications/Index" class="notify-bell @(unread > 0 ? "has-unread" : null)" aria-label="@label" title="@label">
+    <partial name="_Icon" model='"bell"' />
+    @if (unread > 0)
+    {
+        <span class="notify-count">@(unread > 99 ? "99+" : unread.ToString())</span>
+    }
+</a>

@@ -35,6 +35,10 @@ public sealed class InventoryOptions
     [Range(0, 90)]
     public int AlertLeadDays { get; set; } = 7;
 
+    /// <summary>Minutes between background re-evaluations of stock alerts.</summary>
+    [Range(1, 1440)]
+    public int AlertRefreshMinutes { get; set; } = 15;
+
     /// <summary>The defaults as <see cref="LeadTimes"/>.</summary>
     /// <returns>The default timings.</returns>
     public LeadTimes Defaults() => new(SupplierLeadTimeDays, PrepTimeDays, TransitDays, SafetyStockDays, TargetStockDays, IsCustom: false);

@@ -1,3 +1,4 @@
+using AERai.Web.Application.Alerts;
 using AERai.Web.Application.Dashboard;
 using AERai.Web.Application.Imports;
 using AERai.Web.Application.Inventory;
@@ -56,6 +57,7 @@ public static class DependencyInjection
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<IInventoryItemService, InventoryItemService>();
+        services.AddScoped<IStockAlertService, StockAlertService>();
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<ICurrentMarketplace, CurrentMarketplace>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
