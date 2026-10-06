@@ -477,3 +477,8 @@ th .tip { text-transform: none; }
 .inventory-table th.th-group { text-align: center; border-bottom: 1px solid var(--border); }
 .inventory-table .col-divider { border-left: 1px solid var(--border); }
 .inventory-table td, .inventory-table th { white-space: nowrap; }
+.inventory-table .thumb-cell { width: 3rem; padding-right: 0; }
+.product-thumb { display: block; width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--surface-2); border: 1px solid var(--border); }
+.product-thumb-lg { width: 120px; height: 120px; }
+.product-thumb-empty { background: var(--surface-2); }
+.home-stock-col { width: 9rem; }

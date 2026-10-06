@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<IStagingImportService, StagingImportService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IInventoryService, InventoryService>();
+        services.AddScoped<IInventoryItemService, InventoryItemService>();
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<ICurrentMarketplace, CurrentMarketplace>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();

@@ -42,6 +42,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Per-marketplace product costs.</summary>
     public DbSet<ProductCost> ProductCosts => Set<ProductCost>();
 
+    /// <summary>Product families (user-defined groups).</summary>
+    public DbSet<ProductFamily> ProductFamilies => Set<ProductFamily>();
+
+    /// <summary>Stock held outside Amazon, per marketplace.</summary>
+    public DbSet<HomeStock> HomeStocks => Set<HomeStock>();
+
     /// <summary>Curated orders.</summary>
     public DbSet<Order> Orders => Set<Order>();
 

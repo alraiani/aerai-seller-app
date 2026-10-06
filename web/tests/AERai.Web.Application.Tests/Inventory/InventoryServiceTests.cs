@@ -120,7 +120,7 @@ public sealed class InventoryServiceTests
         Stock("MAT-BLU", available: 20, p => p.Asin = "B0MAT2");
         Stock("STRAP", available: 99, p => p.Asin = "B0STR1");
 
-        var overview = await CreateService().GetOverviewAsync(Us, new PageRequest(1, 1, "b0mat"), CancellationToken.None);
+        var overview = await CreateService().GetOverviewAsync(Us, new PageRequest(1, 1, "b0mat"), null, InventorySort.Urgency, CancellationToken.None);
 
         Assert.Equal(2, overview.Items.TotalCount);
         Assert.Single(overview.Items.Items);

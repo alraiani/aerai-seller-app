@@ -22,6 +22,11 @@ public sealed class RawStorageOptions
     [RegularExpression("^[a-z0-9](?!.*--)[a-z0-9-]{1,61}[a-z0-9]$", ErrorMessage = "Must be a valid blob container name.")]
     public string ContainerName { get; set; } = "raw";
 
+    /// <summary>Blob container holding product pictures (replaceable, unlike raw files).</summary>
+    [Required]
+    [RegularExpression("^[a-z0-9](?!.*--)[a-z0-9-]{1,61}[a-z0-9]$", ErrorMessage = "Must be a valid blob container name.")]
+    public string ProductImageContainerName { get; set; } = "product-images";
+
     /// <summary>Blob service endpoint, e.g. <c>https://staeraisellerprod.blob.core.windows.net</c> (Azure only).</summary>
     public Uri? ServiceUri { get; set; }
 }
