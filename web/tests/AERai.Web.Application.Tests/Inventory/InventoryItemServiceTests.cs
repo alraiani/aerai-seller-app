@@ -46,7 +46,7 @@ public sealed class InventoryItemServiceTests
     }
 
     [Fact]
-    public async Task UpdateAsync_BlankFamily_ClearsAndRemovesUnusedFamily()
+    public async Task UpdateAsync_BlankFamily_ClearsTheSkuButKeepsTheFamily()
     {
         var service = CreateService();
         await service.UpdateAsync("MAT-BLK", Us, new InventoryItemUpdate("Mats", 0, LeadTimeSettings.None), User, CancellationToken.None);
@@ -55,7 +55,7 @@ public sealed class InventoryItemServiceTests
 
         Assert.True(result.IsSuccess);
         Assert.Null(_repository.Products["MAT-BLK"].FamilyId);
-        Assert.Empty(_repository.Families);
+        Assert.Single(_repository.Families); // families are managed explicitly, not deleted when empty
     }
 
     [Theory]

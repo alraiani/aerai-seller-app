@@ -17,4 +17,7 @@ public enum InventorySort
 
     /// <summary>Most sellable units first.</summary>
     Available = 4,
+
+    /// <summary>Best sellers over the last 90 days first.</summary>
+    Sold90d = 5,
 }

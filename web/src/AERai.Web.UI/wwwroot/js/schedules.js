@@ -123,52 +123,7 @@
         update();
     }
 
-    // ---------- Bulk selection ----------
-    function setupBulk(bar) {
-        var all = document.querySelector("[data-select-all]");
-        var rows = document.querySelectorAll("[data-select-row]");
-        var count = bar.querySelector("[data-bulk-count]");
-        var modalCount = document.querySelector("[data-bulk-count-modal]");
-        var buttons = bar.querySelectorAll("[data-bulk-button]");
-        if (rows.length === 0) {
-            bar.hidden = true;
-            if (all) { all.disabled = true; }
-            return;
-        }
-
-        function update() {
-            var selected = 0;
-            for (var i = 0; i < rows.length; i++) {
-                if (rows[i].checked) { selected++; }
-                rows[i].closest("tr").classList.toggle("row-selected", rows[i].checked);
-            }
-
-            var noun = selected === 1 ? "schedule" : "schedules";
-            count.textContent = selected === 0 ? "Tick schedules to act on several at once." : selected + " " + noun + " selected";
-            if (modalCount) { modalCount.textContent = "The " + selected + " selected " + noun; }
-            bar.classList.toggle("has-selection", selected > 0);
-            for (var j = 0; j < buttons.length; j++) { buttons[j].disabled = selected === 0; }
-            if (all) {
-                all.checked = selected === rows.length;
-                all.indeterminate = selected > 0 && selected < rows.length;
-            }
-        }
-
-        if (all) {
-            all.addEventListener("change", function () {
-                for (var i = 0; i < rows.length; i++) { rows[i].checked = all.checked; }
-                update();
-            });
-        }
-
-        for (var i = 0; i < rows.length; i++) { rows[i].addEventListener("change", update); }
-        update();
-    }
-
     document.addEventListener("DOMContentLoaded", function () {
-        var bulk = document.querySelector("[data-bulk-bar]");
-        if (bulk) { setupBulk(bulk); }
-
         var chip = document.querySelector("[data-auto-refresh]");
         if (chip) { setupAutoRefresh(chip); }
 

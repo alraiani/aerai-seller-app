@@ -59,12 +59,6 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
             await ApplyHomeStockAsync(marketplaceId, [new HomeStockEntry(sku, homeStock)], updatedAt, updatedBy, cancellationToken).ConfigureAwait(false);
             await SetLeadTimesAsync(sku, marketplaceId, leadTimes, updatedAt, updatedBy, cancellationToken).ConfigureAwait(false);
 
-            // A family is only a label; once nothing uses it, it would just clutter the picker.
-            await dbContext.ProductFamilies
-                .Where(f => !dbContext.Products.Any(p => p.FamilyId == f.Id))
-                .ExecuteDeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
-
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }).ConfigureAwait(false);

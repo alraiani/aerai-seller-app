@@ -20,7 +20,7 @@ public interface IInventoryItemRepository
 
     /// <summary>
     /// Saves a SKU's family (created on first use; null clears it), its home stock, and its lead-time
-    /// overrides in one transaction, then deletes families nothing uses any more.
+    /// overrides in one transaction. Families are kept even when empty; they are managed explicitly.
     /// </summary>
     /// <param name="sku">Seller SKU.</param>
     /// <param name="marketplaceId">Marketplace for home stock and lead times.</param>

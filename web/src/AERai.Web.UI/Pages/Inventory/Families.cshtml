@@ -1,0 +1,15 @@
+@page
+@model AERai.Web.UI.Pages.Inventory.FamiliesModel
+@{
+    ViewData["Title"] = "Families";
+}
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">Inventory</a>
+    <span aria-hidden="true">/</span>
+    <span>Families</span>
+</nav>
+<div class="card col-xl-7">
+    <div class="card-body">
+        <partial name="_FamilyManager" model="new FamilyManagerModel(Model.Families, Model.Back ?? string.Empty)" />
+    </div>
+</div>

@@ -64,7 +64,6 @@ internal sealed class FakeInventoryItemRepository : IInventoryItemRepository
             LeadTimes[(marketplaceId, sku)] = leadTimes;
         }
 
-        Families.RemoveAll(f => !Products.Values.Any(p => p.FamilyId == f.Id));
         return Task.FromResult(true);
     }
 

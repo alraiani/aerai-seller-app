@@ -54,7 +54,7 @@ public sealed class InventoryItemTests(SqlDatabaseFixture fixture) : IClassFixtu
     }
 
     [SqlFact]
-    public async Task SaveItemAsync_ReusesFamilyCaseInsensitivelyAndDropsUnusedOnes()
+    public async Task SaveItemAsync_ReusesFamilyCaseInsensitivelyAndKeepsEmptyOnes()
     {
         await AddProductAsync("T-FAM-1");
         await AddProductAsync("T-FAM-2");
@@ -69,7 +69,7 @@ public sealed class InventoryItemTests(SqlDatabaseFixture fixture) : IClassFixtu
 
         var names = (await repository.ListFamiliesAsync(CancellationToken.None)).Select(f => f.Name).ToList();
         Assert.Single(names, n => n.Equals("Shared family", StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain("Orphan family", names);
+        Assert.Contains("Orphan family", names); // emptied, but kept until someone deletes it
         Assert.Equal("Shared family", (await repository.GetAsync("T-FAM-1", MarketplaceIds.UnitedStates, CancellationToken.None))!.Family);
     }
 

@@ -464,7 +464,7 @@ th .tip { text-transform: none; }
 .bulk-bar.has-selection .bulk-count { color: var(--brand); font-weight: 600; }
 .select-col { width: 2.25rem; padding-right: 0 !important; }
 .select-col .form-check-input { margin: 0; cursor: pointer; }
-.schedule-table tbody tr.row-selected { background: var(--brand-soft); }
+.schedule-table tbody tr.row-selected, .data-table tbody tr.row-selected { background: var(--brand-soft); }
 /* The On switch and the row's buttons share the last column. */
 .on-cell { display: flex; align-items: center; gap: 0.75rem; }
 
@@ -502,6 +502,24 @@ th .tip { text-transform: none; }
 .cover-bad { fill: var(--negative); }
 .next-step { line-height: 1.35; cursor: help; }
 .list-count { flex-wrap: wrap; column-gap: 0.35rem; }
+.bulk-bar-row { flex-wrap: wrap; margin: 0.5rem 0.75rem; }
+.bulk-input { width: 13rem; max-width: 100%; background-color: var(--surface); }
+.inventory-table .select-col { width: 2.5rem; position: sticky; left: 0; z-index: 1; background: var(--surface); }
+.inventory-table thead .select-col { background: var(--surface-2); z-index: 2; }
+.inventory-table.has-select .product-col { left: 2.5rem; }
+.inventory-table tbody tr:hover .select-col { background: var(--surface-2); }
+/* Pinned cells need an opaque background; layering the translucent highlight over the surface
+   colour matches the rest of the selected row. */
+.inventory-table tbody tr.row-selected .select-col,
+.inventory-table tbody tr.row-selected .product-col { background: linear-gradient(var(--brand-soft), var(--brand-soft)), var(--surface); }
+.family-create { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.family-list { list-style: none; margin: 0 0 0.75rem; padding: 0; border: 1px solid var(--border); border-radius: 0.6rem; }
+.family-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.6rem; border-top: 1px solid var(--border); }
+.family-row:first-child { border-top: 0; }
+.family-row form { margin: 0; }
+.family-rename { display: flex; flex: 1 1 auto; gap: 0.35rem; min-width: 0; }
+.family-count { flex: 0 0 auto; min-width: 4.5rem; text-align: right; font-size: 0.8rem; color: var(--muted); text-decoration: none; }
+.family-count:hover { color: var(--brand); text-decoration: underline; }
 .home-stock-col { width: 9rem; }
 @media (max-width: 767.98px) {
     .inventory-table .product-col { min-width: 11rem; max-width: 13rem; }
