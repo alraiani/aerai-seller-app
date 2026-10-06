@@ -1,5 +1,6 @@
 using AERai.Web.Application.Dashboard;
 using AERai.Web.Application.Imports;
+using AERai.Web.Application.Inventory;
 using AERai.Web.Application.Ingestion;
 using AERai.Web.Application.Marketplaces;
 using AERai.Web.Application.Products;
@@ -43,10 +44,12 @@ public static class DependencyInjection
         services.AddSingleton<IStagingRowMapper, InventoryRowMapper>();
         services.AddSingleton<IStagingRowMapper, SettlementLineMapper>();
         services.AddSingleton<IStagingRowMapper, FbaInventoryRowMapper>();
+        services.AddSingleton<IStagingRowMapper, FbaReservedInventoryRowMapper>();
 
         // Scoped because they depend on scoped Infrastructure services (DbContext-backed).
         services.AddScoped<IStagingImportService, StagingImportService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<ICurrentMarketplace, CurrentMarketplace>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();

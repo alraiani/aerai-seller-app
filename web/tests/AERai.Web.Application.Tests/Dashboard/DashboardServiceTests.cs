@@ -1,4 +1,5 @@
 using AERai.Web.Application.Dashboard;
+using AERai.Web.Application.Inventory;
 using AERai.Web.Application.Tests.Fakes;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
@@ -16,6 +17,7 @@ public sealed class DashboardServiceTests
     private static readonly Marketplace Us = TestMarketplaces.UnitedStates;
 
     private readonly FakeDashboardQueries _queries = new();
+    private readonly FakeInventoryQueries _inventory = new();
     private readonly FakeTimeProvider _clock = new(Now);
 
     public DashboardServiceTests()
@@ -28,7 +30,7 @@ public sealed class DashboardServiceTests
     }
 
     private DashboardService CreateService(DashboardOptions? options = null) =>
-        new(_queries, Options.Create(options ?? new DashboardOptions()), _clock);
+        new(_queries, new InventoryService(_inventory, _clock), Options.Create(options ?? new DashboardOptions()), _clock);
 
     private void Sale(DateTimeOffset at, string sku, decimal price, int quantity = 1, string order = "", string status = "Shipped") =>
         _queries.Lines.Add(new SalesLine
@@ -157,9 +159,13 @@ public sealed class DashboardServiceTests
     public async Task Attention_OrdersCriticalFirstAndNamesSkus()
     {
         _queries.MissingCost.AddRange(["C1", "C2", "C3", "C4"]);
-        _queries.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "OUT", Available = 0, UnitsSold30d = 12 });
-        _queries.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "LOW", Available = 10, UnitsSold30d = 30, DaysOfSupply = 10 });
-        _queries.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "DEAD", Available = 0, UnitsSold30d = 0 });
+        _inventory.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "OUT", Available = 0 });
+        _inventory.Sold.Add(new UnitsSold("OUT", Now.AddDays(-20), 12));
+        // 30 units over 30 days = 1/day, so 10 units last 10 days (under the 21-day threshold).
+        _inventory.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "LOW", Available = 10 });
+        _inventory.Sold.Add(new UnitsSold("LOW", Now.AddDays(-29), 15));
+        _inventory.Sold.Add(new UnitsSold("LOW", Now, 15));
+        _inventory.Positions.Add(new InventoryPosition { MarketplaceId = MarketplaceIds.UnitedStates, Sku = "DEAD", Available = 0 });
         _queries.AwaitingPromotion = 2;
 
         var snapshot = await CreateService().GetSnapshotAsync(Us, DashboardPeriod.Last7Days, CancellationToken.None);

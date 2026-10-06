@@ -1,8 +1,8 @@
 namespace AERai.Web.Domain.Reporting;
 
 /// <summary>
-/// Read model for <c>rpt.vw_InventoryPosition</c>: each SKU's latest snapshot pivoted by state,
-/// combined with trailing 30-day sales velocity.
+/// Read model for <c>rpt.vw_InventoryPosition</c>: each SKU's latest snapshot in one marketplace,
+/// pivoted into one column per inventory state. Sales velocity is computed by the application.
 /// </summary>
 public sealed class InventoryPosition
 {
@@ -11,6 +11,9 @@ public sealed class InventoryPosition
 
     /// <summary>Marketplace the position is for.</summary>
     public required string MarketplaceId { get; set; }
+
+    /// <summary>ASIN, when known.</summary>
+    public string? Asin { get; set; }
 
     /// <summary>Product title, when known.</summary>
     public string? Title { get; set; }
@@ -21,23 +24,56 @@ public sealed class InventoryPosition
     /// <summary>Units sellable now.</summary>
     public int Available { get; set; }
 
-    /// <summary>Units on the way to the fulfillment network.</summary>
-    public int Inbound { get; set; }
+    /// <summary>Units on a shipment plan that has not shipped yet.</summary>
+    public int InboundWorking { get; set; }
 
-    /// <summary>Units reserved.</summary>
-    public int Reserved { get; set; }
+    /// <summary>Units in transit to the fulfillment network.</summary>
+    public int InboundShipped { get; set; }
+
+    /// <summary>Units being received at a fulfillment center.</summary>
+    public int InboundReceiving { get; set; }
+
+    /// <summary>Inbound units whose stage is unknown (sources without a breakdown).</summary>
+    public int InboundUnsplit { get; set; }
+
+    /// <summary>Units reserved for customer orders that have not shipped (already sold).</summary>
+    public int ReservedCustomerOrder { get; set; }
+
+    /// <summary>Units moving between fulfillment centers.</summary>
+    public int ReservedFcTransfer { get; set; }
+
+    /// <summary>Units held for processing at a fulfillment center.</summary>
+    public int ReservedFcProcessing { get; set; }
+
+    /// <summary>Reserved units with no breakdown (no reserved-inventory report for the date).</summary>
+    public int ReservedUnsplit { get; set; }
 
     /// <summary>Units not sellable.</summary>
     public int Unfulfillable { get; set; }
 
-    /// <summary>Units sold over the trailing 30 days (excluding cancelled orders).</summary>
-    public int UnitsSold30d { get; set; }
+    /// <summary>All inbound units, whatever their stage.</summary>
+    public int Inbound => InboundWorking + InboundShipped + InboundReceiving + InboundUnsplit;
 
-    /// <summary>Average units sold per day over the trailing 30 days.</summary>
-    public decimal DailyVelocity { get; set; }
+    /// <summary>All reserved units, whatever the reason.</summary>
+    public int Reserved => ReservedCustomerOrder + ReservedFcTransfer + ReservedFcProcessing + ReservedUnsplit;
+
+    /// <summary>Whether <see cref="Inbound"/> is fully broken down by stage.</summary>
+    public bool HasInboundBreakdown => InboundUnsplit == 0;
+
+    /// <summary>Whether <see cref="Reserved"/> is fully broken down by reason.</summary>
+    public bool HasReservedBreakdown => ReservedUnsplit == 0;
+
+    /// <summary>Every unit Amazon reports for the SKU, in any state.</summary>
+    public int AmazonTotal => Available + Inbound + Reserved + Unfulfillable;
 
     /// <summary>
-    /// (Available + Inbound) ÷ daily velocity; <see langword="null"/> when there were no sales in the window.
+    /// Units that will become (or already are) sellable without action: available, inbound, and
+    /// stock moving or being processed between fulfillment centers.
     /// </summary>
-    public decimal? DaysOfSupply { get; set; }
+    /// <remarks>
+    /// Customer-order reservations are excluded because those units are already sold, and
+    /// unfulfillable units never sell. Unsplit reserved stock is excluded too: without a breakdown
+    /// it may be mostly customer orders, so counting it would overstate cover.
+    /// </remarks>
+    public int SellThroughStock => Available + Inbound + ReservedFcTransfer + ReservedFcProcessing;
 }

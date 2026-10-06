@@ -1,44 +1,106 @@
 @page
+@using System.Globalization
+@using AERai.Web.Application.Inventory
 @model AERai.Web.UI.Pages.Inventory.IndexModel
 @{
     ViewData["Title"] = "Inventory";
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var t = Model.Overview.Totals;
+    var tiles = new (string Label, string Tip, int Value)[]
+    {
+        ("Sellable", "Units available to buy right now.", t.Available),
+        ("Inbound", "Units on shipment plans, in transit, or being received at a fulfillment center.", t.Inbound),
+        ("In warehouse", "Units inside Amazon's fulfillment centers: sellable, reserved, and unfulfillable.", t.InWarehouse),
+        ("Total at Amazon", "Every unit Amazon reports: in the warehouse plus inbound.", t.AmazonTotal),
+    };
 }
-<partial name="_SearchForm" model="Model.Search" />
+<div class="list-toolbar mb-3">
+    <partial name="_SearchForm" model="Model.Search" />
+    <span class="text-muted-token small">
+        @t.SkuCount.ToString("N0", en) SKU@(t.SkuCount == 1 ? "" : "s") in @Model.Marketplace.Name@(t.SnapshotDate is { } d ? $" · snapshot {d.ToString("MMM d", en)}" : "")
+    </span>
+</div>
+
+<div class="row g-3 mb-3">
+    @foreach (var tile in tiles)
+    {
+        <div class="col-6 col-xl-3">
+            <div class="card h-100">
+                <div class="kpi">
+                    <div class="kpi-label">@tile.Label <partial name="_Tip" model="tile.Tip" /></div>
+                    <div class="kpi-value">@tile.Value.ToString("N0", en)</div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
 <div class="card">
     <div class="card-body p-0">
         <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
+        <table class="table table-sm table-hover mb-0 inventory-table">
             <thead>
                 <tr>
-                    <th>SKU</th><th>Title</th><th>Snapshot</th>
-                    <th class="text-end">Available</th><th class="text-end">Inbound</th>
-                    <th class="text-end">Reserved</th><th class="text-end">Unfulfillable</th>
-                    <th class="text-end">Sold (30d)</th><th class="text-end">Per day</th><th class="text-end">Days of supply</th>
+                    <th rowspan="2">Product</th>
+                    <th rowspan="2" class="text-end">Available</th>
+                    <th colspan="3" class="th-group">Inbound <partial name="_Tip" model='"Working: on a shipment plan, not shipped. Shipped: in transit. Receiving: arrived and being checked in."' /></th>
+                    <th colspan="3" class="th-group">Reserved <partial name="_Tip" model='"Customer orders: sold, waiting to ship. FC transfer: moving between fulfillment centers. Processing: held for measuring or investigation."' /></th>
+                    <th rowspan="2" class="text-end">Unfulfillable</th>
+                    <th rowspan="2" class="text-end col-divider">Sold 30d</th>
+                    <th rowspan="2" class="text-end">Sold 90d</th>
+                    <th rowspan="2" class="text-end">Per day <partial name="_Tip" model="@($"Units sold in the last {InventoryService.VelocityWindowDays} days divided by the days covered since the first sale in that window. Blank until there are {InventoryService.MinCoverageDays} days and {InventoryService.MinUnitsSold} units of history.")" /></th>
+                    <th rowspan="2" class="text-end">Days of inventory <partial name="_Tip" model='"How long sellable, inbound, and FC-transfer/processing stock lasts at the current sales rate. Home stock is not counted."' /></th>
+                </tr>
+                <tr>
+                    <th class="text-end">Working</th><th class="text-end">Shipped</th><th class="text-end">Receiving</th>
+                    <th class="text-end">Customer orders</th><th class="text-end">FC transfer</th><th class="text-end">Processing</th>
                 </tr>
             </thead>
             <tbody>
-            @foreach (var p in Model.Positions.Items)
+            @foreach (var item in Model.Overview.Items.Items)
             {
+                var p = item.Position;
                 <tr>
-                    <td>@p.Sku</td>
-                    <td class="cell-truncate" title="@p.Title">@p.Title</td>
-                    <td class="text-nowrap">@p.SnapshotDate.ToString("yyyy-MM-dd")</td>
-                    <td class="text-end">@p.Available.ToString("N0")</td>
-                    <td class="text-end">@p.Inbound.ToString("N0")</td>
-                    <td class="text-end">@p.Reserved.ToString("N0")</td>
-                    <td class="text-end">@p.Unfulfillable.ToString("N0")</td>
-                    <td class="text-end">@p.UnitsSold30d.ToString("N0")</td>
-                    <td class="text-end">@p.DailyVelocity.ToString("0.00")</td>
-                    <td class="text-end">@(p.DaysOfSupply?.ToString("0.0") ?? "—")</td>
+                    <td>
+                        <div class="product-title" title="@p.Title">@(p.Title ?? p.Sku)</div>
+                        <div class="product-sku">@p.Sku@(p.Asin is { } asin ? $" · {asin}" : "")</div>
+                    </td>
+                    <td class="text-end fw-semibold">@p.Available.ToString("N0", en)</td>
+                    @if (p.HasInboundBreakdown)
+                    {
+                        <td class="text-end">@p.InboundWorking.ToString("N0", en)</td>
+                        <td class="text-end">@p.InboundShipped.ToString("N0", en)</td>
+                        <td class="text-end">@p.InboundReceiving.ToString("N0", en)</td>
+                    }
+                    else
+                    {
+                        <td colspan="3" class="text-end">@p.Inbound.ToString("N0", en) <span class="cell-sub">no breakdown</span></td>
+                    }
+                    @if (p.HasReservedBreakdown)
+                    {
+                        <td class="text-end">@p.ReservedCustomerOrder.ToString("N0", en)</td>
+                        <td class="text-end">@p.ReservedFcTransfer.ToString("N0", en)</td>
+                        <td class="text-end">@p.ReservedFcProcessing.ToString("N0", en)</td>
+                    }
+                    else
+                    {
+                        <td colspan="3" class="text-end">@p.Reserved.ToString("N0", en) <span class="cell-sub">no breakdown</span></td>
+                    }
+                    <td class="text-end">@p.Unfulfillable.ToString("N0", en)</td>
+                    <td class="text-end col-divider">@item.UnitsSold30d.ToString("N0", en)</td>
+                    <td class="text-end">@item.UnitsSold90d.ToString("N0", en)</td>
+                    <td class="text-end">@(item.DailyVelocity?.ToString("0.00", en) ?? "—")</td>
+                    <td class="text-end">@(item.DaysOfInventory?.ToString("N1", en) ?? "—")</td>
                 </tr>
             }
-            @if (Model.Positions.Items.Count == 0)
+            @if (Model.Overview.Items.Items.Count == 0)
             {
-                <tr><td colspan="10" class="text-body-secondary p-3">No inventory yet. Import an inventory file from Tools.</td></tr>
+                <tr><td colspan="13" class="text-body-secondary p-3">@(string.IsNullOrWhiteSpace(Model.Search) ? "No inventory yet. Turn on the FBA inventory sync in Tools → Amazon sync, or import an inventory file." : "No SKUs match your search.")</td></tr>
             }
             </tbody>
         </table>
         </div>
     </div>
 </div>
-<partial name="_Pager" model="Model.Positions.ToPager(Model.Search)" />
+<partial name="_Pager" model="Model.Overview.Items.ToPager(Model.Search)" />
+<p class="page-footnote">Search matches SKU, ASIN, or product name. Totals cover every SKU that matches, not just this page. Days are @Model.Marketplace.Name local days.</p>

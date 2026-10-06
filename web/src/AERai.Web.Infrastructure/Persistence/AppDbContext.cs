@@ -27,6 +27,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Raw FBA inventory rows.</summary>
     public DbSet<StgFbaInventoryRow> StgFbaInventoryRows => Set<StgFbaInventoryRow>();
 
+    /// <summary>Raw reserved-inventory report rows.</summary>
+    public DbSet<StgFbaReservedRow> StgFbaReservedRows => Set<StgFbaReservedRow>();
+
     /// <summary>Raw settlement lines.</summary>
     public DbSet<StgSettlementLine> StgSettlementLines => Set<StgSettlementLine>();
 

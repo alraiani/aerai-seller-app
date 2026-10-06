@@ -30,25 +30,6 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
     }
 
     /// <inheritdoc/>
-    public Task<PagedResult<InventoryPosition>> GetInventoryPositionsAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        var query = dbContext.InventoryPositions.AsNoTracking().Where(v => v.MarketplaceId == marketplaceId);
-        if (request.SafeSearch is { } search)
-        {
-            query = query.Where(p => p.Sku.Contains(search) || (p.Title != null && p.Title.Contains(search)));
-        }
-
-        // SKUs with no sales (NULL days of supply) sort last: they're not at risk of stocking out.
-        return query
-            .OrderBy(p => p.DaysOfSupply == null)
-            .ThenBy(p => p.DaysOfSupply)
-            .ThenBy(p => p.Sku)
-            .ToPagedResultAsync(request, cancellationToken);
-    }
-
-    /// <inheritdoc/>
     public Task<PagedResult<SettlementSummary>> GetSettlementsAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);

@@ -29,6 +29,7 @@ public static class ScheduleDisplay
     [
         (AmazonReportType.Orders, "Orders created or updated since the last run. Hourly is typical."),
         (AmazonReportType.FbaInventory, "A snapshot of FBA stock by state. Once or twice a day is plenty."),
+        (AmazonReportType.FbaReservedInventory, "Why stock is reserved (customer orders, FC transfers, FC processing). Run just after FBA inventory."),
         (AmazonReportType.Settlements, "Amazon publishes these every ~14 days; a daily check picks up new ones once."),
     ];
 
@@ -127,7 +128,7 @@ public static class ScheduleDisplay
     public static string ReportTag(AmazonReportType type) => type switch
     {
         AmazonReportType.Orders => "tag tag-orders",
-        AmazonReportType.FbaInventory => "tag tag-inventory",
+        AmazonReportType.FbaInventory or AmazonReportType.FbaReservedInventory => "tag tag-inventory",
         AmazonReportType.Settlements => "tag tag-settlements",
         _ => "tag",
     };

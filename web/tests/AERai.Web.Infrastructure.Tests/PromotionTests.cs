@@ -75,7 +75,7 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     }
 
     [SqlFact]
-    public async Task Inventory_RawStatesRollUpAndSnapshotReplacesPriorStates()
+    public async Task Inventory_RawStatesNormalizeAndSnapshotReplacesPriorStates()
     {
         const string first =
             "snapshot-date\tsku\tstate\tquantity\n" +
@@ -97,6 +97,8 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         {
             var position = await scope.ServiceProvider.GetRequiredService<AppDbContext>().InventoryPositions.SingleAsync(p => p.Sku == "T-INV-1");
             Assert.Equal((10, 7, 2), (position.Available, position.Inbound, position.Reserved));
+            Assert.Equal((3, 4, 0), (position.InboundWorking, position.InboundShipped, position.InboundUnsplit));
+            Assert.False(position.HasReservedBreakdown); // a plain "Reserved" label has no reason
         }
 
         await PromoteAsync(await StageAsync(ImportSource.Inventory, "inv2.tsv", second));

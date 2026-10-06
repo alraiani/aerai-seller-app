@@ -59,6 +59,9 @@ public sealed class ImportBatch
     /// <summary>Raw FBA inventory rows (only populated for <see cref="ImportSource.FbaInventory"/> batches).</summary>
     public List<StgFbaInventoryRow> FbaInventoryRows { get; set; } = [];
 
+    /// <summary>Raw reserved-inventory rows (only populated for <see cref="ImportSource.FbaReservedInventory"/> batches).</summary>
+    public List<StgFbaReservedRow> FbaReservedRows { get; set; } = [];
+
     /// <summary>Raw settlement lines (only populated for <see cref="ImportSource.Settlements"/> batches).</summary>
     public List<StgSettlementLine> SettlementLines { get; set; } = [];
 }

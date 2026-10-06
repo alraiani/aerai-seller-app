@@ -25,10 +25,6 @@ internal sealed class DashboardQueries(AppDbContext dbContext) : IDashboardQueri
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<InventoryPosition>> GetInventoryPositionsAsync(string marketplaceId, CancellationToken cancellationToken) =>
-        await dbContext.InventoryPositions.AsNoTracking().Where(p => p.MarketplaceId == marketplaceId).ToListAsync(cancellationToken).ConfigureAwait(false);
-
-    /// <inheritdoc/>
     public Task<SettlementSummary?> GetLatestSettlementAsync(string marketplaceId, CancellationToken cancellationToken) =>
         dbContext.SettlementSummaries
             .AsNoTracking()
