@@ -1,5 +1,6 @@
 using AERai.Web.Application.Ingestion;
 using AERai.Web.Application.Tests.Fakes;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -12,14 +13,16 @@ public sealed class SyncScheduleServiceTests
     private readonly FakeManualRunChannel _channel = new();
     private readonly FakeSyncSettingsRepository _settings = new();
     private readonly FakeIdentityService _identity = new();
+    private readonly FakeMarketplaceQueries _marketplaces = new();
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 2, 12, 0, 0, TimeSpan.Zero));
 
     private SyncScheduleService CreateService(bool canRun = true) =>
-        new(_repository, _settings, _channel, new FakeConnection(canRun), _identity, _clock, NullLogger<SyncScheduleService>.Instance);
+        new(_repository, _settings, _channel, new FakeConnection(canRun), _identity, _marketplaces, _clock, NullLogger<SyncScheduleService>.Instance);
 
     private static SyncScheduleInput Input(
-        ScheduleFrequency frequency = ScheduleFrequency.Interval, int? interval = 60, string zone = "America/New_York", int lookback = 7, bool enabled = true) =>
-        new("Orders hourly", AmazonReportType.Orders, enabled, frequency, interval, new TimeOnly(6, 0), zone, lookback, AutoPromote: true);
+        ScheduleFrequency frequency = ScheduleFrequency.Interval, int? interval = 60, string zone = "America/New_York", int lookback = 7, bool enabled = true,
+        string marketplaceId = MarketplaceIds.UnitedStates) =>
+        new("Orders hourly", AmazonReportType.Orders, marketplaceId, enabled, frequency, interval, new TimeOnly(6, 0), zone, lookback, AutoPromote: true);
 
     [Fact]
     public async Task CreateAsync_EnabledSchedule_ComputesNextRun()
@@ -30,6 +33,17 @@ public sealed class SyncScheduleServiceTests
         var saved = _repository.Schedules[result.Value];
         Assert.Equal(_clock.GetUtcNow().AddHours(1), saved.NextRunAt);
         Assert.Null(saved.DailyTime); // Only the field that applies to the frequency is kept.
+    }
+
+    [Theory]
+    [InlineData(MarketplaceIds.UnitedKingdom)] // seeded inactive
+    [InlineData("NOT-A-MARKETPLACE")]
+    public async Task CreateAsync_InactiveOrUnknownMarketplace_Fails(string marketplaceId)
+    {
+        var result = await CreateService().CreateAsync(Input(marketplaceId: marketplaceId), "ops", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(_repository.Schedules);
     }
 
     [Fact]

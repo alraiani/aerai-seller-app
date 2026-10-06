@@ -10,13 +10,13 @@ public sealed class ScheduleListTests
     private static SyncSchedule Schedule(int id, string name, AmazonReportType type = AmazonReportType.Orders, bool enabled = true,
         DateTimeOffset? nextRun = null, string? notes = null, string? owner = null, bool deleted = false) => new()
     {
-        Id = id, Name = name, ReportType = type, IsEnabled = enabled, Frequency = ScheduleFrequency.Interval, IntervalMinutes = 60,
+        Id = id, Name = name, ReportType = type, MarketplaceId = "ATVPDKIKX0DER", IsEnabled = enabled, Frequency = ScheduleFrequency.Interval, IntervalMinutes = 60,
         TimeZoneId = "UTC", LookbackDays = 7, NextRunAt = nextRun, Notes = notes, OwnerEmail = owner, UpdatedBy = "t",
         DeletedAt = deleted ? Now : null,
     };
 
     private static SyncRun Run(int scheduleId, SyncRunStatus status, DateTimeOffset startedAt) =>
-        new() { SyncScheduleId = scheduleId, Status = status, StartedAt = startedAt, TriggeredBy = "t" };
+        new() { SyncScheduleId = scheduleId, MarketplaceId = "ATVPDKIKX0DER", Status = status, StartedAt = startedAt, TriggeredBy = "t" };
 
     private static readonly SyncSchedule[] Schedules =
     [

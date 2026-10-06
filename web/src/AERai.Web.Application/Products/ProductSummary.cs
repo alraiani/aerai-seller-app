@@ -6,6 +6,6 @@ namespace AERai.Web.Application.Products;
 /// <param name="Sku">Seller SKU.</param>
 /// <param name="Asin">ASIN, when known.</param>
 /// <param name="Title">Product title, when known.</param>
-/// <param name="CostOfGoods">Unit cost, when entered.</param>
+/// <param name="CostOfGoods">Unit cost in the listed marketplace's currency, when entered.</param>
 /// <param name="UpdatedAt">Last change time.</param>
 public sealed record ProductSummary(string Sku, string? Asin, string? Title, decimal? CostOfGoods, DateTimeOffset UpdatedAt);

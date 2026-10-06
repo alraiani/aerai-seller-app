@@ -14,6 +14,7 @@ internal sealed class SettlementSummaryConfiguration : IEntityTypeConfiguration<
     public void Configure(EntityTypeBuilder<SettlementSummary> builder)
     {
         builder.ToView("vw_SettlementSummary", Schemas.Reporting).HasNoKey();
+        builder.Property(v => v.MarketplaceId).HasMaxLength(16);
         builder.Property(v => v.Sales).HasPrecision(18, 2);
         builder.Property(v => v.Fees).HasPrecision(18, 2);
         builder.Property(v => v.Refunds).HasPrecision(18, 2);

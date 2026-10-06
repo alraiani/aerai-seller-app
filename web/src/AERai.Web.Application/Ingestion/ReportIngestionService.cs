@@ -87,6 +87,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         {
             SyncScheduleId = schedule.Id,
             ReportType = schedule.ReportType,
+            MarketplaceId = schedule.MarketplaceId,
             Trigger = trigger,
             TriggeredBy = triggeredBy,
             StartedAt = _clock.GetUtcNow(),
@@ -260,6 +261,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["source"] = source.ToString(),
+            ["marketplaceid"] = schedule.MarketplaceId,
             ["amazonreportid"] = reportId,
             ["syncrunid"] = context.Run.Id.ToString(CultureInfo.InvariantCulture),
             ["uploadedby"] = context.Run.TriggeredBy,
@@ -273,7 +275,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         }
 
         var staged = await _staging.StageRawFileAsync(
-            new StageRawFileCommand(source, path, sha256, displayName, context.Run.TriggeredBy), cancellationToken).ConfigureAwait(false);
+            new StageRawFileCommand(source, schedule.MarketplaceId, path, sha256, displayName, context.Run.TriggeredBy), cancellationToken).ConfigureAwait(false);
 
         if (staged.IsFailure)
         {

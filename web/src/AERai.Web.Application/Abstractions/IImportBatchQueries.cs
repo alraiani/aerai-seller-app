@@ -8,11 +8,12 @@ namespace AERai.Web.Application.Abstractions;
 /// </summary>
 public interface IImportBatchQueries
 {
-    /// <summary>Lists batches, newest first.</summary>
+    /// <summary>Lists one marketplace's batches, newest first.</summary>
+    /// <param name="marketplaceId">Marketplace to report on.</param>
     /// <param name="request">Paging; <see cref="PageRequest.Search"/> filters by file name.</param>
     /// <returns>One page of batches.</returns>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    Task<PagedResult<ImportBatchSummary>> ListAsync(PageRequest request, CancellationToken cancellationToken);
+    Task<PagedResult<ImportBatchSummary>> ListAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken);
 
     /// <summary>Gets one batch.</summary>
     /// <param name="batchId">Batch id.</param>

@@ -40,6 +40,10 @@
                         <label asp-for="Input.Name" class="form-label">Name</label>
                         <input asp-for="Input.Name" class="form-control" placeholder="e.g. Orders — hourly" />
                     </div>
+                    <div class="mb-3">
+                        <label asp-for="Input.MarketplaceId" class="form-label"></label>
+                        <select asp-for="Input.MarketplaceId" asp-items="@(new SelectList(Model.Marketplaces, "MarketplaceId", "Name"))" class="form-select"></select>
+                    </div>
                     <fieldset>
                         <legend class="form-label">Amazon report</legend>
                         <div class="choice-grid">

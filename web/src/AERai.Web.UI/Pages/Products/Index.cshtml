@@ -8,7 +8,7 @@
     <div class="card-body p-0">
         <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
-            <thead><tr><th>SKU</th><th>ASIN</th><th>Title</th><th class="text-end">Cost of goods</th><th>Updated</th><th></th></tr></thead>
+            <thead><tr><th>SKU</th><th>ASIN</th><th>Title</th><th class="text-end">Cost of goods (@Model.Marketplace.Currency)</th><th>Updated</th><th></th></tr></thead>
             <tbody>
             @foreach (var p in Model.Products.Items)
             {
@@ -16,7 +16,7 @@
                     <td>@p.Sku</td>
                     <td>@p.Asin</td>
                     <td class="cell-truncate" title="@p.Title">@p.Title</td>
-                    <td class="text-end">@(p.CostOfGoods?.ToString("C") ?? "—")</td>
+                    <td class="text-end">@(p.CostOfGoods is { } cost ? DashboardFormat.Price(cost, Model.Marketplace.Currency) : "—")</td>
                     <td>@p.UpdatedAt.ToString("yyyy-MM-dd")</td>
                     <td class="text-end">
                         @if (Model.CanEdit)

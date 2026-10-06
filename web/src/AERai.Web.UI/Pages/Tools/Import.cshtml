@@ -15,6 +15,11 @@
                         <select asp-for="Input.Source" asp-items="Html.GetEnumSelectList<ImportSource>()" class="form-select"></select>
                     </div>
                     <div class="mb-3">
+                        <label asp-for="Input.MarketplaceId" class="form-label"></label>
+                        <select asp-for="Input.MarketplaceId" asp-items="@(new SelectList(Model.Marketplaces, "MarketplaceId", "Name"))" class="form-select"></select>
+                        <div class="form-text">Every row in the file is recorded under this marketplace.</div>
+                    </div>
+                    <div class="mb-3">
                         <label asp-for="Input.File" class="form-label"></label>
                         <input asp-for="Input.File" type="file" class="form-control" accept="@string.Join(",", Model.Limits.AllowedExtensions)" />
                         <div class="form-text">
@@ -39,7 +44,7 @@
                 </ol>
                 <p class="mb-1"><strong>Required columns</strong></p>
                 <ul class="mb-0">
-                    <li>Orders: amazon-order-id, purchase-date, order-status, sku, quantity, item-price (optional: asin, product-name, currency)</li>
+                    <li>Orders: amazon-order-id, purchase-date, order-status, sku, quantity, item-price (optional: asin, product-name, currency, sales-channel)</li>
                     <li>Inventory: snapshot-date, sku, state, quantity (optional: asin, product-name)</li>
                     <li>Settlements: settlement-id, transaction-type, amount (plus the standard V2 flat-file columns)</li>
                 </ul>

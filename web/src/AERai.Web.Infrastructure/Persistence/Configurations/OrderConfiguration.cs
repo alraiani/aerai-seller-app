@@ -16,6 +16,8 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(o => o.AmazonOrderId).IsUnique();
         builder.Property(o => o.OrderStatus).HasMaxLength(32);
         builder.Property(o => o.Currency).HasMaxLength(3);
+        builder.Property(o => o.MarketplaceId).HasMaxLength(16);
+        builder.HasOne<Marketplace>().WithMany().HasForeignKey(o => o.MarketplaceId).OnDelete(DeleteBehavior.Restrict);
 
         // SWITCHOFFSET + CAST are deterministic, so the column can be persisted and indexed.
         builder.Property(o => o.PurchaseDateUtc)

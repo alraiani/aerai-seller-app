@@ -1,3 +1,4 @@
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Staging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -12,6 +13,8 @@ internal sealed class ImportBatchConfiguration : IEntityTypeConfiguration<Import
     {
         builder.ToTable("ImportBatch", Schemas.Staging);
         builder.HasKey(b => b.Id);
+        builder.Property(b => b.MarketplaceId).HasMaxLength(16);
+        builder.HasOne<Marketplace>().WithMany().HasForeignKey(b => b.MarketplaceId).OnDelete(DeleteBehavior.Restrict);
 
         // Stored as text because the promotion procedure reads and writes these values by name.
         builder.Property(b => b.Source).HasConversion<string>().HasMaxLength(32);

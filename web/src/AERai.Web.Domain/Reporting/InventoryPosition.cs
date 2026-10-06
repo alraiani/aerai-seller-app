@@ -9,6 +9,9 @@ public sealed class InventoryPosition
     /// <summary>Seller SKU.</summary>
     public required string Sku { get; set; }
 
+    /// <summary>Marketplace the position is for.</summary>
+    public required string MarketplaceId { get; set; }
+
     /// <summary>Product title, when known.</summary>
     public string? Title { get; set; }
 

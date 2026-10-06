@@ -1,0 +1,25 @@
+@using AERai.Web.Application.Marketplaces
+@inject ICurrentMarketplace CurrentMarketplace
+@{
+    var selection = await CurrentMarketplace.GetAsync(Context.RequestAborted);
+    var returnUrl = $"{Context.Request.Path}{Context.Request.QueryString}";
+}
+@* Marketplace switcher. A plain form with one submit button per marketplace, so it needs no script (CSP). *@
+<form method="post" asp-page="/Marketplace/Switch" class="market-switch" role="group" aria-label="Marketplace">
+    <input type="hidden" name="returnUrl" value="@returnUrl" />
+    @foreach (var m in selection.All)
+    {
+        var isCurrent = m.MarketplaceId == selection.Current.MarketplaceId;
+        if (!m.IsActive)
+        {
+            <button type="button" class="market-switch-btn" disabled title="@m.Name is not set up yet">@m.Code</button>
+        }
+        else
+        {
+            <button type="submit" name="marketplaceId" value="@m.MarketplaceId"
+                    class="market-switch-btn @(isCurrent ? "active" : null)"
+                    aria-pressed="@(isCurrent ? "true" : "false")"
+                    title="@m.Name (@m.Currency)">@m.Code</button>
+        }
+    }
+</form>

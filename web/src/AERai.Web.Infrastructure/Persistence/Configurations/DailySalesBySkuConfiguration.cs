@@ -14,6 +14,7 @@ internal sealed class DailySalesBySkuConfiguration : IEntityTypeConfiguration<Da
     public void Configure(EntityTypeBuilder<DailySalesBySku> builder)
     {
         builder.ToView("vw_DailySalesBySku", Schemas.Reporting).HasNoKey();
+        builder.Property(v => v.MarketplaceId).HasMaxLength(16);
         builder.Property(v => v.Revenue).HasPrecision(18, 2);
     }
 }

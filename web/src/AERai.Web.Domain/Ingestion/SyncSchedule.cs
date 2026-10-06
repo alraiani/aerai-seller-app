@@ -15,6 +15,9 @@ public sealed class SyncSchedule
     /// <summary>Which report this schedule pulls.</summary>
     public AmazonReportType ReportType { get; set; }
 
+    /// <summary>Marketplace the schedule pulls reports for.</summary>
+    public required string MarketplaceId { get; set; }
+
     /// <summary>Whether the scheduler runs it automatically. Disabled schedules can still be run manually.</summary>
     public bool IsEnabled { get; set; }
 

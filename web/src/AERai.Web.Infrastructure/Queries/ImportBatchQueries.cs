@@ -14,11 +14,11 @@ namespace AERai.Web.Infrastructure.Queries;
 internal sealed class ImportBatchQueries(AppDbContext dbContext) : IImportBatchQueries
 {
     /// <inheritdoc/>
-    public Task<PagedResult<ImportBatchSummary>> ListAsync(PageRequest request, CancellationToken cancellationToken)
+    public Task<PagedResult<ImportBatchSummary>> ListAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var query = dbContext.ImportBatches.AsNoTracking();
+        var query = dbContext.ImportBatches.AsNoTracking().Where(b => b.MarketplaceId == marketplaceId);
         if (request.SafeSearch is { } search)
         {
             query = query.Where(b => b.FileName.Contains(search));
@@ -76,6 +76,6 @@ internal sealed class ImportBatchQueries(AppDbContext dbContext) : IImportBatchQ
 
     /// <summary>Projection shared by every batch query so the DTO shape is defined once.</summary>
     private static readonly System.Linq.Expressions.Expression<Func<ImportBatch, ImportBatchSummary>> ToSummary = b =>
-        new ImportBatchSummary(b.Id, b.Source, b.FileName, b.UploadedBy, b.UploadedAt, b.Status,
+        new ImportBatchSummary(b.Id, b.Source, b.MarketplaceId, b.FileName, b.UploadedBy, b.UploadedAt, b.Status,
             b.RowCount, b.PromotedRowCount, b.RejectedRowCount, b.PromotedAt, b.ErrorMessage, b.RawFilePath, b.RawFileSha256);
 }

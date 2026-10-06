@@ -11,6 +11,9 @@ public sealed class InventorySnapshot
     /// <summary>The date the quantities were reported for.</summary>
     public DateOnly SnapshotDate { get; set; }
 
+    /// <summary>Marketplace whose fulfillment network holds the stock.</summary>
+    public required string MarketplaceId { get; set; }
+
     /// <summary>Seller SKU.</summary>
     public required string Sku { get; set; }
 

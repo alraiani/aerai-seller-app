@@ -13,6 +13,7 @@ namespace AERai.Web.Application.Ingestion;
 /// <param name="queue">Manual-run queue.</param>
 /// <param name="connection">Amazon connection state.</param>
 /// <param name="identity">User lookups for the schedule owner.</param>
+/// <param name="marketplaces">Marketplace lookups for the schedule's marketplace.</param>
 /// <param name="clock">Clock for next-run calculation.</param>
 /// <param name="logger">Logger.</param>
 public sealed partial class SyncScheduleService(
@@ -21,6 +22,7 @@ public sealed partial class SyncScheduleService(
     IManualRunChannel queue,
     IAmazonConnectionInfo connection,
     IIdentityService identity,
+    IMarketplaceQueries marketplaces,
     TimeProvider clock,
     ILogger<SyncScheduleService> logger) : ISyncScheduleService
 {
@@ -269,6 +271,12 @@ public sealed partial class SyncScheduleService(
             return Result.Failure<SyncSchedule>("Choose a report type.");
         }
 
+        // Whether the marketplace exists and is active needs the database; that check is in CheckNameAndOwnerAsync.
+        if (string.IsNullOrWhiteSpace(input.MarketplaceId))
+        {
+            return Result.Failure<SyncSchedule>("Choose a marketplace.");
+        }
+
         if (input.Frequency == ScheduleFrequency.Interval
             && input.IntervalMinutes is not (>= MinIntervalMinutes and <= MaxIntervalMinutes))
         {
@@ -305,6 +313,7 @@ public sealed partial class SyncScheduleService(
         {
             Name = input.Name.Trim(),
             ReportType = input.ReportType,
+            MarketplaceId = input.MarketplaceId,
             IsEnabled = input.IsEnabled,
             Frequency = input.Frequency,
 
@@ -320,12 +329,18 @@ public sealed partial class SyncScheduleService(
         });
     }
 
-    /// <summary>Checks rules that need the database: unique name and an owner who is a real user.</summary>
+    /// <summary>Checks rules that need the database: unique name, an active marketplace, and an owner who is a real user.</summary>
     private async Task<Result> CheckNameAndOwnerAsync(SyncSchedule schedule, int? excludeId, CancellationToken cancellationToken)
     {
         if (await repository.NameExistsAsync(schedule.Name, excludeId, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure($"Another schedule is already named '{schedule.Name}'.");
+        }
+
+        var all = await marketplaces.GetAllAsync(cancellationToken).ConfigureAwait(false);
+        if (!all.Any(m => m.IsActive && m.MarketplaceId == schedule.MarketplaceId))
+        {
+            return Result.Failure("Choose an active marketplace.");
         }
 
         if (schedule.OwnerEmail is { } owner)

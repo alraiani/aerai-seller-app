@@ -33,6 +33,7 @@ public sealed class OrderLineMapper : IStagingRowMapper
             Quantity = record.Get("quantity"),
             ItemPrice = record.Get("item-price"),
             Currency = record.Get("currency"),
+            SalesChannel = record.Get("sales-channel"),
         });
     }
 }

@@ -17,9 +17,10 @@ public sealed partial class ProductService(IProductRepository repository, TimePr
     public const decimal MaxCostOfGoods = 100_000m;
 
     /// <inheritdoc/>
-    public async Task<Result> UpdateCostAsync(string sku, decimal? costOfGoods, CancellationToken cancellationToken)
+    public async Task<Result> UpdateCostAsync(string sku, string marketplaceId, decimal? costOfGoods, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
 
         if (costOfGoods is < 0 or > MaxCostOfGoods)
         {
@@ -29,16 +30,16 @@ public sealed partial class ProductService(IProductRepository repository, TimePr
         // Round to cents up front so the stored value matches what the user sees after save.
         var rounded = costOfGoods is null ? (decimal?)null : Math.Round(costOfGoods.Value, 2, MidpointRounding.AwayFromZero);
 
-        var updated = await repository.UpdateCostAsync(sku, rounded, timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        var updated = await repository.UpdateCostAsync(sku, marketplaceId, rounded, timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
         if (!updated)
         {
             return Result.Failure($"Product '{sku}' was not found.");
         }
 
-        LogCostUpdated(sku, rounded);
+        LogCostUpdated(sku, marketplaceId, rounded);
         return Result.Success();
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Updated cost of goods for {Sku} to {CostOfGoods}")]
-    private partial void LogCostUpdated(string sku, decimal? costOfGoods);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Updated cost of goods for {Sku} in {MarketplaceId} to {CostOfGoods}")]
+    private partial void LogCostUpdated(string sku, string marketplaceId, decimal? costOfGoods);
 }

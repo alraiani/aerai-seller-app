@@ -142,6 +142,7 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
 }
 
 .app-content { padding: 1.5rem; }
+.topbar-actions { display: flex; align-items: center; gap: 1rem; }
 
 .nav-links { display: flex; flex-direction: column; gap: 0.125rem; }
 .nav-toggle-label { display: none; }
@@ -161,9 +162,12 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
     .nav-links { display: none; padding-top: 0.5rem; }
     .nav-toggle:checked ~ .nav-links { display: flex; }
     .app-content { padding: 1rem; }
-    .app-topbar { padding: 0.75rem 1rem; }
+    .app-topbar { padding: 0.75rem 1rem; flex-wrap: wrap; row-gap: 0.5rem; }
     .app-topbar h1 { font-size: 1.05rem; }
+    /* Marketplace, theme, and sign-out wrap under the title instead of running off-screen. */
+    .topbar-actions { flex-wrap: wrap; gap: 0.5rem; }
 }
+
 
 /* ---------- Theme toggle ---------- */
 .theme-toggle { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); }
@@ -174,6 +178,15 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
 .theme-toggle-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .theme-toggle-btn:hover { color: var(--text); }
 .theme-toggle-btn.active { background: var(--surface); color: var(--brand); box-shadow: 0 0 0 1px var(--border); }
+/* ---------- Marketplace switcher ---------- */
+.market-switch { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); margin: 0; }
+.market-switch-btn {
+    min-width: 2.4rem; height: 26px; padding: 0 0.6rem; border: 0; border-radius: 999px; background: transparent;
+    color: var(--muted); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.02em;
+}
+.market-switch-btn:hover:not(:disabled) { color: var(--text); }
+.market-switch-btn.active { background: var(--surface); color: var(--brand); box-shadow: 0 0 0 1px var(--border); }
+.market-switch-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .login-theme { position: fixed; top: 1rem; right: 1rem; z-index: 10; }
 
 /* ---------- Dashboard ---------- */
@@ -454,3 +467,8 @@ th .tip { text-transform: none; }
 .schedule-table tbody tr.row-selected { background: var(--brand-soft); }
 /* The On switch and the row's buttons share the last column. */
 .on-cell { display: flex; align-items: center; gap: 0.75rem; }
+
+@media (max-width: 576px) {
+    /* Two KPI tiles share a phone-width row; longer symbols such as "CA$" must still fit on one line. */
+    .kpi-value { font-size: 1.4rem; }
+}

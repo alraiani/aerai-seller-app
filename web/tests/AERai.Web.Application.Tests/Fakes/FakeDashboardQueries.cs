@@ -24,29 +24,34 @@ internal sealed class FakeDashboardQueries : IDashboardQueries
     public bool SyncPaused { get; set; }
 
     /// <summary>The window the service asked for, to assert it fetches enough history.</summary>
+    /// <summary>Marketplace the service asked sales lines for.</summary>
+    public string? RequestedMarketplaceId { get; private set; }
+
     public (DateTimeOffset From, DateTimeOffset To)? RequestedWindow { get; private set; }
 
-    public Task<IReadOnlyList<SalesLine>> GetSalesLinesAsync(DateTimeOffset from, DateTimeOffset to, string currency, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<SalesLine>> GetSalesLinesAsync(string marketplaceId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken)
     {
+        RequestedMarketplaceId = marketplaceId;
         RequestedWindow = (from, to);
-        return Task.FromResult<IReadOnlyList<SalesLine>>(Lines.Where(l => l.PurchaseDate >= from && l.PurchaseDate < to).ToList());
+        return Task.FromResult<IReadOnlyList<SalesLine>>(
+            Lines.Where(l => l.MarketplaceId == marketplaceId && l.PurchaseDate >= from && l.PurchaseDate < to).ToList());
     }
 
-    public Task<IReadOnlyList<InventoryPosition>> GetInventoryPositionsAsync(CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<InventoryPosition>> GetInventoryPositionsAsync(string marketplaceId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<InventoryPosition>>(Positions);
 
-    public Task<SettlementSummary?> GetLatestSettlementAsync(string currency, CancellationToken cancellationToken) =>
+    public Task<SettlementSummary?> GetLatestSettlementAsync(string marketplaceId, CancellationToken cancellationToken) =>
         Task.FromResult(LatestSettlement);
 
-    public Task<IReadOnlyList<string>> GetSoldSkusMissingCostAsync(DateTimeOffset since, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<string>> GetSoldSkusMissingCostAsync(string marketplaceId, DateTimeOffset since, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<string>>(MissingCost);
 
-    public Task<int> CountBatchesAwaitingPromotionAsync(CancellationToken cancellationToken) => Task.FromResult(AwaitingPromotion);
+    public Task<int> CountBatchesAwaitingPromotionAsync(string marketplaceId, CancellationToken cancellationToken) => Task.FromResult(AwaitingPromotion);
 
-    public Task<IReadOnlyList<SyncGlance>> GetSyncHealthAsync(CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<SyncGlance>> GetSyncHealthAsync(string marketplaceId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<SyncGlance>>(Sync);
 
     public Task<bool> IsSyncPausedAsync(CancellationToken cancellationToken) => Task.FromResult(SyncPaused);
 
-    public Task<DateTimeOffset?> GetOrdersCoverageStartAsync(CancellationToken cancellationToken) => Task.FromResult(CoverageStart);
+    public Task<DateTimeOffset?> GetOrdersCoverageStartAsync(string marketplaceId, CancellationToken cancellationToken) => Task.FromResult(CoverageStart);
 }

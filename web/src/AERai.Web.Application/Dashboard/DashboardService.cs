@@ -1,5 +1,6 @@
 using System.Globalization;
 using AERai.Web.Application.Abstractions;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.Domain.Reporting;
 using Microsoft.Extensions.Options;
@@ -11,7 +12,7 @@ namespace AERai.Web.Application.Dashboard;
 /// best sellers, health glances, and a prioritized "needs attention" list.
 /// </summary>
 /// <remarks>
-/// Days and hours are the business's local ones (<see cref="DashboardOptions.TimeZoneId"/>), not
+/// Days and hours are the marketplace's local ones (<see cref="Marketplace.TimeZoneId"/>), not
 /// UTC, so an order placed at 11 PM Eastern counts on that day. Comparisons always use the same
 /// amount of elapsed time ("today so far" vs "yesterday up to now"), so a partial day is never
 /// compared with a full one.
@@ -28,10 +29,13 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
     private const int NamedSkuLimit = 3;
 
     /// <inheritdoc/>
-    public async Task<DashboardSnapshot> GetSnapshotAsync(DashboardPeriod period, CancellationToken cancellationToken)
+    public async Task<DashboardSnapshot> GetSnapshotAsync(Marketplace marketplace, DashboardPeriod period, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(marketplace);
+
         var settings = options.Value;
-        var zone = TimeZoneInfo.FindSystemTimeZoneById(settings.TimeZoneId);
+        var id = marketplace.MarketplaceId;
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
         var now = clock.GetUtcNow();
         var localNow = TimeZoneInfo.ConvertTime(now, zone);
         var days = (int)period;
@@ -43,17 +47,17 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
         var previousStart = LocalInstant(firstDay.AddDays(-days).ToDateTime(TimeOnly.MinValue), zone);
         var previousEnd = LocalInstant(localNow.DateTime.AddDays(-days), zone);
 
-        var lines = await queries.GetSalesLinesAsync(previousStart, now, settings.Currency, cancellationToken).ConfigureAwait(false);
+        var lines = await queries.GetSalesLinesAsync(id, previousStart, now, cancellationToken).ConfigureAwait(false);
         var current = lines.Where(l => l.PurchaseDate >= start).ToList();
         var previous = lines.Where(l => l.PurchaseDate < previousEnd).ToList();
 
-        var positions = await queries.GetInventoryPositionsAsync(cancellationToken).ConfigureAwait(false);
-        var settlement = await queries.GetLatestSettlementAsync(settings.Currency, cancellationToken).ConfigureAwait(false);
-        var missingCost = await queries.GetSoldSkusMissingCostAsync(now.AddDays(-SellingWindowDays), cancellationToken).ConfigureAwait(false);
-        var awaitingPromotion = await queries.CountBatchesAwaitingPromotionAsync(cancellationToken).ConfigureAwait(false);
-        var sync = await queries.GetSyncHealthAsync(cancellationToken).ConfigureAwait(false);
+        var positions = await queries.GetInventoryPositionsAsync(id, cancellationToken).ConfigureAwait(false);
+        var settlement = await queries.GetLatestSettlementAsync(id, cancellationToken).ConfigureAwait(false);
+        var missingCost = await queries.GetSoldSkusMissingCostAsync(id, now.AddDays(-SellingWindowDays), cancellationToken).ConfigureAwait(false);
+        var awaitingPromotion = await queries.CountBatchesAwaitingPromotionAsync(id, cancellationToken).ConfigureAwait(false);
+        var sync = await queries.GetSyncHealthAsync(id, cancellationToken).ConfigureAwait(false);
         var syncPaused = await queries.IsSyncPausedAsync(cancellationToken).ConfigureAwait(false);
-        var coverageStart = await queries.GetOrdersCoverageStartAsync(cancellationToken).ConfigureAwait(false);
+        var coverageStart = await queries.GetOrdersCoverageStartAsync(id, cancellationToken).ConfigureAwait(false);
 
         // A comparison is only meaningful if synced order history covers the whole comparison window;
         // otherwise a full period would be compared with a partly empty one (e.g. "+400%").
@@ -70,8 +74,8 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
 
         return new DashboardSnapshot(
             Period: period,
-            TimeZoneId: settings.TimeZoneId,
-            Currency: settings.Currency,
+            TimeZoneId: marketplace.TimeZoneId,
+            Currency: marketplace.Currency,
             GeneratedAt: now,
             WindowStart: TimeZoneInfo.ConvertTime(start, zone),
             Revenue: revenue,
@@ -88,7 +92,7 @@ public sealed class DashboardService(IDashboardQueries queries, IOptions<Dashboa
             Inventory: inventory,
             LatestPayout: settlement is null
                 ? null
-                : new PayoutGlance(settlement.SettlementId, settlement.PeriodStart, settlement.PeriodEnd, settlement.Net, settlement.Sales, settlement.Fees, settlement.Refunds, settings.Currency),
+                : new PayoutGlance(settlement.SettlementId, settlement.PeriodStart, settlement.PeriodEnd, settlement.Net, settlement.Sales, settlement.Fees, settlement.Refunds, marketplace.Currency),
             Sync: sync,
             SalesCoverageStart: coverageStart,
             ComparisonAvailable: comparable);

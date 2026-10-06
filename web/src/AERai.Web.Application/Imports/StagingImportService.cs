@@ -77,6 +77,7 @@ public sealed partial class StagingImportService : IStagingImportService
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["source"] = command.Source.ToString(),
+            ["marketplaceid"] = command.MarketplaceId,
             ["uploadedby"] = ToAsciiMetadata(command.UploadedBy),
             ["originalname"] = ToAsciiMetadata(displayName),
         };
@@ -85,7 +86,7 @@ public sealed partial class StagingImportService : IStagingImportService
         LogLanded(path, command.Source, command.UploadedBy);
 
         return await StageRawFileAsync(
-            new StageRawFileCommand(command.Source, path, sha256, displayName, command.UploadedBy),
+            new StageRawFileCommand(command.Source, command.MarketplaceId, path, sha256, displayName, command.UploadedBy),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -133,6 +134,7 @@ public sealed partial class StagingImportService : IStagingImportService
         var batch = new ImportBatch
         {
             Source = command.Source,
+            MarketplaceId = command.MarketplaceId,
             FileName = command.DisplayFileName,
             RawFilePath = command.RawFilePath,
             RawFileSha256 = command.RawFileSha256,
@@ -168,7 +170,7 @@ public sealed partial class StagingImportService : IStagingImportService
         }
 
         return await StageRawFileAsync(
-            new StageRawFileCommand(batch.Source, batch.RawFilePath, batch.RawFileSha256, batch.FileName, requestedBy),
+            new StageRawFileCommand(batch.Source, batch.MarketplaceId, batch.RawFilePath, batch.RawFileSha256, batch.FileName, requestedBy),
             cancellationToken).ConfigureAwait(false);
     }
 

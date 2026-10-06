@@ -14,6 +14,9 @@ public sealed class SyncRun
     /// <summary>Report type pulled.</summary>
     public AmazonReportType ReportType { get; set; }
 
+    /// <summary>Marketplace of the schedule at the time of the run.</summary>
+    public required string MarketplaceId { get; set; }
+
     /// <summary>What started the run.</summary>
     public SyncTrigger Trigger { get; set; }
 

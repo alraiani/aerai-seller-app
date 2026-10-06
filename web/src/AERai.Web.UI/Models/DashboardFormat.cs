@@ -12,14 +12,32 @@ public static class DashboardFormat
 {
     private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("en-US");
 
+    /// <summary>Symbols for the marketplaces' currencies; "CA$" keeps Canadian dollars distinct from US.</summary>
+    private static readonly Dictionary<string, string> Symbols = new(StringComparer.Ordinal)
+    {
+        ["USD"] = "$",
+        ["CAD"] = "CA$",
+        ["GBP"] = "£",
+    };
+
     /// <summary>Money for headline tiles: whole units from 1,000 up, cents below.</summary>
     /// <param name="amount">Amount.</param>
     /// <param name="currency">ISO currency code.</param>
-    /// <returns>e.g. "$12,345" or "$842.10" (non-USD amounts get the code appended).</returns>
-    public static string Money(decimal amount, string currency)
+    /// <returns>e.g. "$12,345", "CA$842.10", or "£5.00" (unknown currencies get the code appended).</returns>
+    public static string Money(decimal amount, string currency) =>
+        Format(amount, currency, Math.Abs(amount) >= 1000 ? "N0" : "N2");
+
+    /// <summary>Money with cents always shown, for unit prices and costs.</summary>
+    /// <param name="amount">Amount.</param>
+    /// <param name="currency">ISO currency code.</param>
+    /// <returns>e.g. "CA$4.13".</returns>
+    public static string Price(decimal amount, string currency) => Format(amount, currency, "N2");
+
+    private static string Format(decimal amount, string currency, string numberFormat)
     {
-        var text = Math.Abs(amount) >= 1000 ? amount.ToString("C0", Culture) : amount.ToString("C2", Culture);
-        return currency == "USD" ? text : $"{text} {currency}";
+        var number = Math.Abs(amount).ToString(numberFormat, Culture);
+        var text = Symbols.TryGetValue(currency, out var symbol) ? symbol + number : $"{number} {currency}";
+        return amount < 0 ? "-" + text : text;
     }
 
     /// <summary>CSS class for a change chip.</summary>

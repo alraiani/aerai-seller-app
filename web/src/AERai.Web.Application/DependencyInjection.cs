@@ -1,6 +1,7 @@
 using AERai.Web.Application.Dashboard;
 using AERai.Web.Application.Imports;
 using AERai.Web.Application.Ingestion;
+using AERai.Web.Application.Marketplaces;
 using AERai.Web.Application.Products;
 using AERai.Web.Application.Security;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IStagingImportService, StagingImportService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<ICurrentMarketplace, CurrentMarketplace>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
         services.AddScoped<IReportIngestionService, ReportIngestionService>();
         services.AddScoped<ISyncScheduleService, SyncScheduleService>();

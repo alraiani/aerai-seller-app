@@ -2,6 +2,7 @@ using System.Text;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Imports;
 using AERai.Web.Application.Ingestion;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.Domain.Staging;
 using AERai.Web.Infrastructure.Persistence;
@@ -16,11 +17,11 @@ namespace AERai.Web.Infrastructure.Tests;
 /// </summary>
 public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<SqlDatabaseFixture>
 {
-    private async Task<int> AddScheduleAsync(AmazonReportType type, string name, int lookbackDays = 2)
+    private async Task<int> AddScheduleAsync(AmazonReportType type, string name, int lookbackDays = 2, string marketplaceId = MarketplaceIds.UnitedStates)
     {
         await using var scope = fixture.Services.CreateAsyncScope();
         var result = await scope.ServiceProvider.GetRequiredService<ISyncScheduleService>().CreateAsync(
-            new SyncScheduleInput(name, type, IsEnabled: true, ScheduleFrequency.Interval, 60, null, "UTC", lookbackDays, AutoPromote: true),
+            new SyncScheduleInput(name, type, marketplaceId, IsEnabled: true, ScheduleFrequency.Interval, 60, null, "UTC", lookbackDays, AutoPromote: true),
             "tests@aeraigroup.com", CancellationToken.None);
         Assert.True(result.IsSuccess, result.Error);
         return result.Value;
@@ -37,7 +38,7 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         await using var scope = fixture.Services.CreateAsyncScope();
         var bytes = Encoding.UTF8.GetBytes(tsv);
         var staged = await scope.ServiceProvider.GetRequiredService<IStagingImportService>()
-            .ImportAsync(new ImportFileCommand(ImportSource.FbaInventory, "myi.tsv", bytes.Length, new MemoryStream(bytes), "tests"), CancellationToken.None);
+            .ImportAsync(new ImportFileCommand(ImportSource.FbaInventory, MarketplaceIds.UnitedStates, "myi.tsv", bytes.Length, new MemoryStream(bytes), "tests"), CancellationToken.None);
         Assert.True(staged.IsSuccess, staged.Error);
 
         var promoted = await scope.ServiceProvider.GetRequiredService<IPromotionService>().PromoteAsync(staged.Value.BatchId, CancellationToken.None);

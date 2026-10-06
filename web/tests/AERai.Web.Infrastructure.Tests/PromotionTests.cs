@@ -2,6 +2,7 @@ using System.Text;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Imports;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Staging;
 using AERai.Web.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -15,12 +16,12 @@ namespace AERai.Web.Infrastructure.Tests;
 /// </summary>
 public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<SqlDatabaseFixture>
 {
-    private async Task<long> StageAsync(ImportSource source, string fileName, string content)
+    private async Task<long> StageAsync(ImportSource source, string fileName, string content, string marketplaceId = MarketplaceIds.UnitedStates)
     {
         await using var scope = fixture.Services.CreateAsyncScope();
         var bytes = Encoding.UTF8.GetBytes(content);
         var result = await scope.ServiceProvider.GetRequiredService<IStagingImportService>()
-            .ImportAsync(new ImportFileCommand(source, fileName, bytes.Length, new MemoryStream(bytes), "tests@aeraigroup.com"), CancellationToken.None);
+            .ImportAsync(new ImportFileCommand(source, marketplaceId, fileName, bytes.Length, new MemoryStream(bytes), "tests@aeraigroup.com"), CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
         return result.Value.BatchId;

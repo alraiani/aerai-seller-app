@@ -1,6 +1,7 @@
 using System.Text;
 using AERai.Web.Application.Imports;
 using AERai.Web.Application.Tests.Fakes;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Staging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -29,10 +30,11 @@ public sealed class StagingImportServiceTests
         _clock,
         NullLogger<StagingImportService>.Instance);
 
-    private static ImportFileCommand Command(string content, string fileName = "orders.csv", ImportSource source = ImportSource.Orders)
+    private static ImportFileCommand Command(
+        string content, string fileName = "orders.csv", ImportSource source = ImportSource.Orders, string marketplaceId = MarketplaceIds.UnitedStates)
     {
         var bytes = Encoding.UTF8.GetBytes(content);
-        return new ImportFileCommand(source, fileName, bytes.Length, new MemoryStream(bytes), "ops@aeraigroup.com");
+        return new ImportFileCommand(source, marketplaceId, fileName, bytes.Length, new MemoryStream(bytes), "ops@aeraigroup.com");
     }
 
     [Fact]
@@ -121,7 +123,7 @@ public sealed class StagingImportServiceTests
     public async Task StageRawFileAsync_FileMissingFromStore_Fails()
     {
         var result = await CreateService().StageRawFileAsync(
-            new StageRawFileCommand(ImportSource.Orders, "orders/2026/10/02/missing.csv", new string('0', 64), "missing.csv", "spapi-worker"),
+            new StageRawFileCommand(ImportSource.Orders, MarketplaceIds.UnitedStates, "orders/2026/10/02/missing.csv", new string('0', 64), "missing.csv", "spapi-worker"),
             CancellationToken.None);
 
         Assert.True(result.IsFailure);
@@ -132,9 +134,9 @@ public sealed class StagingImportServiceTests
     public async Task RestageAsync_BatchWithRawFile_CreatesNewBatchFromStoredFile()
     {
         var service = CreateService();
-        await service.ImportAsync(Command(OrdersCsv), CancellationToken.None);
+        await service.ImportAsync(Command(OrdersCsv, marketplaceId: MarketplaceIds.Canada), CancellationToken.None);
         var original = _repository.Saved[0];
-        _batches.Batches.Add(new ImportBatchSummary(original.Id, original.Source, original.FileName, original.UploadedBy, original.UploadedAt,
+        _batches.Batches.Add(new ImportBatchSummary(original.Id, original.Source, original.MarketplaceId, original.FileName, original.UploadedBy, original.UploadedAt,
             original.Status, original.RowCount, 0, 0, null, null, original.RawFilePath, original.RawFileSha256));
 
         var result = await service.RestageAsync(original.Id, "admin@aeraigroup.com", CancellationToken.None);
@@ -144,6 +146,7 @@ public sealed class StagingImportServiceTests
         var restaged = _repository.Saved[1];
         Assert.Equal(original.RawFilePath, restaged.RawFilePath);
         Assert.Equal("admin@aeraigroup.com", restaged.UploadedBy);
+        Assert.Equal(MarketplaceIds.Canada, restaged.MarketplaceId);
         Assert.Equal(original.OrderLines.Count, restaged.OrderLines.Count);
         Assert.Single(_rawFiles.Files); // Re-staging reads the stored file; it never writes a new one.
     }
@@ -151,7 +154,7 @@ public sealed class StagingImportServiceTests
     [Fact]
     public async Task RestageAsync_BatchWithoutRawFile_Fails()
     {
-        _batches.Batches.Add(new ImportBatchSummary(7, ImportSource.Orders, "old.csv", "x", DateTimeOffset.UnixEpoch,
+        _batches.Batches.Add(new ImportBatchSummary(7, ImportSource.Orders, MarketplaceIds.UnitedStates, "old.csv", "x", DateTimeOffset.UnixEpoch,
             ImportBatchStatus.Promoted, 1, 1, 0, null, null, null, null));
 
         var result = await CreateService().RestageAsync(7, "admin@aeraigroup.com", CancellationToken.None);

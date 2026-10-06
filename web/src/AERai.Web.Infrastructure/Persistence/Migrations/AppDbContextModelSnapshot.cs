@@ -33,6 +33,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<long>("LastImportBatchId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
@@ -51,7 +56,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Sku", "SnapshotDate", "State")
+                    b.HasIndex("Sku");
+
+                    b.HasIndex("MarketplaceId", "Sku", "SnapshotDate", "State")
                         .IsUnique();
 
                     b.ToTable("InventorySnapshot", "core", t =>
@@ -169,6 +176,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<long>("LastImportBatchId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<string>("OrderStatus")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -189,6 +201,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AmazonOrderId")
                         .IsUnique();
+
+                    b.HasIndex("MarketplaceId");
 
                     b.HasIndex("PurchaseDateUtc");
 
@@ -238,10 +252,6 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
 
-                    b.Property<decimal?>("CostOfGoods")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -257,6 +267,33 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.ToTable("Product", "core");
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.ProductCost", b =>
+                {
+                    b.Property<string>("Sku")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("MarketplaceId")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<decimal>("CostOfGoods")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Sku", "MarketplaceId");
+
+                    b.HasIndex("MarketplaceId");
+
+                    b.ToTable("ProductCost", "core", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductCost_NonNegative", "[CostOfGoods] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.Settlement", b =>
                 {
                     b.Property<string>("SettlementId")
@@ -270,6 +307,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<long>("LastImportBatchId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<DateTimeOffset?>("PeriodEnd")
                         .HasColumnType("datetimeoffset");
 
@@ -277,6 +319,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.HasKey("SettlementId");
+
+                    b.HasIndex("MarketplaceId");
 
                     b.ToTable("Settlement", "core");
                 });
@@ -382,6 +426,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<string>("Message")
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
@@ -413,6 +462,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(256)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("MarketplaceId");
 
                     b.HasIndex("SyncScheduleId", "StartedAt");
 
@@ -463,6 +514,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<int>("LookbackDays")
                         .HasColumnType("int");
 
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -498,6 +554,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(256)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("MarketplaceId");
 
                     b.HasIndex("Name")
                         .IsUnique()
@@ -540,6 +598,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AERai.Web.Domain.Reporting.DailySalesBySku", b =>
                 {
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<int>("OrderCount")
                         .HasColumnType("int");
 
@@ -581,6 +644,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<int>("Inbound")
                         .HasColumnType("int");
 
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<int>("Reserved")
                         .HasColumnType("int");
 
@@ -617,6 +685,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<int>("LineCount")
                         .HasColumnType("int");
 
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<string>("OrderStatus")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -649,6 +722,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<string>("OrderStatus")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -679,6 +757,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("Fees")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
 
                     b.Property<decimal>("Net")
                         .HasPrecision(18, 2)
@@ -728,6 +811,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasMaxLength(260)
                         .HasColumnType("nvarchar(260)");
 
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<DateTimeOffset?>("PromotedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -768,6 +856,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(256)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("MarketplaceId");
 
                     b.HasIndex("RawFileSha256");
 
@@ -949,6 +1039,10 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("RowNumber")
                         .HasColumnType("int");
+
+                    b.Property<string>("SalesChannel")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
 
                     b.Property<string>("Sku")
                         .HasMaxLength(400)
@@ -1240,9 +1334,24 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AERai.Web.Domain.Core.InventorySnapshot", b =>
                 {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("AERai.Web.Domain.Core.Product", null)
                         .WithMany()
                         .HasForeignKey("Sku")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.Order", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -1262,6 +1371,30 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.ProductCost", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AERai.Web.Domain.Core.Product", null)
+                        .WithMany()
+                        .HasForeignKey("Sku")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.Settlement", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Core.SettlementLine", b =>
@@ -1292,10 +1425,34 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AERai.Web.Domain.Ingestion.SyncRun", b =>
                 {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("AERai.Web.Domain.Ingestion.SyncSchedule", null)
                         .WithMany()
                         .HasForeignKey("SyncScheduleId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Ingestion.SyncSchedule", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Staging.ImportBatch", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

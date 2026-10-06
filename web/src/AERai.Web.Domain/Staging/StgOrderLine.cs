@@ -31,4 +31,7 @@ public sealed class StgOrderLine : StagingRow
 
     /// <summary><c>currency</c>.</summary>
     public string? Currency { get; set; }
+
+    /// <summary><c>sales-channel</c> (e.g. <c>Amazon.com</c>); optional in uploads.</summary>
+    public string? SalesChannel { get; set; }
 }

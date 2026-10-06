@@ -1,3 +1,4 @@
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -13,6 +14,8 @@ internal sealed class SyncRunConfiguration : IEntityTypeConfiguration<SyncRun>
         builder.ToTable("SyncRun", Schemas.Operations);
         builder.HasKey(r => r.Id);
         builder.Property(r => r.ReportType).HasConversion<string>().HasMaxLength(32);
+        builder.Property(r => r.MarketplaceId).HasMaxLength(16);
+        builder.HasOne<Marketplace>().WithMany().HasForeignKey(r => r.MarketplaceId).OnDelete(DeleteBehavior.Restrict);
         builder.Property(r => r.Trigger).HasConversion<string>().HasMaxLength(16);
         builder.Property(r => r.Status).HasConversion<string>().HasMaxLength(16);
         builder.Property(r => r.TriggeredBy).HasMaxLength(256);

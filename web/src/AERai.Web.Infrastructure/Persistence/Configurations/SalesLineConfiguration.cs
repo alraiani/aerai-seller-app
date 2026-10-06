@@ -11,6 +11,7 @@ internal sealed class SalesLineConfiguration : IEntityTypeConfiguration<SalesLin
     public void Configure(EntityTypeBuilder<SalesLine> builder)
     {
         builder.ToView("vw_SalesLine", Schemas.Reporting).HasNoKey();
+        builder.Property(v => v.MarketplaceId).HasMaxLength(16);
         builder.Property(v => v.ItemPrice).HasPrecision(18, 2);
     }
 }

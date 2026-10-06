@@ -9,19 +9,24 @@ internal sealed class FakeProductRepository : IProductRepository
 {
     public Dictionary<string, ProductSummary> Products { get; } = new(StringComparer.Ordinal);
 
-    public Task<bool> UpdateCostAsync(string sku, decimal? costOfGoods, DateTimeOffset updatedAt, CancellationToken cancellationToken)
+    /// <summary>Costs per (SKU, marketplace), as saved through <see cref="UpdateCostAsync"/>.</summary>
+    public Dictionary<(string Sku, string MarketplaceId), (decimal? Cost, DateTimeOffset UpdatedAt)> Costs { get; } = [];
+
+    public Task<bool> UpdateCostAsync(string sku, string marketplaceId, decimal? costOfGoods, DateTimeOffset updatedAt, CancellationToken cancellationToken)
     {
-        if (!Products.TryGetValue(sku, out var existing))
+        if (!Products.ContainsKey(sku))
         {
             return Task.FromResult(false);
         }
 
-        Products[sku] = existing with { CostOfGoods = costOfGoods, UpdatedAt = updatedAt };
+        Costs[(sku, marketplaceId)] = (costOfGoods, updatedAt);
         return Task.FromResult(true);
     }
 
-    public Task<ProductSummary?> GetAsync(string sku, CancellationToken cancellationToken) =>
-        Task.FromResult(Products.GetValueOrDefault(sku));
+    public Task<ProductSummary?> GetAsync(string sku, string marketplaceId, CancellationToken cancellationToken) =>
+        Task.FromResult(Products.TryGetValue(sku, out var product)
+            ? product with { CostOfGoods = Costs.GetValueOrDefault((sku, marketplaceId)).Cost }
+            : null);
 
-    public Task<PagedResult<ProductSummary>> ListAsync(PageRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<PagedResult<ProductSummary>> ListAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
 }

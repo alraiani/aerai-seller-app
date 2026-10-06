@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Ingestion;
+using AERai.Web.Application.Marketplaces;
 using AERai.Web.Application.Security;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.UI.Models;
@@ -16,11 +17,13 @@ namespace AERai.Web.UI.Pages.Tools.Schedules;
 /// <param name="schedules">Schedule queries.</param>
 /// <param name="scheduleService">Schedule use cases.</param>
 /// <param name="identity">User list for the owner picker.</param>
+/// <param name="currentMarketplace">The marketplace the user is viewing (the default for new schedules).</param>
 /// <param name="clock">Clock for relative times.</param>
 public sealed class EditModel(
     ISyncScheduleRepository schedules,
     ISyncScheduleService scheduleService,
     IIdentityService identity,
+    ICurrentMarketplace currentMarketplace,
     TimeProvider clock) : PageModel
 {
     /// <summary>Posted form values.</summary>
@@ -44,12 +47,16 @@ public sealed class EditModel(
     /// <summary>Current time, for relative times.</summary>
     public DateTimeOffset Now { get; } = clock.GetUtcNow();
 
+    /// <summary>Active marketplaces a schedule can target.</summary>
+    public IReadOnlyList<Domain.Core.Marketplace> Marketplaces { get; private set; } = [];
+
     /// <summary>Shows the form: blank, pre-filled for editing, or copied for duplicating.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The page, or 404 for an unknown id.</returns>
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         Users = await identity.ListUsersAsync(cancellationToken);
+        var selection = await LoadMarketplacesAsync(cancellationToken);
 
         if (Id is { } id)
         {
@@ -74,6 +81,8 @@ public sealed class EditModel(
             return Page();
         }
 
+        Input.MarketplaceId = selection.Current.MarketplaceId;
+        Input.TimeZoneId = selection.Current.TimeZoneId;
         Input.OwnerEmail = User.Identity!.Name;
         return Page();
     }
@@ -124,12 +133,20 @@ public sealed class EditModel(
     private async Task<IActionResult> RedisplayAsync(CancellationToken cancellationToken)
     {
         Users = await identity.ListUsersAsync(cancellationToken);
+        await LoadMarketplacesAsync(cancellationToken);
         if (Id is { } id)
         {
             Existing = await schedules.GetAsync(id, cancellationToken);
         }
 
         return Page();
+    }
+
+    private async Task<MarketplaceSelection> LoadMarketplacesAsync(CancellationToken cancellationToken)
+    {
+        var selection = await currentMarketplace.GetAsync(cancellationToken);
+        Marketplaces = [.. selection.All.Where(m => m.IsActive)];
+        return selection;
     }
 
     /// <summary>Schedule form fields.</summary>
@@ -142,6 +159,11 @@ public sealed class EditModel(
         /// <summary>Report to pull.</summary>
         [Display(Name = "Amazon report")]
         public AmazonReportType ReportType { get; set; } = AmazonReportType.Orders;
+
+        /// <summary>Marketplace to pull for.</summary>
+        [Required]
+        [Display(Name = "Marketplace")]
+        public string MarketplaceId { get; set; } = string.Empty;
 
         /// <summary>Interval or daily.</summary>
         [Display(Name = "Repeat")]
@@ -191,6 +213,7 @@ public sealed class EditModel(
             {
                 Name = s.Name,
                 ReportType = s.ReportType,
+                MarketplaceId = s.MarketplaceId,
                 Frequency = s.Frequency,
                 IntervalMinutes = s.IntervalMinutes ?? 60,
                 DailyTime = s.DailyTime ?? new TimeOnly(6, 0),
@@ -206,6 +229,6 @@ public sealed class EditModel(
         /// <summary>Converts the form to the Application input.</summary>
         /// <returns>The schedule input.</returns>
         public SyncScheduleInput ToInput() =>
-            new(Name, ReportType, IsEnabled, Frequency, IntervalMinutes, DailyTime, TimeZoneId, LookbackDays, AutoPromote, Notes, OwnerEmail);
+            new(Name, ReportType, MarketplaceId, IsEnabled, Frequency, IntervalMinutes, DailyTime, TimeZoneId, LookbackDays, AutoPromote, Notes, OwnerEmail);
     }
 }

@@ -11,6 +11,9 @@ public sealed class ImportBatch
     /// <summary>The report type the file contains.</summary>
     public ImportSource Source { get; set; }
 
+    /// <summary>Marketplace the file's data belongs to; promotion stamps it on every curated row.</summary>
+    public required string MarketplaceId { get; set; }
+
     /// <summary>Original file name as supplied by the uploader (display only; never used as a path).</summary>
     public required string FileName { get; set; }
 

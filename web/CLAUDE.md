@@ -56,7 +56,7 @@ Amazon SP-API reports ─┐  (upload today; automated download later)
 | Schema | Role |
 |---|---|
 | `stg` | Raw imports. `stg.ImportBatch` + one table per source (`OrderLine`, `InventoryRow`, `SettlementLine`). All business columns are `nvarchar`; every row is kept with its `RawLine` and an `ErrorMessage` after promotion. |
-| `core` | Curated, typed, constrained tables (`Product`, `Order`, `OrderItem`, `InventorySnapshot`, `Settlement`, `SettlementLine`). Written **only** by `core.usp_PromoteImportBatch` and the Products/COGS tool. |
+| `core` | Curated, typed, constrained tables (`Marketplace`, `Product`, `ProductCost`, `Order`, `OrderItem`, `InventorySnapshot`, `Settlement`, `SettlementLine`). Written **only** by `core.usp_PromoteImportBatch` and the Products/COGS tool (`Marketplace` is seeded reference data). |
 | `rpt` | SQL views over `core` (`vw_DailySalesBySku`, `vw_OrderSummary`, `vw_InventoryPosition`, `vw_SettlementSummary`) mapped as EF keyless entities. Pages read these. |
 | `ops` | Ingestion schedules, run history, and the ingested-report ledger. |
 | `auth` | ASP.NET Core Identity tables. |
@@ -71,12 +71,20 @@ Integration tests (`tests/AERai.Web.Infrastructure.Tests`) run only when `AERAI_
 
 ASP.NET Core Identity (email = username), cookie auth, no self-registration. Roles: `Admin` (users + everything), `Operator` (imports, promotion, Amazon sync schedules, COGS edits), `Viewer` (read-only). Every page requires login by default; `Account/Login` is the only anonymous page. `/Tools` requires Operator, `/Admin` requires Admin.
 
+## Marketplaces (US / CA / UK)
+
+- **Reference data**: `core.Marketplace` (seeded: US `ATVPDKIKX0DER`, CA `A2EUQ1WTGCTBG2`, UK `A1F83G8C2ARO7P`) holds each marketplace's currency, time zone, `sales-channel` value, SP-API region, and `IsActive`. UK starts **inactive** because it is in the EU region and needs its own SP-API authorization; set `IsActive = 1` once EU credentials exist.
+- **Every record has a marketplace**: `stg.ImportBatch`, `core.Order`, `core.InventorySnapshot`, `core.Settlement`, `ops.SyncSchedule`, and `ops.SyncRun` carry a non-null `MarketplaceId`. Promotion stamps the batch's marketplace on what it writes; uploads choose one on the Import page, schedules have one each. `core.Product` is a shared SKU catalog, but **cost of goods is per marketplace** in `core.ProductCost` (no row = not set).
+- **Channel guard**: promotion rejects order lines whose `sales-channel` belongs to another marketplace (blank = the batch's own), so a mixed file can never leak orders into the wrong marketplace.
+- **Inventory is never pooled**: each marketplace has its own fulfillment network, so snapshots and `rpt.vw_InventoryPosition` are keyed by (marketplace, SKU).
+- **The switcher**: `_MarketplaceSwitch` in the top bar posts to `/Marketplace/Switch`, which remembers the choice per user/browser in the `AERai.Marketplace` cookie (`IMarketplacePreference`). Pages get their marketplace from `ICurrentMarketplace` (Application), which falls back to the first active marketplace if the cookie is missing, unknown, or inactive. Every marketplace-scoped query takes a `marketplaceId`; never add a page query that reads across marketplaces.
+
 ## Dashboard & UI conventions
 
 - **Dashboard rules live in `DashboardService`** (Application, unit-tested); `IDashboardQueries` only returns rows (`rpt.vw_SalesLine`, inventory positions, settlements, sync health). Pages format, never compute.
-- **Local business time**: days/hours use `Dashboard:TimeZoneId` (default `America/New_York`), not UTC. Comparisons use the same elapsed time ("today so far" vs "yesterday until now").
+- **Local business time**: days/hours use the selected marketplace's `TimeZoneId` (US `America/New_York`, CA `America/Toronto`, UK `Europe/London`), not UTC. Comparisons use the same elapsed time ("today so far" vs "yesterday until now").
 - **Honest comparisons**: if synced Orders history (earliest successful run's `DataStart`) doesn't cover the whole comparison window, changes are suppressed (`ComparisonAvailable = false`) instead of showing misleading percentages.
-- **One currency**: the dashboard reports in `Dashboard:Currency` (USD); CAD/MXN settlements are never summed with it.
+- **One currency**: every page shows one marketplace, so money is always in that marketplace's currency (USD/CAD/GBP, formatted `$`/`CA$`/`£` by `DashboardFormat`). Amounts from different marketplaces are never summed.
 - **Theme**: Light / Dark / System via `wwwroot/js/theme.js` (loaded in `<head>` to avoid a flash; choice in localStorage). Colors are CSS tokens in `site.css` defined per `[data-bs-theme]`; components must use tokens, never hard-coded colors. No inline styles or scripts (CSP) — charts are SVG with attribute geometry and token-colored classes.
 - **Responsive**: tables go inside `.table-responsive`; long Amazon titles use `.cell-truncate` + `title` tooltip. The sidebar collapses behind a CSS-only Menu toggle under 768px.
 - **Razor gotchas**: inside a C# block only the first element on a line is markup — put sibling elements on separate lines. After any Razor compile error, other pages may report bogus errors (e.g. on `<partial model=...>`) from stale source-generator state: run `dotnet build-server shutdown`, delete `src/AERai.Web.UI/obj`, rebuild.

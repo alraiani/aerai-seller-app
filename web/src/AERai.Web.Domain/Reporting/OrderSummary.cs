@@ -8,6 +8,9 @@ public sealed class OrderSummary
     /// <summary>Amazon order identifier.</summary>
     public required string AmazonOrderId { get; set; }
 
+    /// <summary>Marketplace the order was placed in.</summary>
+    public required string MarketplaceId { get; set; }
+
     /// <summary>When the order was placed.</summary>
     public DateTimeOffset PurchaseDate { get; set; }
 

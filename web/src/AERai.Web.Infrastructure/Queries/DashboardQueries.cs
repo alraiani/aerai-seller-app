@@ -16,35 +16,32 @@ namespace AERai.Web.Infrastructure.Queries;
 internal sealed class DashboardQueries(AppDbContext dbContext) : IDashboardQueries
 {
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<SalesLine>> GetSalesLinesAsync(DateTimeOffset from, DateTimeOffset to, string currency, CancellationToken cancellationToken) =>
+    public async Task<IReadOnlyList<SalesLine>> GetSalesLinesAsync(string marketplaceId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken) =>
         await dbContext.SalesLines
             .AsNoTracking()
-            .Where(l => l.PurchaseDate >= from && l.PurchaseDate < to)
+            .Where(l => l.MarketplaceId == marketplaceId && l.PurchaseDate >= from && l.PurchaseDate < to)
 
-            // Amazon leaves currency blank on some lines (e.g. zero-price shipped items); those
-            // belong to the marketplace's own currency, so they are kept rather than dropped.
-            .Where(l => l.Currency == currency || l.Currency == null)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<InventoryPosition>> GetInventoryPositionsAsync(CancellationToken cancellationToken) =>
-        await dbContext.InventoryPositions.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+    public async Task<IReadOnlyList<InventoryPosition>> GetInventoryPositionsAsync(string marketplaceId, CancellationToken cancellationToken) =>
+        await dbContext.InventoryPositions.AsNoTracking().Where(p => p.MarketplaceId == marketplaceId).ToListAsync(cancellationToken).ConfigureAwait(false);
 
     /// <inheritdoc/>
-    public Task<SettlementSummary?> GetLatestSettlementAsync(string currency, CancellationToken cancellationToken) =>
+    public Task<SettlementSummary?> GetLatestSettlementAsync(string marketplaceId, CancellationToken cancellationToken) =>
         dbContext.SettlementSummaries
             .AsNoTracking()
-            .Where(s => s.Currency == currency && s.PeriodEnd != null)
+            .Where(s => s.MarketplaceId == marketplaceId && s.PeriodEnd != null)
             .OrderByDescending(s => s.PeriodEnd)
             .FirstOrDefaultAsync(cancellationToken);
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<string>> GetSoldSkusMissingCostAsync(DateTimeOffset since, CancellationToken cancellationToken) =>
+    public async Task<IReadOnlyList<string>> GetSoldSkusMissingCostAsync(string marketplaceId, DateTimeOffset since, CancellationToken cancellationToken) =>
         await dbContext.SalesLines
             .AsNoTracking()
-            .Where(l => l.PurchaseDate >= since)
-            .Join(dbContext.Products.Where(p => p.CostOfGoods == null), l => l.Sku, p => p.Sku, (l, _) => l)
+            .Where(l => l.MarketplaceId == marketplaceId && l.PurchaseDate >= since)
+            .Where(l => !dbContext.ProductCosts.Any(c => c.Sku == l.Sku && c.MarketplaceId == marketplaceId))
             .GroupBy(l => l.Sku)
             .OrderByDescending(g => g.Sum(l => l.ItemPrice))
             .Select(g => g.Key)
@@ -52,16 +49,16 @@ internal sealed class DashboardQueries(AppDbContext dbContext) : IDashboardQueri
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
-    public Task<int> CountBatchesAwaitingPromotionAsync(CancellationToken cancellationToken) =>
-        dbContext.ImportBatches.CountAsync(b => b.Status == ImportBatchStatus.Received, cancellationToken);
+    public Task<int> CountBatchesAwaitingPromotionAsync(string marketplaceId, CancellationToken cancellationToken) =>
+        dbContext.ImportBatches.CountAsync(b => b.MarketplaceId == marketplaceId && b.Status == ImportBatchStatus.Received, cancellationToken);
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<SyncGlance>> GetSyncHealthAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SyncGlance>> GetSyncHealthAsync(string marketplaceId, CancellationToken cancellationToken)
     {
-        var schedules = await dbContext.SyncSchedules.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var schedules = await dbContext.SyncSchedules.AsNoTracking().Where(s => s.MarketplaceId == marketplaceId).ToListAsync(cancellationToken).ConfigureAwait(false);
         var runs = await dbContext.SyncRuns
             .AsNoTracking()
-            .Where(r => r.Status != SyncRunStatus.Running)
+            .Where(r => r.MarketplaceId == marketplaceId && r.Status != SyncRunStatus.Running)
             .GroupBy(r => r.ReportType)
             .Select(g => new
             {
@@ -88,8 +85,8 @@ internal sealed class DashboardQueries(AppDbContext dbContext) : IDashboardQueri
         dbContext.SyncSettings.AnyAsync(s => s.IsPaused, cancellationToken);
 
     /// <inheritdoc/>
-    public Task<DateTimeOffset?> GetOrdersCoverageStartAsync(CancellationToken cancellationToken) =>
+    public Task<DateTimeOffset?> GetOrdersCoverageStartAsync(string marketplaceId, CancellationToken cancellationToken) =>
         dbContext.SyncRuns
-            .Where(r => r.ReportType == AmazonReportType.Orders && r.Status != SyncRunStatus.Failed && r.Status != SyncRunStatus.Running)
+            .Where(r => r.MarketplaceId == marketplaceId && r.ReportType == AmazonReportType.Orders && r.Status != SyncRunStatus.Failed && r.Status != SyncRunStatus.Running)
             .MinAsync(r => r.DataStart, cancellationToken);
 }

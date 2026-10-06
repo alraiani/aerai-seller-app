@@ -13,7 +13,7 @@ internal sealed class FakeImportBatchQueries : IImportBatchQueries
 
     public Task<ImportBatchSummary?> GetLatestAsync(CancellationToken cancellationToken) => Task.FromResult(Latest);
 
-    public Task<PagedResult<ImportBatchSummary>> ListAsync(PageRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<PagedResult<ImportBatchSummary>> ListAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ImportBatchSummary?> GetAsync(long batchId, CancellationToken cancellationToken) =>
         Task.FromResult(Batches.FirstOrDefault(b => b.Id == batchId));

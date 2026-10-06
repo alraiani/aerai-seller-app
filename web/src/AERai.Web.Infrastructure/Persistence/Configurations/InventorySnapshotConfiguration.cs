@@ -15,7 +15,11 @@ internal sealed class InventorySnapshotConfiguration : IEntityTypeConfiguration<
         builder.HasKey(s => s.Id);
         builder.Property(s => s.Sku).HasMaxLength(64);
         builder.Property(s => s.State).HasMaxLength(32);
-        builder.HasIndex(s => new { s.Sku, s.SnapshotDate, s.State }).IsUnique();
+        builder.Property(s => s.MarketplaceId).HasMaxLength(16);
+
+        // Each marketplace has its own fulfillment network, so the same SKU has a separate snapshot per marketplace.
+        builder.HasIndex(s => new { s.MarketplaceId, s.Sku, s.SnapshotDate, s.State }).IsUnique();
+        builder.HasOne<Marketplace>().WithMany().HasForeignKey(s => s.MarketplaceId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Product>().WithMany().HasForeignKey(s => s.Sku).OnDelete(DeleteBehavior.Restrict);
     }
 }

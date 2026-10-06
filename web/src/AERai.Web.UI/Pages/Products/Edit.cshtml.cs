@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using AERai.Web.Application.Abstractions;
+using AERai.Web.Application.Marketplaces;
 using AERai.Web.Application.Products;
 using AERai.Web.Application.Security;
 using AERai.Web.UI.Models;
@@ -10,13 +11,18 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace AERai.Web.UI.Pages.Products;
 
 /// <summary>
-/// Edits a product's cost of goods. Operators and Admins only.
+/// Edits a product's cost of goods in the current marketplace (each marketplace has its own cost,
+/// in its own currency). Operators and Admins only.
 /// </summary>
 /// <param name="products">Product queries.</param>
 /// <param name="productService">Product use cases.</param>
+/// <param name="currentMarketplace">The marketplace the user is viewing.</param>
 [Authorize(Policy = AppPolicies.RequireOperator)]
-public sealed class EditModel(IProductRepository products, IProductService productService) : PageModel
+public sealed class EditModel(IProductRepository products, IProductService productService, ICurrentMarketplace currentMarketplace) : PageModel
 {
+    /// <summary>Marketplace whose cost is being edited.</summary>
+    public Domain.Core.Marketplace Marketplace { get; private set; } = default!;
+
     /// <summary>The product being edited (for display).</summary>
     public ProductSummary Product { get; private set; } = default!;
 
@@ -55,20 +61,21 @@ public sealed class EditModel(IProductRepository products, IProductService produ
             return Page();
         }
 
-        var result = await productService.UpdateCostAsync(sku, Input.CostOfGoods, cancellationToken);
+        var result = await productService.UpdateCostAsync(sku, Marketplace.MarketplaceId, Input.CostOfGoods, cancellationToken);
         if (result.IsFailure)
         {
             ModelState.AddModelError(string.Empty, result.Error);
             return Page();
         }
 
-        TempData[StatusMessage.Success] = $"Cost of goods for {sku} saved.";
+        TempData[StatusMessage.Success] = $"{Marketplace.Code} cost of goods for {sku} saved.";
         return RedirectToPage("Index");
     }
 
     private async Task<bool> LoadAsync(string sku, CancellationToken cancellationToken)
     {
-        var product = await products.GetAsync(sku, cancellationToken);
+        Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        var product = await products.GetAsync(sku, Marketplace.MarketplaceId, cancellationToken);
         if (product is null)
         {
             return false;

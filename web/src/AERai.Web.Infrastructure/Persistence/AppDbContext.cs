@@ -36,6 +36,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Curated products.</summary>
     public DbSet<Product> Products => Set<Product>();
 
+    /// <summary>Per-marketplace product costs.</summary>
+    public DbSet<ProductCost> ProductCosts => Set<ProductCost>();
+
     /// <summary>Curated orders.</summary>
     public DbSet<Order> Orders => Set<Order>();
 

@@ -11,6 +11,9 @@ public sealed class Order
     /// <summary>Amazon order identifier (natural key).</summary>
     public required string AmazonOrderId { get; set; }
 
+    /// <summary>Marketplace the order was placed in.</summary>
+    public required string MarketplaceId { get; set; }
+
     /// <summary>When the customer placed the order.</summary>
     public DateTimeOffset PurchaseDate { get; set; }
 

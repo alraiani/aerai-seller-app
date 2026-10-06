@@ -14,6 +14,7 @@ internal sealed class InventoryPositionConfiguration : IEntityTypeConfiguration<
     public void Configure(EntityTypeBuilder<InventoryPosition> builder)
     {
         builder.ToView("vw_InventoryPosition", Schemas.Reporting).HasNoKey();
+        builder.Property(v => v.MarketplaceId).HasMaxLength(16);
         builder.Property(v => v.DailyVelocity).HasPrecision(18, 2);
         builder.Property(v => v.DaysOfSupply).HasPrecision(18, 1);
     }

@@ -9,6 +9,9 @@ public sealed class SettlementSummary
     /// <summary>Amazon settlement identifier.</summary>
     public required string SettlementId { get; set; }
 
+    /// <summary>Marketplace the payout settles.</summary>
+    public required string MarketplaceId { get; set; }
+
     /// <summary>Start of the settlement period.</summary>
     public DateTimeOffset? PeriodStart { get; set; }
 

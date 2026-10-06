@@ -14,6 +14,7 @@ internal sealed class OrderSummaryConfiguration : IEntityTypeConfiguration<Order
     public void Configure(EntityTypeBuilder<OrderSummary> builder)
     {
         builder.ToView("vw_OrderSummary", Schemas.Reporting).HasNoKey();
+        builder.Property(v => v.MarketplaceId).HasMaxLength(16);
         builder.Property(v => v.OrderTotal).HasPrecision(18, 2);
     }
 }

@@ -1,3 +1,5 @@
+using AERai.Web.Domain.Core;
+
 namespace AERai.Web.Application.Dashboard;
 
 /// <summary>
@@ -5,9 +7,10 @@ namespace AERai.Web.Application.Dashboard;
 /// </summary>
 public interface IDashboardService
 {
-    /// <summary>Computes the dashboard for a period.</summary>
+    /// <summary>Computes one marketplace's dashboard for a period.</summary>
+    /// <param name="marketplace">Marketplace to report on; its currency and time zone apply.</param>
     /// <param name="period">Window to summarize.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The snapshot.</returns>
-    Task<DashboardSnapshot> GetSnapshotAsync(DashboardPeriod period, CancellationToken cancellationToken);
+    Task<DashboardSnapshot> GetSnapshotAsync(Marketplace marketplace, DashboardPeriod period, CancellationToken cancellationToken);
 }

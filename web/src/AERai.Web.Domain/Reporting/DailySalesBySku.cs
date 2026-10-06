@@ -9,6 +9,9 @@ public sealed class DailySalesBySku
     /// <summary>UTC calendar date of the purchase.</summary>
     public DateOnly SalesDate { get; set; }
 
+    /// <summary>Marketplace the sales were made in.</summary>
+    public required string MarketplaceId { get; set; }
+
     /// <summary>Seller SKU.</summary>
     public required string Sku { get; set; }
 

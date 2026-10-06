@@ -7,7 +7,7 @@ public sealed class ScheduleCalculatorTests
 {
     private static SyncSchedule Daily(int hour, int minute, string zone = "America/New_York") => new()
     {
-        Name = "t", Frequency = ScheduleFrequency.Daily, DailyTime = new TimeOnly(hour, minute), TimeZoneId = zone, UpdatedBy = "t",
+        Name = "t", MarketplaceId = "ATVPDKIKX0DER", Frequency = ScheduleFrequency.Daily, DailyTime = new TimeOnly(hour, minute), TimeZoneId = zone, UpdatedBy = "t",
     };
 
     private static DateTimeOffset Utc(int y, int mo, int d, int h, int mi) => new(y, mo, d, h, mi, 0, TimeSpan.Zero);
@@ -15,7 +15,7 @@ public sealed class ScheduleCalculatorTests
     [Fact]
     public void NextRunAfter_Interval_AddsMinutes()
     {
-        var schedule = new SyncSchedule { Name = "t", Frequency = ScheduleFrequency.Interval, IntervalMinutes = 90, TimeZoneId = "UTC", UpdatedBy = "t" };
+        var schedule = new SyncSchedule { Name = "t", MarketplaceId = "ATVPDKIKX0DER", Frequency = ScheduleFrequency.Interval, IntervalMinutes = 90, TimeZoneId = "UTC", UpdatedBy = "t" };
 
         Assert.Equal(Utc(2026, 10, 2, 13, 30), ScheduleCalculator.NextRunAfter(schedule, Utc(2026, 10, 2, 12, 0)));
     }

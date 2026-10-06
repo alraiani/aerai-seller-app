@@ -3,6 +3,7 @@
 
 using System.Threading.RateLimiting;
 using AERai.Web.Application;
+using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Security;
 using AERai.Web.Infrastructure;
 using AERai.Web.Infrastructure.Persistence;
@@ -30,6 +31,9 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration["APPLICATIONINSIGHTS_CONNEC
 builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration);
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IMarketplacePreference, CookieMarketplacePreference>();
 
 builder.Services.ConfigureApplicationCookie(options =>
 {

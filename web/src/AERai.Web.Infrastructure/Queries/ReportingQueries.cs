@@ -13,11 +13,11 @@ namespace AERai.Web.Infrastructure.Queries;
 internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueries
 {
     /// <inheritdoc/>
-    public Task<PagedResult<OrderSummary>> GetOrdersAsync(PageRequest request, CancellationToken cancellationToken)
+    public Task<PagedResult<OrderSummary>> GetOrdersAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var query = dbContext.OrderSummaries.AsNoTracking();
+        var query = dbContext.OrderSummaries.AsNoTracking().Where(v => v.MarketplaceId == marketplaceId);
         if (request.SafeSearch is { } search)
         {
             query = query.Where(o => o.AmazonOrderId.Contains(search) || o.OrderStatus.Contains(search));
@@ -30,11 +30,11 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
     }
 
     /// <inheritdoc/>
-    public Task<PagedResult<InventoryPosition>> GetInventoryPositionsAsync(PageRequest request, CancellationToken cancellationToken)
+    public Task<PagedResult<InventoryPosition>> GetInventoryPositionsAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var query = dbContext.InventoryPositions.AsNoTracking();
+        var query = dbContext.InventoryPositions.AsNoTracking().Where(v => v.MarketplaceId == marketplaceId);
         if (request.SafeSearch is { } search)
         {
             query = query.Where(p => p.Sku.Contains(search) || (p.Title != null && p.Title.Contains(search)));
@@ -49,11 +49,11 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
     }
 
     /// <inheritdoc/>
-    public Task<PagedResult<SettlementSummary>> GetSettlementsAsync(PageRequest request, CancellationToken cancellationToken)
+    public Task<PagedResult<SettlementSummary>> GetSettlementsAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var query = dbContext.SettlementSummaries.AsNoTracking();
+        var query = dbContext.SettlementSummaries.AsNoTracking().Where(v => v.MarketplaceId == marketplaceId);
         if (request.SafeSearch is { } search)
         {
             query = query.Where(s => s.SettlementId.Contains(search));

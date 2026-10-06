@@ -1,4 +1,5 @@
 using AERai.Web.Application.Security;
+using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.Infrastructure.Identity;
 using AERai.Web.Infrastructure.Persistence;
@@ -77,35 +78,48 @@ public static partial class DatabaseInitializer
     }
 
     /// <summary>
-    /// On first run, creates one schedule per report type so the Schedules page starts populated.
-    /// They are created <b>disabled</b>: nothing calls Amazon until an operator turns a schedule on.
+    /// Creates one schedule per report type for each active marketplace that has never had any, so
+    /// the Schedules page starts populated (including for a marketplace activated later). They are
+    /// created <b>disabled</b>: nothing calls Amazon until an operator turns a schedule on.
     /// </summary>
     private static async Task SeedDefaultSchedulesAsync(AppDbContext db, TimeProvider clock, CancellationToken cancellationToken)
     {
         // Include deleted schedules: an operator who deleted every default must not get them back.
-        if (await db.SyncSchedules.IgnoreQueryFilters().AnyAsync(cancellationToken).ConfigureAwait(false))
-        {
-            return;
-        }
+        var seeded = await db.SyncSchedules.IgnoreQueryFilters()
+            .Select(s => s.MarketplaceId)
+            .Distinct()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var marketplaces = await db.Marketplaces
+            .Where(m => m.IsActive && !seeded.Contains(m.MarketplaceId))
+            .OrderBy(m => m.SortOrder)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         var now = clock.GetUtcNow();
-        db.SyncSchedules.AddRange(
-            DefaultSchedule("Orders — hourly", AmazonReportType.Orders, ScheduleFrequency.Interval, 60, null, 7, now),
-            DefaultSchedule("FBA inventory — daily 6:00 AM", AmazonReportType.FbaInventory, ScheduleFrequency.Daily, null, new TimeOnly(6, 0), 1, now),
-            DefaultSchedule("Settlements — daily 7:00 AM", AmazonReportType.Settlements, ScheduleFrequency.Daily, null, new TimeOnly(7, 0), 30, now));
+        foreach (var m in marketplaces)
+        {
+            db.SyncSchedules.AddRange(
+                DefaultSchedule(m, "Orders — hourly", AmazonReportType.Orders, ScheduleFrequency.Interval, 60, null, 7, now),
+                DefaultSchedule(m, "FBA inventory — daily 6:00 AM", AmazonReportType.FbaInventory, ScheduleFrequency.Daily, null, new TimeOnly(6, 0), 1, now),
+                DefaultSchedule(m, "Settlements — daily 7:00 AM", AmazonReportType.Settlements, ScheduleFrequency.Daily, null, new TimeOnly(7, 0), 30, now));
+        }
+
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static SyncSchedule DefaultSchedule(
-        string name, AmazonReportType type, ScheduleFrequency frequency, int? intervalMinutes, TimeOnly? dailyTime, int lookbackDays, DateTimeOffset now) => new()
+        Marketplace marketplace, string name, AmazonReportType type, ScheduleFrequency frequency, int? intervalMinutes, TimeOnly? dailyTime, int lookbackDays, DateTimeOffset now) => new()
     {
-        Name = name,
+        // Names are unique across marketplaces, so each default carries its marketplace code.
+        Name = $"{marketplace.Code} {name}",
         ReportType = type,
+        MarketplaceId = marketplace.MarketplaceId,
         IsEnabled = false,
         Frequency = frequency,
         IntervalMinutes = intervalMinutes,
         DailyTime = dailyTime,
-        TimeZoneId = "America/New_York",
+        TimeZoneId = marketplace.TimeZoneId,
         LookbackDays = lookbackDays,
         AutoPromote = true,
         CreatedAt = now,

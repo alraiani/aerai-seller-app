@@ -7,6 +7,7 @@ namespace AERai.Web.Application.Imports;
 /// </summary>
 /// <param name="Id">Batch id.</param>
 /// <param name="Source">Report type.</param>
+/// <param name="MarketplaceId">Marketplace the data belongs to.</param>
 /// <param name="FileName">Original file name.</param>
 /// <param name="UploadedBy">Uploader's user name.</param>
 /// <param name="UploadedAt">Upload time.</param>
@@ -21,6 +22,7 @@ namespace AERai.Web.Application.Imports;
 public sealed record ImportBatchSummary(
     long Id,
     ImportSource Source,
+    string MarketplaceId,
     string FileName,
     string UploadedBy,
     DateTimeOffset UploadedAt,

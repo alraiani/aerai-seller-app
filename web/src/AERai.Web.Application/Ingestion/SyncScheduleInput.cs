@@ -5,6 +5,7 @@ namespace AERai.Web.Application.Ingestion;
 /// <summary>User-editable schedule settings, as submitted from the Schedules page.</summary>
 /// <param name="Name">Display name.</param>
 /// <param name="ReportType">Report to pull.</param>
+/// <param name="MarketplaceId">Marketplace to pull the report for.</param>
 /// <param name="IsEnabled">Whether it runs automatically.</param>
 /// <param name="Frequency">Interval or daily.</param>
 /// <param name="IntervalMinutes">Minutes between runs (interval schedules).</param>
@@ -17,6 +18,7 @@ namespace AERai.Web.Application.Ingestion;
 public sealed record SyncScheduleInput(
     string Name,
     AmazonReportType ReportType,
+    string MarketplaceId,
     bool IsEnabled,
     ScheduleFrequency Frequency,
     int? IntervalMinutes,

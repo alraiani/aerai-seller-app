@@ -37,7 +37,7 @@ public sealed class SettlementLayoutTests
             [new SettlementLineMapper()], new FakeRawFileStore(), _staged, new FakeImportBatchQueries(),
             Options.Create(new ImportOptions()), new FakeTimeProvider(), NullLogger<StagingImportService>.Instance);
         var bytes = Encoding.UTF8.GetBytes(content);
-        return service.ImportAsync(new ImportFileCommand(ImportSource.Settlements, "s.tsv", bytes.Length, new MemoryStream(bytes), "t"), CancellationToken.None);
+        return service.ImportAsync(new ImportFileCommand(ImportSource.Settlements, "ATVPDKIKX0DER", "s.tsv", bytes.Length, new MemoryStream(bytes), "t"), CancellationToken.None);
     }
 
     [Fact]

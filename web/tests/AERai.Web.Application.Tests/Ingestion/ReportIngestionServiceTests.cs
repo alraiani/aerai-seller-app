@@ -47,7 +47,8 @@ public sealed class ReportIngestionServiceTests
     {
         var schedule = new SyncSchedule
         {
-            Id = 1, Name = "s", ReportType = type, IsEnabled = true, Frequency = ScheduleFrequency.Interval, IntervalMinutes = 60,
+            Id = 1, Name = "s", ReportType = type, MarketplaceId = "ATVPDKIKX0DER",
+            IsEnabled = true, Frequency = ScheduleFrequency.Interval, IntervalMinutes = 60,
             TimeZoneId = "UTC", LookbackDays = 7, AutoPromote = autoPromote, LastSuccessfulDataEnd = lastEnd, UpdatedBy = "t",
         };
         _schedules.Schedules[1] = schedule;
