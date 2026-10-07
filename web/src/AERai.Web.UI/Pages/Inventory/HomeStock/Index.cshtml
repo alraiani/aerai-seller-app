@@ -24,7 +24,10 @@
             <a asp-page="Index" class="btn btn-sm btn-link">Clear</a>
         }
     </form>
-    <a asp-page="Upload" class="btn btn-sm btn-soft"><partial name="_Icon" model='"upload"' /> Upload a spreadsheet instead</a>
+    <div class="card-toolbar-group">
+        <a asp-page="Upload" asp-page-handler="Template" class="btn btn-sm btn-soft"><partial name="_Icon" model='"download"' /> Download count sheet</a>
+        <a asp-page="Upload" class="btn btn-sm btn-soft"><partial name="_Icon" model='"upload"' /> Upload a spreadsheet instead</a>
+    </div>
 </div>
 
 <form method="post" asp-route-p="@Model.PageNumber" asp-route-q="@Model.Search">
