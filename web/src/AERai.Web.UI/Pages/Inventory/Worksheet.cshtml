@@ -51,6 +51,13 @@
     }
     <div class="card-toolbar-group">
         <a asp-page="HomeStock/Ledger" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"><partial name="_Icon" model='"list"' /> Home-stock ledger</a>
+        @if (Model.CanEdit)
+        {
+            <a asp-page="HomeStock/Upload" asp-page-handler="Template" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"
+               data-bs-toggle="tooltip" data-bs-title="Excel sheet of this family's SKUs to count home stock and upload back"><partial name="_Icon" model='"download"' /> Count sheet</a>
+            <a asp-page="HomeStock/Upload" class="btn btn-sm btn-soft btn-icon" aria-label="Upload home stock"
+               data-bs-toggle="tooltip" data-bs-title="Upload a filled-in count sheet"><partial name="_Icon" model='"upload"' /></a>
+        }
         <button type="button" class="btn btn-sm btn-soft" data-print><partial name="_Icon" model='"printer"' /> Print</button>
     </div>
 </div>

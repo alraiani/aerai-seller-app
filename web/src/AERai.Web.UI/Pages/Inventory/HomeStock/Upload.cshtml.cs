@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text;
 using AERai.Web.Application.Inventory;
 using AERai.Web.Application.Marketplaces;
 using AERai.Web.Application.Security;
@@ -15,13 +13,13 @@ namespace AERai.Web.UI.Pages.Inventory.HomeStock;
 /// Uploads home stock from a spreadsheet (.xlsx, .csv, or .tsv with columns sku and home-stock) and
 /// offers a template pre-filled with the marketplace's SKUs. Operators and Admins only.
 /// </summary>
-/// <param name="inventory">Inventory service (for the template).</param>
+/// <param name="templates">Builds the downloadable spreadsheet.</param>
 /// <param name="items">Item editing service (imports the file).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
 [Authorize(Policy = AppPolicies.RequireOperator)]
 [RequestFormLimits(MultipartBodyLengthLimit = MaxRequestBytes)]
 [RequestSizeLimit(MaxRequestBytes)]
-public sealed class UploadModel(IInventoryService inventory, IInventoryItemService items, ICurrentMarketplace currentMarketplace) : PageModel
+public sealed class UploadModel(IHomeStockTemplateService templates, IInventoryItemService items, ICurrentMarketplace currentMarketplace) : PageModel
 {
     /// <summary>Largest upload accepted (a 10,000-row sheet is far smaller).</summary>
     public const int MaxFileBytes = 5 * 1024 * 1024;
@@ -44,24 +42,27 @@ public sealed class UploadModel(IInventoryService inventory, IInventoryItemServi
     /// <summary>Shows the form.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>A task that completes when the page is loaded.</returns>
-    public async Task OnGetAsync(CancellationToken cancellationToken) =>
-        Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
-
-    /// <summary>Downloads a CSV template listing the marketplace's SKUs and current home stock.</summary>
-    /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The CSV file.</returns>
-    public async Task<IActionResult> OnGetTemplateAsync(CancellationToken cancellationToken)
+    public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
-        var all = await inventory.GetItemsAsync(Marketplace, cancellationToken);
+        Families = await items.ListFamiliesAsync(cancellationToken);
+    }
 
-        var csv = new StringBuilder("sku,home-stock,product-name\n");
-        foreach (var item in all.OrderBy(i => i.Sku, StringComparer.Ordinal))
-        {
-            csv.Append(CultureInfo.InvariantCulture, $"{Csv(item.Sku)},{item.Position.HomeStock},{Csv(NeutralizeFormula(item.Position.Title ?? string.Empty))}\n");
-        }
+    /// <summary>Families for the template's family picker.</summary>
+    public IReadOnlyList<Domain.Core.ProductFamily> Families { get; private set; } = [];
 
-        return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray(), "text/csv", $"home-stock-{Marketplace.Code}.csv");
+    /// <summary>
+    /// Downloads the home-stock spreadsheet (.xlsx): every SKU, or one family's, with its current
+    /// count in the <c>home-stock</c> column, ready to fill in and upload back unchanged.
+    /// </summary>
+    /// <param name="family">Only this family's SKUs, or <see langword="null"/> for all.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The workbook.</returns>
+    public async Task<IActionResult> OnGetTemplateAsync(int? family, CancellationToken cancellationToken)
+    {
+        Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        var (fileName, content) = await templates.CreateAsync(Marketplace, family, cancellationToken);
+        return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     /// <summary>Imports the uploaded file.</summary>
@@ -70,6 +71,7 @@ public sealed class UploadModel(IInventoryService inventory, IInventoryItemServi
     public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
     {
         Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        Families = await items.ListFamiliesAsync(cancellationToken);
         if (Spreadsheet is null || Spreadsheet.Length == 0)
         {
             ModelState.AddModelError(nameof(Spreadsheet), "Choose a file to upload.");
@@ -94,15 +96,4 @@ public sealed class UploadModel(IInventoryService inventory, IInventoryItemServi
         Outcome = result.Value;
         return Page();
     }
-
-    /// <summary>Quotes a CSV field when it contains a delimiter, quote, or line break (RFC 4180).</summary>
-    private static string Csv(string value) =>
-        value.AsSpan().IndexOfAny(",\"\r\n") >= 0 ? $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"" : value;
-
-    /// <summary>
-    /// Stops Excel from running a value as a formula by prefixing an apostrophe. Used for product
-    /// titles, which come from Amazon and are not trusted; never for SKUs, which must round-trip.
-    /// </summary>
-    private static string NeutralizeFormula(string value) =>
-        value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r' ? "'" + value : value;
 }

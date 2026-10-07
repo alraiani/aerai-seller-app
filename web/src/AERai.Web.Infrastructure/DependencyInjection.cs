@@ -92,6 +92,7 @@ public static class DependencyInjection
         services.AddScoped<IHomeStockLedgerRepository, HomeStockLedgerRepository>();
         services.AddScoped<IStockAlertRepository, StockAlertRepository>();
         services.AddSingleton<ISpreadsheetReader, ClosedXmlSpreadsheetReader>();
+        services.AddSingleton<IHomeStockTemplateWriter, ClosedXmlHomeStockTemplateWriter>();
         services.AddScoped<IPromotionService, SqlPromotionService>();
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<ISyncScheduleRepository, SyncScheduleRepository>();

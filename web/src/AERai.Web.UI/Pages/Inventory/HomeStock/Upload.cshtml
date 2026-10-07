@@ -60,12 +60,23 @@
             <div class="form-section-head">
                 <span class="step">1</span>
                 <div>
-                    <h2>Get the template</h2>
-                    <p>A CSV listing every SKU in @Model.Marketplace.Name with its current home stock. Fill in the counts in Excel or any spreadsheet app.</p>
+                    <h2>Download the count sheet</h2>
+                    <p>An Excel workbook already mapped to this upload: every SKU in @Model.Marketplace.Name (or one family), grouped by family and color, with its current home stock in the yellow <code>home-stock</code> column. Type the new counts there and upload it back as-is.</p>
                 </div>
             </div>
             <div class="form-section-body">
-                <a asp-page-handler="Template" class="btn btn-soft"><partial name="_Icon" model='"copy"' /> Download template</a>
+                <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
+                    <input type="hidden" name="handler" value="Template" />
+                    <select name="family" class="form-select w-auto" aria-label="Which SKUs to include">
+                        <option value="">All SKUs</option>
+                        @foreach (var f in Model.Families)
+                        {
+                            <option value="@f.Id">@f.Name only</option>
+                        }
+                    </select>
+                    <button type="submit" class="btn btn-soft"><partial name="_Icon" model='"download"' /> Download .xlsx</button>
+                </form>
+                <div class="form-text mt-2">Reference columns (product name, family, color, Amazon stock, 30-day sales, what to send) help with the count and are ignored on upload.</div>
             </div>
         </section>
 
@@ -95,7 +106,8 @@
             <div class="card-body">
                 <div class="kpi-label mb-2">File layout</div>
                 <ul class="summary-facts">
-                    <li>A header row with <code>sku</code> and <code>home-stock</code> columns; others are ignored</li>
+                    <li>A header row with <code>sku</code> and <code>home-stock</code> columns; others are ignored (the downloaded sheet already has them)</li>
+                    <li>Each changed count is logged in the <a asp-page="Ledger">home-stock ledger</a> as a count correction</li>
                     <li><code>0</code> clears a SKU</li>
                     <li>Unknown SKUs and bad numbers are skipped and listed</li>
                     <li>If a SKU appears twice, the last row wins</li>
