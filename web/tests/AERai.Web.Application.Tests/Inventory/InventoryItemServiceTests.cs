@@ -178,8 +178,11 @@ public sealed class InventoryItemServiceTests
     }
 
     [Fact]
-    public async Task ImportHomeStockAsync_Csv_SavesValidRowsAndReportsTheRest()
+    public async Task PreviewHomeStockImportAsync_ComparesWithHomeStockAndSavesNothing()
     {
+        _repository.HomeStock[(Us, "MAT-BLK")] = 20;
+        _repository.AddProduct("STRAP");
+        _repository.HomeStock[(Us, "STRAP")] = 4;
         const string csv =
             "SKU,Home Stock,product-name\n" +
             "MAT-BLK,10,Mat\n" +
@@ -187,43 +190,45 @@ public sealed class InventoryItemServiceTests
             "GHOST,5,Unknown\n" +
             "MAT-BLK,-3,Bad\n" +
             ",7,No sku\n" +
+            "STRAP,4,Same\n" +
             "MAT-BLK,12,Last wins\n";
 
-        var result = await CreateService().ImportHomeStockAsync(Us, "stock.csv", Text(csv), User, CancellationToken.None);
+        var result = await CreateService().PreviewHomeStockImportAsync(Us, "stock.csv", Text(csv), CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
-        Assert.Equal(2, result.Value.Saved);
-        Assert.Equal([3, 4, 5], result.Value.Rejected.Select(r => r.RowNumber));
-        Assert.Equal(12, _repository.HomeStock[(Us, "MAT-BLK")]);
-        Assert.Equal(1200, _repository.HomeStock[(Us, "MAT-BLU")]);
+        var preview = result.Value;
+        Assert.Equal([("MAT-BLU", 0, 1200), ("MAT-BLK", 20, 12)], preview.Changes.Select(c => (c.Sku, c.Current, c.New)));
+        Assert.Equal((1, 1, 1200, 8, 1), (preview.IncreaseCount, preview.DecreaseCount, preview.UnitsIn, preview.UnitsOut, preview.UnchangedCount));
+        Assert.Equal([3, 4, 5], preview.Rejected.Select(r => r.RowNumber));
+        Assert.Equal(20, _repository.HomeStock[(Us, "MAT-BLK")]);
+        Assert.False(_repository.HomeStock.ContainsKey((Us, "MAT-BLU")));
     }
 
     [Fact]
-    public async Task ImportHomeStockAsync_MissingColumn_Fails()
+    public async Task PreviewHomeStockImportAsync_MissingColumn_Fails()
     {
-        var result = await CreateService().ImportHomeStockAsync(Us, "stock.csv", Text("sku,qty\nMAT-BLK,1\n"), User, CancellationToken.None);
+        var result = await CreateService().PreviewHomeStockImportAsync(Us, "stock.csv", Text("sku,qty\nMAT-BLK,1\n"), CancellationToken.None);
 
         Assert.Contains("'home-stock'", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ImportHomeStockAsync_UnsupportedType_Fails()
+    public async Task PreviewHomeStockImportAsync_UnsupportedType_Fails()
     {
-        var result = await CreateService().ImportHomeStockAsync(Us, "stock.xls", Text("x"), User, CancellationToken.None);
+        var result = await CreateService().PreviewHomeStockImportAsync(Us, "stock.xls", Text("x"), CancellationToken.None);
 
         Assert.Equal("Upload a .xlsx, .csv, or .tsv file.", result.Error);
     }
 
     [Fact]
-    public async Task ImportHomeStockAsync_Xlsx_ReadsThroughTheSpreadsheetReader()
+    public async Task PreviewHomeStockImportAsync_Xlsx_ReadsThroughTheSpreadsheetReader()
     {
         _spreadsheets.Sheet = new ParsedFile(["sku", "home-stock"],
             [new ParsedRecord(1, "MAT-BLU\t8", new Dictionary<string, string> { ["sku"] = "MAT-BLU", ["home-stock"] = "8" })]);
 
-        var result = await CreateService().ImportHomeStockAsync(Us, "Stock.XLSX", new MemoryStream(), User, CancellationToken.None);
+        var result = await CreateService().PreviewHomeStockImportAsync(Us, "Stock.XLSX", new MemoryStream(), CancellationToken.None);
 
         Assert.True(_spreadsheets.WasCalled);
-        Assert.Equal(1, result.Value.Saved);
-        Assert.Equal(8, _repository.HomeStock[(Us, "MAT-BLU")]);
+        Assert.Equal(8, Assert.Single(result.Value.Changes).Difference);
     }
 }

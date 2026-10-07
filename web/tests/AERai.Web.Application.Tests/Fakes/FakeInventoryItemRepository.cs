@@ -19,6 +19,12 @@ internal sealed class FakeInventoryItemRepository : IInventoryItemRepository
 
     public int SaveCalls { get; private set; }
 
+    public Task<IReadOnlyDictionary<string, HomeStockSnapshot>> GetHomeStockAsync(string marketplaceId, IReadOnlyCollection<string> skus, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<string, HomeStockSnapshot>>(skus
+            .Where(Products.ContainsKey)
+            .Distinct(StringComparer.Ordinal)
+            .ToDictionary(sku => sku, sku => new HomeStockSnapshot(sku, HomeStock.GetValueOrDefault((marketplaceId, sku)), Products[sku].Title, Products[sku].Color), StringComparer.Ordinal));
+
     public Task<int> SetColorAsync(IReadOnlyCollection<string> skus, ProductColor? color, CancellationToken cancellationToken)
     {
         var known = skus.Where(Products.ContainsKey).Distinct(StringComparer.Ordinal).ToList();

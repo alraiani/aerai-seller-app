@@ -123,6 +123,33 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
             .ConfigureAwait(false) > 0;
 
     /// <inheritdoc/>
+    public async Task<IReadOnlyDictionary<string, HomeStockSnapshot>> GetHomeStockAsync(string marketplaceId, IReadOnlyCollection<string> skus, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(skus);
+
+        var found = new Dictionary<string, HomeStockSnapshot>(StringComparer.Ordinal);
+
+        // Chunked so a large upload stays well under SQL Server's 2,100-parameter limit.
+        foreach (var chunk in skus.Distinct(StringComparer.Ordinal).Chunk(1000))
+        {
+            var rows = await (
+                from p in dbContext.Products.AsNoTracking()
+                where chunk.Contains(p.Sku)
+                join h in dbContext.HomeStocks.Where(h => h.MarketplaceId == marketplaceId) on p.Sku equals h.Sku into stock
+                from h in stock.DefaultIfEmpty()
+                select new HomeStockSnapshot(p.Sku, h == null ? 0 : h.Quantity, p.Title, p.Color))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var row in rows)
+            {
+                found[row.Sku] = row;
+            }
+        }
+
+        return found;
+    }
+
+    /// <inheritdoc/>
     public async Task<int> SetColorAsync(IReadOnlyCollection<string> skus, ProductColor? color, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(skus);

@@ -129,6 +129,8 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
 .text-muted-token { color: var(--muted); }
 .text-bad { color: var(--negative); }
 .text-warn { color: var(--warning); }
+.text-positive { color: var(--positive); }
+.text-negative { color: var(--negative); }
 
 /* ---------- Shell ---------- */
 .app-shell { display: flex; min-height: 100vh; }

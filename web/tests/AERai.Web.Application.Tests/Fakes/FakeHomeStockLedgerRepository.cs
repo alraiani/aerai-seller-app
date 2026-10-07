@@ -60,6 +60,26 @@ internal sealed class FakeHomeStockLedgerRepository : IHomeStockLedgerRepository
         return Task.FromResult<(HomeStockLedgerOutcome, long?)>((HomeStockLedgerOutcome.Recorded, Entries.Count));
     }
 
+    public Task<(IReadOnlyList<HomeStockCountChange> Applied, IReadOnlyList<string> Stale)> ApplyCountsAsync(
+        string marketplaceId, IReadOnlyList<HomeStockCountChange> changes, HomeStockMovementType increaseType, HomeStockMovementType decreaseType, HomeStockLedgerWrite template, CancellationToken cancellationToken)
+    {
+        var applied = new List<HomeStockCountChange>();
+        var stale = new List<string>();
+        foreach (var change in changes)
+        {
+            if (!Skus.Contains(change.Sku) || Balance(marketplaceId, change.Sku) != change.Current)
+            {
+                stale.Add(change.Sku);
+                continue;
+            }
+
+            Entries.Add(template with { Sku = change.Sku, Type = change.Difference > 0 ? increaseType : decreaseType, Units = change.Difference });
+            applied.Add(change);
+        }
+
+        return Task.FromResult<(IReadOnlyList<HomeStockCountChange>, IReadOnlyList<string>)>((applied, stale));
+    }
+
     public Task<PagedResult<HomeStockLedgerEntry>> ListAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, CancellationToken cancellationToken) =>
         Task.FromResult(new PagedResult<HomeStockLedgerEntry>([], 0, 1, request.SafePageSize));
 }

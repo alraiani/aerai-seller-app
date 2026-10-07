@@ -16,6 +16,18 @@ public interface IHomeStockLedgerService
     /// <returns>A short description of what was recorded, or why it was not.</returns>
     Task<Result<string>> RecordAsync(string marketplaceId, HomeStockMovementInput input, string user, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Applies a reviewed count sheet: one ledger entry per changed SKU, increases and decreases
+    /// logged with the chosen types. SKUs whose home stock changed since the review are skipped.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace the stock is held for.</param>
+    /// <param name="changes">The reviewed changes (see <see cref="HomeStockCountPayload"/>).</param>
+    /// <param name="options">Movement types, reference, note, and date.</param>
+    /// <param name="user">Email of the user applying it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>What was applied and skipped, or why nothing was.</returns>
+    Task<Result<HomeStockCountResult>> ApplyCountsAsync(string marketplaceId, IReadOnlyList<HomeStockCountChange> changes, HomeStockCountOptions options, string user, CancellationToken cancellationToken);
+
     /// <summary>Reverses an entry.</summary>
     /// <param name="marketplaceId">Marketplace of the entry.</param>
     /// <param name="id">The entry.</param>
