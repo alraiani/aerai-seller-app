@@ -1,0 +1,8 @@
+{
+  // Open web/ as its own VS Code window so C# Dev Kit loads this solution, not the WPF one.
+  "dotnet.defaultSolution": "AERai.Web.slnx",
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true
+  }
+}

@@ -1,0 +1,6 @@
+@model string?
+@* GET form so searches are bookmarkable; resets to page 1 by omitting p. *@
+<form method="get" class="d-flex gap-2 mb-3" role="search">
+    <input type="search" name="q" value="@Model" class="form-control form-control-sm search-input" placeholder="Search…" aria-label="Search" />
+    <button type="submit" class="btn btn-sm btn-outline-primary">Search</button>
+</form>

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AERai.Web.Application/AERai.Web.Application.csproj" />
+    <Project Path="src/AERai.Web.Domain/AERai.Web.Domain.csproj" />
+    <Project Path="src/AERai.Web.Infrastructure/AERai.Web.Infrastructure.csproj" />
+    <Project Path="src/AERai.Web.UI/AERai.Web.UI.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AERai.Web.Application.Tests/AERai.Web.Application.Tests.csproj" />
+    <Project Path="tests/AERai.Web.Infrastructure.Tests/AERai.Web.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

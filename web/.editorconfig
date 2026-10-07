@@ -1,0 +1,33 @@
+# Code-style and analyzer configuration for the AERai web solution.
+# Analyzer findings are build errors (TreatWarningsAsErrors); every rule disabled here has a reason.
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{json,yml,yaml,bicep,bicepparam,props,csproj,slnx,xml}]
+indent_size = 2
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:error
+csharp_style_var_when_type_is_apparent = true:suggestion
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:error
+csharp_prefer_braces = true:error
+
+# CA1716: guards against VB keywords (e.g. "Imports", "To"). This solution is C#-only.
+dotnet_diagnostic.CA1716.severity = none
+
+# CA1848/CA1873 are satisfied with [LoggerMessage] where logging is hot; ad-hoc logging is acceptable elsewhere.
+dotnet_diagnostic.CA1848.severity = suggestion
+
+# CA2007: ASP.NET Core has no SynchronizationContext, but library layers still use ConfigureAwait(false) by convention.
+dotnet_diagnostic.CA2007.severity = none
+
+[**/Migrations/*.cs]
+# EF-generated code: don't apply style or analyzer rules.
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none

@@ -1,0 +1,38 @@
+@page
+@model AERai.Web.UI.Pages.Products.IndexModel
+@{
+    ViewData["Title"] = "Products & COGS";
+}
+<partial name="_SearchForm" model="Model.Search" />
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>SKU</th><th>ASIN</th><th>Title</th><th class="text-end">Cost of goods (@Model.Marketplace.Currency)</th><th>Updated</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var p in Model.Products.Items)
+            {
+                <tr>
+                    <td>@p.Sku</td>
+                    <td>@p.Asin</td>
+                    <td class="cell-truncate" title="@p.Title">@p.Title</td>
+                    <td class="text-end">@(p.CostOfGoods is { } cost ? DashboardFormat.Price(cost, Model.Marketplace.Currency) : "—")</td>
+                    <td>@p.UpdatedAt.ToString("yyyy-MM-dd")</td>
+                    <td class="text-end">
+                        @if (Model.CanEdit)
+                        {
+                            <a asp-page="Edit" asp-route-sku="@p.Sku" class="btn btn-sm btn-outline-primary">Edit</a>
+                        }
+                    </td>
+                </tr>
+            }
+            @if (Model.Products.Items.Count == 0)
+            {
+                <tr><td colspan="6" class="text-body-secondary p-3">No products yet. Products are created when orders or inventory are promoted.</td></tr>
+            }
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+<partial name="_Pager" model="Model.Products.ToPager(Model.Search)" />

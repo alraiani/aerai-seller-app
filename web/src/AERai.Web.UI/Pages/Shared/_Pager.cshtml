@@ -1,0 +1,13 @@
+@model PagerViewModel
+@* Preserves the search term (q) while moving between pages (p) of the current page route. *@
+<nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Pagination">
+    <span class="text-body-secondary small">@Model.TotalCount.ToString("N0") result(s) · page @Model.Page of @Model.TotalPages</span>
+    <ul class="pagination pagination-sm mb-0">
+        <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+            <a class="page-link" asp-route-p="@(Model.Page - 1)" asp-route-q="@Model.Search">Previous</a>
+        </li>
+        <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+            <a class="page-link" asp-route-p="@(Model.Page + 1)" asp-route-q="@Model.Search">Next</a>
+        </li>
+    </ul>
+</nav>

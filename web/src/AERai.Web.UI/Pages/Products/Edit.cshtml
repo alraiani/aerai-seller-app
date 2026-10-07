@@ -1,0 +1,25 @@
+@page "{sku}"
+@model AERai.Web.UI.Pages.Products.EditModel
+@{
+    ViewData["Title"] = "Edit cost of goods";
+}
+<div class="card col-lg-6">
+    <div class="card-body">
+        <h2 class="h6">@Model.Product.Sku <span class="badge text-bg-secondary ms-1">@Model.Marketplace.Code</span></h2>
+        <p class="text-body-secondary">@Model.Product.Title</p>
+        <form method="post">
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+            <div class="mb-3">
+                <label asp-for="Input.CostOfGoods" class="form-label"></label>
+                <input asp-for="Input.CostOfGoods" class="form-control" step="0.01" min="0" />
+                <span asp-validation-for="Input.CostOfGoods" class="text-danger small"></span>
+                <div class="form-text">Landed cost per unit in @Model.Marketplace.Name, in @Model.Marketplace.Currency. Other marketplaces keep their own cost. Leave blank to clear.</div>
+            </div>
+            <button type="submit" class="btn btn-primary">Save</button>
+            <a asp-page="Index" class="btn btn-link">Cancel</a>
+        </form>
+    </div>
+</div>
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

@@ -1,0 +1,38 @@
+@page
+@model AERai.Web.UI.Pages.Tools.Batches.IndexModel
+@{
+    ViewData["Title"] = "Import batches";
+}
+<div class="d-flex justify-content-between">
+    <partial name="_SearchForm" model="Model.Search" />
+    <div><a asp-page="/Tools/Import" class="btn btn-sm btn-primary">New import</a></div>
+</div>
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>#</th><th>Type</th><th>File</th><th>Uploaded</th><th>By</th><th class="text-end">Rows</th><th class="text-end">Rejected</th><th>Status</th></tr></thead>
+            <tbody>
+            @foreach (var b in Model.Batches.Items)
+            {
+                <tr>
+                    <td><a asp-page="Details" asp-route-id="@b.Id">@b.Id</a></td>
+                    <td>@b.Source</td>
+                    <td class="cell-truncate" title="@b.FileName">@b.FileName</td>
+                    <td>@b.UploadedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@b.UploadedBy</td>
+                    <td class="text-end">@b.RowCount.ToString("N0")</td>
+                    <td class="text-end">@b.RejectedRowCount.ToString("N0")</td>
+                    <td><partial name="_BatchStatusBadge" model="b.Status" /></td>
+                </tr>
+            }
+            @if (Model.Batches.Items.Count == 0)
+            {
+                <tr><td colspan="8" class="text-body-secondary p-3">No imports yet.</td></tr>
+            }
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+<partial name="_Pager" model="Model.Batches.ToPager(Model.Search)" />

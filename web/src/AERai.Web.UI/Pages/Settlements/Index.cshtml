@@ -1,0 +1,36 @@
+@page
+@model AERai.Web.UI.Pages.Settlements.IndexModel
+@{
+    ViewData["Title"] = "Settlements";
+}
+<partial name="_SearchForm" model="Model.Search" />
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead>
+                <tr><th>Settlement</th><th>Period</th><th class="text-end">Sales</th><th class="text-end">Fees</th><th class="text-end">Refunds</th><th class="text-end">Other</th><th class="text-end">Net payout</th></tr>
+            </thead>
+            <tbody>
+            @foreach (var s in Model.Settlements.Items)
+            {
+                <tr>
+                    <td>@s.SettlementId</td>
+                    <td>@s.PeriodStart?.ToString("yyyy-MM-dd") – @s.PeriodEnd?.ToString("yyyy-MM-dd")</td>
+                    <td class="text-end">@s.Sales.ToString("N2")</td>
+                    <td class="text-end">@s.Fees.ToString("N2")</td>
+                    <td class="text-end">@s.Refunds.ToString("N2")</td>
+                    <td class="text-end">@s.Other.ToString("N2")</td>
+                    <td class="text-end fw-semibold">@s.Net.ToString("N2") @s.Currency</td>
+                </tr>
+            }
+            @if (Model.Settlements.Items.Count == 0)
+            {
+                <tr><td colspan="7" class="text-body-secondary p-3">No settlements yet. Import a settlement file from Tools.</td></tr>
+            }
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+<partial name="_Pager" model="Model.Settlements.ToPager(Model.Search)" />

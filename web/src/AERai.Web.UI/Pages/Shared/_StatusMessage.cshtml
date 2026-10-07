@@ -1,0 +1,9 @@
+@using AERai.Web.UI.Models
+@if (TempData[StatusMessage.Success] is string success)
+{
+    <div class="alert alert-success" role="status">@success</div>
+}
+@if (TempData[StatusMessage.Error] is string error)
+{
+    <div class="alert alert-danger" role="alert">@error</div>
+}

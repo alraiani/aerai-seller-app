@@ -1,0 +1,70 @@
+@page "{id:long}"
+@using AERai.Web.Domain.Staging
+@model AERai.Web.UI.Pages.Tools.Batches.DetailsModel
+@{
+    ViewData["Title"] = $"Import batch {Model.Batch.Id}";
+    var b = Model.Batch;
+}
+<div class="card mb-3">
+    <div class="card-body d-flex flex-wrap justify-content-between gap-3">
+        <dl class="row mb-0 flex-grow-1">
+            <dt class="col-sm-3">Type</dt><dd class="col-sm-9">@b.Source</dd>
+            <dt class="col-sm-3">File</dt><dd class="col-sm-9">@b.FileName</dd>
+            <dt class="col-sm-3">Raw file</dt>
+            <dd class="col-sm-9">
+                @if (b.RawFilePath is not null)
+                {
+                    <code>@b.RawFilePath</code>
+                    <div class="small text-body-secondary">SHA-256 @b.RawFileSha256</div>
+                }
+                else
+                {
+                    <span class="text-body-secondary">Not stored (staged before the raw landing zone existed)</span>
+                }
+            </dd>
+            <dt class="col-sm-3">Uploaded</dt><dd class="col-sm-9">@b.UploadedAt.ToString("u") by @b.UploadedBy</dd>
+            <dt class="col-sm-3">Rows</dt><dd class="col-sm-9">@b.RowCount.ToString("N0") staged · @b.PromotedRowCount.ToString("N0") promoted · @b.RejectedRowCount.ToString("N0") rejected</dd>
+            <dt class="col-sm-3">Status</dt><dd class="col-sm-9"><partial name="_BatchStatusBadge" model="b.Status" /></dd>
+            @if (b.ErrorMessage is not null)
+            {
+                <dt class="col-sm-3">Error</dt>
+                <dd class="col-sm-9 text-danger">@b.ErrorMessage</dd>
+            }
+        </dl>
+        <div class="d-flex flex-column gap-2">
+            <form method="post" asp-page-handler="Promote" asp-route-id="@b.Id">
+                <button type="submit" class="btn btn-primary w-100">@(b.Status == ImportBatchStatus.Received ? "Promote to core" : "Re-promote")</button>
+                <div class="form-text">Safe to repeat — promotion is idempotent.</div>
+            </form>
+            @if (b.RawFilePath is not null)
+            {
+                <form method="post" asp-page-handler="Restage" asp-route-id="@b.Id">
+                    <button type="submit" class="btn btn-outline-secondary w-100">Re-stage from raw file</button>
+                    <div class="form-text">Creates a new batch from the stored original.</div>
+                </form>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Rejected rows</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-sm mb-0">
+            <thead><tr><th>Row</th><th>Reason</th><th>Raw line</th></tr></thead>
+            <tbody>
+            @foreach (var r in Model.Rejected.Items)
+            {
+                <tr><td>@r.RowNumber</td><td class="text-danger">@r.ErrorMessage</td><td class="raw-line">@r.RawLine</td></tr>
+            }
+            @if (Model.Rejected.Items.Count == 0)
+            {
+                <tr><td colspan="3" class="text-body-secondary p-3">@(b.Status == ImportBatchStatus.Received ? "Promote the batch to validate its rows." : "No rows were rejected.")</td></tr>
+            }
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+<partial name="_Pager" model="Model.Rejected.ToPager(null)" />

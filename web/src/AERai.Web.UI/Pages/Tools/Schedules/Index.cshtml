@@ -1,0 +1,545 @@
+@page
+@using AERai.Web.Application.Ingestion
+@using AERai.Web.Domain.Ingestion
+@model AERai.Web.UI.Pages.Tools.Schedules.IndexModel
+@{
+    ViewData["Title"] = "Amazon sync";
+    var back = Request.QueryString.Value ?? string.Empty;
+    var (connCss, connLabel, connDetail) = ScheduleDisplay.Connection(Model.Connection, Model.Settings.IsPaused);
+    var canRun = Model.Connection.CanRun;
+    var me = User.Identity!.Name!;
+    var deletedView = Model.View == ScheduleView.Deleted;
+    var anyRunning = Model.Summary.Running > 0;
+}
+
+@* ---------- Connection + page actions ---------- *@
+<div class="card sync-head mb-3">
+    <div class="sync-head-status">
+        <span class="status-light status-@connCss" aria-hidden="true"></span>
+        <div class="sync-head-text">
+            <span class="sync-head-label">@connLabel <partial name="_Tip" model='"Green = connected to Amazon (live). Red = not connected, nothing can run. Amber = connected but scheduled syncs are paused. Blue = simulated mode with sample data."' /></span>
+            <span class="sync-head-detail" title="@connDetail">@connDetail</span>
+            @if (Model.LastTest is { } test)
+            {
+                <span class="conn-test @(test.Succeeded ? "conn-test-ok" : "conn-test-bad")" title="@test.Message · tested @ScheduleDisplay.Relative(test.TestedAt, Model.Now)">
+                    <partial name="_Icon" model='test.Succeeded ? "check" : "x"' />
+                    @(test.Succeeded ? "Test passed" : "Test failed") · @ScheduleDisplay.Relative(test.TestedAt, Model.Now)
+                </span>
+            }
+        </div>
+    </div>
+    <div class="sync-head-actions">
+        <form method="post" asp-page-handler="TestConnection">
+            <input type="hidden" name="back" value="@back" />
+            <button type="submit" class="btn btn-sm btn-soft" data-bs-toggle="tooltip" data-bs-title="Makes one call to Amazon to prove the credentials and permissions work (not just that they're filled in). Results are reused for 60 seconds.">
+                <partial name="_Icon" model='"plug"' /> Test connection
+            </button>
+        </form>
+    </div>
+</div>
+
+@if (Model.Settings.IsPaused)
+{
+    <div class="notice notice-warn mb-3" role="status">
+        <partial name="_Icon" model='"pause"' />
+        <div>
+            <strong>All scheduled syncs are paused</strong>
+            <span>@(Model.Settings.PausedBy is { } by ? $"by {by}" : "") @(Model.Settings.PausedAt is { } at ? ScheduleDisplay.Relative(at, Model.Now) : "").</span>
+            Data won't refresh on its own until syncs are resumed. Run now and backfills still work.
+        </div>
+    </div>
+}
+
+@* ---------- Summary tiles ---------- *@
+<div class="row g-3 mb-3">
+    <div class="col-6 col-xl-3">
+        <a class="card tile h-100" href="@Model.Link(("view", null), ("status", "On"))">
+            <div class="kpi">
+                <div class="kpi-label">Schedules on <partial name="_Tip" model='"Schedules that run automatically. Off schedules only run when someone clicks Run. Click to list the ones that are on."' /></div>
+                <div class="kpi-value">@Model.Summary.On <span class="kpi-of">of @Model.Summary.Total</span></div>
+                <div class="kpi-foot">@(Model.Summary.Total - Model.Summary.On) off</div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-3">
+        <a class="card tile h-100 @(Model.Summary.Failing > 0 ? "tile-bad" : "")" href="@Model.Link(("view", null), ("last", "Failed"))">
+            <div class="kpi">
+                <div class="kpi-label">Failing <partial name="_Tip" model='"Schedules whose most recent run failed. Click to list them, then hover a Failed status to see why."' /></div>
+                <div class="kpi-value">@Model.Summary.Failing</div>
+                <div class="kpi-foot">@(Model.Summary.Failing == 0 ? "All latest runs OK" : "Latest run failed")</div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card tile h-100">
+            <div class="kpi">
+                <div class="kpi-label">Next run <partial name="_Tip" model='"The soonest automatic run across all schedules that are on. Hover the time to see it in the schedule’s own time zone."' /></div>
+                @if (Model.Settings.IsPaused)
+                {
+                    <div class="kpi-value kpi-value-sm">Paused</div>
+                    <div class="kpi-foot">Resume to continue</div>
+                }
+                else if (Model.Summary.NextRun is { } next)
+                {
+                    <div class="kpi-value kpi-value-sm" title="@ScheduleDisplay.Local(next.Schedule.NextRunAt, next.Schedule.TimeZoneId)">@ScheduleDisplay.Relative(next.Schedule.NextRunAt, Model.Now)</div>
+                    <div class="kpi-foot text-truncate">@next.Schedule.Name</div>
+                }
+                else
+                {
+                    <div class="kpi-value kpi-value-sm">—</div>
+                    <div class="kpi-foot">Nothing scheduled</div>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <a class="card tile h-100" asp-page="Runs">
+            <div class="kpi">
+                <div class="kpi-label">Latest run <partial name="_Tip" model='"The most recent run of any schedule. Click to open the full run history."' /></div>
+                @if (Model.Summary.LatestRun is { LastRun: { } latest } latestRow)
+                {
+                    <div class="kpi-value kpi-value-sm">@ScheduleDisplay.Relative(latest.StartedAt, Model.Now)</div>
+                    <div class="kpi-foot">
+                        <span class="@ScheduleDisplay.StatusPill(latest.Status)">@ScheduleDisplay.StatusLabel(latest.Status)</span>
+                        <span class="text-truncate">@latestRow.Schedule.Name</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="kpi-value kpi-value-sm">—</div>
+                    <div class="kpi-foot">No runs yet</div>
+                }
+            </div>
+        </a>
+    </div>
+</div>
+
+@* ---------- Search + filters, Active / Deleted ---------- *@
+<div class="list-toolbar mb-3">
+    <form method="get" class="filters" data-autosubmit-form role="search">
+        @if (deletedView)
+        {
+            <input type="hidden" name="view" value="Deleted" />
+        }
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Query" class="form-control form-control-sm" placeholder="Search name, report, notes, owner…" aria-label="Search schedules" />
+        </div>
+        <select name="report" class="form-select form-select-sm" aria-label="Report type">
+            <option value="">All reports</option>
+            @foreach (var (type, _) in ScheduleDisplay.ReportTypes)
+            {
+                <option value="@type" selected="@(Model.ReportType == type)">@ScheduleDisplay.ReportLabel(type)</option>
+            }
+        </select>
+        <select name="status" class="form-select form-select-sm" aria-label="On or off">
+            <option value="">On &amp; off</option>
+            <option value="On" selected="@(Model.Status == ScheduleStatusFilter.On)">On</option>
+            <option value="Off" selected="@(Model.Status == ScheduleStatusFilter.Off)">Off</option>
+        </select>
+        <select name="last" class="form-select form-select-sm" aria-label="Latest run">
+            <option value="">Any last run</option>
+            <option value="Failed" selected="@(Model.LastRun == LastRunFilter.Failed)">Failed</option>
+            <option value="Succeeded" selected="@(Model.LastRun == LastRunFilter.Succeeded)">Succeeded</option>
+            <option value="Running" selected="@(Model.LastRun == LastRunFilter.Running)">Running</option>
+            <option value="Never" selected="@(Model.LastRun == LastRunFilter.Never)">Never run</option>
+        </select>
+        <select name="owner" class="form-select form-select-sm" aria-label="Owner">
+            <option value="">Any owner</option>
+            <option value="@me" selected="@(string.Equals(Model.Owner, me, StringComparison.OrdinalIgnoreCase))">Mine</option>
+            @foreach (var user in Model.Users.Where(u => !string.Equals(u.Email, me, StringComparison.OrdinalIgnoreCase)))
+            {
+                <option value="@user.Email" selected="@(string.Equals(Model.Owner, user.Email, StringComparison.OrdinalIgnoreCase))">@user.Email</option>
+            }
+        </select>
+        <select name="sort" class="form-select form-select-sm" aria-label="Sort by">
+            <option value="">Sort: Name</option>
+            <option value="Report" selected="@(Model.Sort == ScheduleSort.Report)">Sort: Report</option>
+            <option value="NextRun" selected="@(Model.Sort == ScheduleSort.NextRun)">Sort: Next run</option>
+            <option value="LastRun" selected="@(Model.Sort == ScheduleSort.LastRun)">Sort: Last run</option>
+        </select>
+        @if (Model.Descending)
+        {
+            <input type="hidden" name="desc" value="true" />
+        }
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
+        @if (Model.IsFiltered)
+        {
+            <a href="@Url.Page("Index", new { view = deletedView ? "Deleted" : null })" class="btn btn-sm btn-link">Clear filters</a>
+        }
+    </form>
+    <nav class="segmented" aria-label="Schedules">
+        <a href="@Model.Link(("view", null))" class="@(!deletedView ? "active" : "")">Active <span class="count">@Model.Summary.Total</span></a>
+        <a href="@Model.Link(("view", "Deleted"))" class="@(deletedView ? "active" : "")"
+           data-bs-toggle="tooltip" data-bs-title="Deleted schedules keep their run history and can be restored.">Deleted <span class="count">@Model.DeletedCount</span></a>
+    </nav>
+</div>
+
+@if (anyRunning)
+{
+    <div class="auto-refresh mb-2" data-auto-refresh="10">
+        <span class="status-light status-running" aria-hidden="true"></span>
+        <span>A run is in progress — this page refreshes every 10 s.</span>
+        <button type="button" class="btn btn-sm btn-link p-0" data-auto-refresh-stop>Stop</button>
+    </div>
+}
+
+@* ---------- Schedule list ---------- *@
+<div class="card">
+    @* Toolbar inside the card: page actions on the left, bulk actions for ticked rows on the right.
+       The row checkboxes belong to the bulk form through form="bulk-form". *@
+    <div class="card-toolbar">
+        <div class="card-toolbar-group">
+            <a asp-page="Edit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"plus"' /> Add schedule</a>
+            <form method="post" asp-page-handler="Pause" asp-route-paused="@(!Model.Settings.IsPaused)">
+                <input type="hidden" name="back" value="@back" />
+                @if (Model.Settings.IsPaused)
+                {
+                    <button type="submit" class="btn btn-sm btn-soft-ok" data-bs-toggle="tooltip" data-bs-title="Let scheduled runs start again. Overdue schedules run once right away.">
+                        <partial name="_Icon" model='"play"' /> Resume
+                    </button>
+                }
+                else
+                {
+                    <button type="submit" class="btn btn-sm btn-soft-warn btn-icon" aria-label="Pause all scheduled syncs" data-bs-toggle="tooltip"
+                            data-bs-title="Stop every scheduled run (e.g. during an Amazon outage) without changing each schedule's on/off switch. Run and backfill still work.">
+                        <partial name="_Icon" model='"pause"' />
+                    </button>
+                }
+            </form>
+            <a asp-page="Runs" class="btn btn-sm btn-soft btn-icon" aria-label="Run history" data-bs-toggle="tooltip"
+               data-bs-title="Run history: every run of every schedule, newest first, with errors and imported batches.">
+                <partial name="_Icon" model='"history"' />
+            </a>
+        </div>
+        <form method="post" asp-page-handler="Bulk" id="bulk-form" class="bulk-bar" data-bulk-bar>
+            <input type="hidden" name="back" value="@back" />
+            <span class="bulk-count" data-bulk-count>Tick schedules to act on several at once.</span>
+            @if (deletedView)
+            {
+                <button type="submit" name="action" value="@BulkScheduleAction.Restore" class="btn btn-sm btn-soft" data-bulk-button
+                        data-bs-toggle="tooltip" data-bs-title="Restore the selected schedules. They come back turned off.">
+                    <partial name="_Icon" model='"restore"' /> Restore
+                </button>
+            }
+            else
+            {
+                <button type="submit" name="action" value="@BulkScheduleAction.Disable" class="btn btn-sm btn-soft-warn btn-icon" data-bulk-button
+                        aria-label="Turn off selected" data-bs-toggle="tooltip" data-bs-title="Turn off the selected schedules. They can still be run by hand.">
+                    <partial name="_Icon" model='"pause"' />
+                </button>
+                <button type="submit" name="action" value="@BulkScheduleAction.Enable" class="btn btn-sm btn-soft-ok btn-icon" data-bulk-button
+                        aria-label="Turn on selected" data-bs-toggle="tooltip" data-bs-title="Turn on the selected schedules so they run automatically.">
+                    <partial name="_Icon" model='"play"' />
+                </button>
+                <span class="d-inline-flex" data-bs-toggle="tooltip" data-bs-title="Delete the selected schedules (you'll be asked to confirm).">
+                    <button type="button" class="btn btn-sm btn-soft-bad btn-icon" data-bulk-button aria-label="Delete selected"
+                            data-bs-toggle="modal" data-bs-target="#bulk-delete">
+                        <partial name="_Icon" model='"trash"' />
+                    </button>
+                </span>
+            }
+        </form>
+    </div>
+    <div class="table-responsive">
+        <table class="table schedule-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th class="select-col">
+                        <input type="checkbox" class="form-check-input" data-select-all aria-label="Select all schedules shown" />
+                    </th>
+                    <th><a href="@Model.SortLink(ScheduleSort.Name)" class="sort-link">Schedule @Model.SortArrow(ScheduleSort.Name)</a></th>
+                    <th><a href="@Model.SortLink(ScheduleSort.Report)" class="sort-link">Repeats @Model.SortArrow(ScheduleSort.Report)</a>
+                        <partial name="_Tip" model='"How often the schedule runs: on an interval, or daily at a local time."' /></th>
+                    @if (deletedView)
+                    {
+                        <th>Deleted</th>
+                    }
+                    else
+                    {
+                        <th><a href="@Model.SortLink(ScheduleSort.NextRun)" class="sort-link">Next run @Model.SortArrow(ScheduleSort.NextRun)</a>
+                            <partial name="_Tip" model='"When it will run on its own next. Hover a time to see the exact date in the schedule’s time zone."' /></th>
+                    }
+                    <th><a href="@Model.SortLink(ScheduleSort.LastRun)" class="sort-link">Last run @Model.SortArrow(ScheduleSort.LastRun)</a>
+                        <partial name="_Tip" model='"Result of the most recent run. Hover a status for its message; click it for that schedule’s run history."' /></th>
+                    @if (!deletedView)
+                    {
+                        <th>Auto-promote <partial name="_Tip" model='"Yes: each pull goes straight into dashboards and reports. Review first: it stops at staging so someone can check it under Import batches and promote it."' /></th>
+                        <th>On <partial name="_Tip" model='"Switch: runs automatically on its schedule when on, only when someone clicks Run when off. Buttons: edit, run now, and more (backfill, duplicate, run history, delete)."' /></th>
+                    }
+                    else
+                    {
+                        <th class="text-end"><span class="visually-hidden">Actions</span></th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var row in Model.Rows)
+            {
+                var s = row.Schedule;
+                var last = row.LastRun;
+                <tr class="@(s.IsEnabled || deletedView ? "" : "row-off")">
+                    <td class="select-col">
+                        <input type="checkbox" class="form-check-input" name="ids" value="@s.Id" form="bulk-form" data-select-row
+                               aria-label="Select @s.Name" />
+                    </td>
+                    <td>
+                        <div class="schedule-name">
+                            @if (deletedView)
+                            {
+                                <span>@s.Name</span>
+                            }
+                            else
+                            {
+                                <a asp-page="Edit" asp-route-id="@s.Id">@s.Name</a>
+                            }
+                            @if (s.Notes is { } notes)
+                            {
+                                <span class="note-icon" title="@notes" tabindex="0" aria-label="Notes: @notes"><partial name="_Icon" model='"note"' /></span>
+                            }
+                        </div>
+                        <div class="schedule-meta">
+                            <span class="@ScheduleDisplay.ReportTag(s.ReportType)">@ScheduleDisplay.ReportLabel(s.ReportType)</span>
+                            @if (s.OwnerEmail is { } owner)
+                            {
+                                <span class="owner" title="Owner"><partial name="_Icon" model='"user"' /> @owner</span>
+                            }
+                        </div>
+                    </td>
+                    <td class="text-nowrap">@ScheduleDisplay.Frequency(s)</td>
+                    @if (deletedView)
+                    {
+                        <td>
+                            <span class="pill pill-bad">Deleted</span>
+                            <div class="cell-sub" title="@ScheduleDisplay.Local(s.DeletedAt, s.TimeZoneId)">@ScheduleDisplay.Relative(s.DeletedAt, Model.Now) by @s.DeletedBy</div>
+                        </td>
+                    }
+                    else
+                    {
+                        <td class="text-nowrap">
+                            @if (!s.IsEnabled)
+                            {
+                                <span class="cell-sub">Manual only</span>
+                            }
+                            else if (Model.Settings.IsPaused)
+                            {
+                                <span class="pill pill-warn">Paused</span>
+                            }
+                            else
+                            {
+                                <span title="@ScheduleDisplay.Local(s.NextRunAt, s.TimeZoneId)">@ScheduleDisplay.Relative(s.NextRunAt, Model.Now)</span>
+                            }
+                        </td>
+                    }
+                    <td>
+                        @if (last is not null)
+                        {
+                            <a asp-page="Runs" asp-route-scheduleId="@s.Id" class="@ScheduleDisplay.StatusPill(last.Status)" title="@(last.Message ?? "View run history")">@ScheduleDisplay.StatusLabel(last.Status)</a>
+                            <div class="cell-sub" title="@ScheduleDisplay.Local(last.StartedAt, s.TimeZoneId)">@ScheduleDisplay.Relative(last.StartedAt, Model.Now)</div>
+                        }
+                        else
+                        {
+                            <span class="cell-sub">Never run</span>
+                        }
+                    </td>
+                    @if (!deletedView)
+                    {
+                        <td>
+                            <span class="pill @(s.AutoPromote ? "pill-info" : "pill-warn")"
+                                  title="@(s.AutoPromote ? "Goes straight into reports" : "Stops at staging for review under Import batches")">@(s.AutoPromote ? "Yes" : "Review first")</span>
+                        </td>
+                        <td>
+                            <div class="on-cell">
+                                <form method="post" asp-page-handler="SetEnabled" asp-route-id="@s.Id" asp-route-enabled="@(!s.IsEnabled)" class="toggle-form">
+                                    <input type="hidden" name="back" value="@back" />
+                                    <div class="form-check form-switch m-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="toggle-@s.Id" checked="@s.IsEnabled" data-autosubmit
+                                               aria-label="@(s.IsEnabled ? "Turn off" : "Turn on") @s.Name" />
+                                    </div>
+                                    <button type="submit" class="btn btn-sm btn-link p-0 js-hide">@(s.IsEnabled ? "Turn off" : "Turn on")</button>
+                                </form>
+                                <div class="row-actions">
+                                    <a asp-page="Edit" asp-route-id="@s.Id" class="btn btn-sm btn-soft btn-icon" aria-label="Edit @s.Name" title="Edit: name, report, timing, owner, notes"><partial name="_Icon" model='"edit"' /></a>
+                                    <form method="post" asp-page-handler="RunNow" asp-route-id="@s.Id">
+                                        <input type="hidden" name="back" value="@back" />
+                                        <button type="submit" class="btn btn-sm btn-soft btn-icon" disabled="@(!canRun)" aria-label="Run @s.Name now"
+                                                title="@(canRun ? "Run now: pull new data from Amazon without waiting for the schedule" : "Amazon isn't connected, so nothing can run")"><partial name="_Icon" model='"play"' /></button>
+                                    </form>
+                                    <div class="dropdown">
+                                        <button type="button" class="btn btn-sm btn-soft btn-icon" data-bs-toggle="dropdown" aria-expanded="false"
+                                                data-bs-popper-config='{"strategy":"fixed"}' aria-label="More actions for @s.Name" title="More: backfill, duplicate, run history, delete">
+                                            <partial name="_Icon" model='"more"' />
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end">
+                                            @if (s.ReportType != AmazonReportType.FbaInventory)
+                                            {
+                                                <li>
+                                                    <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#backfill-@s.Id" disabled="@(!canRun)">
+                                                        <partial name="_Icon" model='"rewind"' /> Backfill…
+                                                    </button>
+                                                </li>
+                                            }
+                                            <li><a class="dropdown-item" asp-page="Edit" asp-route-copyFrom="@s.Id"><partial name="_Icon" model='"copy"' /> Duplicate</a></li>
+                                            <li><a class="dropdown-item" asp-page="Runs" asp-route-scheduleId="@s.Id"><partial name="_Icon" model='"history"' /> View runs</a></li>
+                                            <li><hr class="dropdown-divider" /></li>
+                                            <li>
+                                                <button type="button" class="dropdown-item text-bad" data-bs-toggle="modal" data-bs-target="#delete-@s.Id">
+                                                    <partial name="_Icon" model='"trash"' /> Delete…
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    }
+                    else
+                    {
+                        <td class="text-end">
+                            <div class="row-actions">
+                                <form method="post" asp-page-handler="Restore" asp-route-id="@s.Id">
+                                    <input type="hidden" name="back" value="@back" />
+                                    <button type="submit" class="btn btn-sm btn-soft"><partial name="_Icon" model='"restore"' /> Restore</button>
+                                </form>
+                                <a asp-page="Runs" asp-route-scheduleId="@s.Id" class="btn btn-sm btn-soft"><partial name="_Icon" model='"history"' /> Runs</a>
+                            </div>
+                        </td>
+                    }
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+    @if (Model.Rows.Count == 0)
+    {
+        <div class="empty-state">
+            @if (Model.IsFiltered)
+            {
+                <div class="empty-title">No schedules match these filters</div>
+                <a href="@Url.Page("Index", new { view = deletedView ? "Deleted" : null })" class="btn btn-sm btn-soft">Clear filters</a>
+            }
+            else if (deletedView)
+            {
+                <div class="empty-title">No deleted schedules</div>
+                <div class="empty-detail">Schedules you delete show up here and can be restored.</div>
+            }
+            else
+            {
+                <div class="empty-title">No schedules yet</div>
+                <div class="empty-detail">Add one to start pulling reports from Amazon automatically.</div>
+                <a asp-page="Edit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"plus"' /> Add schedule</a>
+            }
+        </div>
+    }
+</div>
+<p class="page-footnote">
+    Each run pulls the report from Amazon, stores the untouched file, stages it, and — when Auto-promote is <strong>Yes</strong> —
+    promotes it into the reports. Hover a time to see it in the schedule's own time zone.
+</p>
+
+@if (!deletedView)
+{
+    <div class="modal fade" id="bulk-delete" tabindex="-1" aria-labelledby="bulk-delete-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5" id="bulk-delete-title">Delete the selected schedules?</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <span data-bulk-count-modal>The selected schedules</span> stop running and move to the <strong>Deleted</strong> tab.
+                    Their run history and imported data are kept, and they can be restored.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-soft" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" form="bulk-form" name="action" value="@BulkScheduleAction.Delete" class="btn btn-sm btn-danger">
+                        <partial name="_Icon" model='"trash"' /> Delete selected
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* ---------- Per-schedule dialogs (Bootstrap modals open via data attributes; no inline script) ---------- *@
+@if (!deletedView)
+{
+    var today = DateOnly.FromDateTime(Model.Now.UtcDateTime);
+    foreach (var row in Model.Rows)
+    {
+        var s = row.Schedule;
+        <div class="modal fade" id="delete-@s.Id" tabindex="-1" aria-labelledby="delete-title-@s.Id" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <form method="post" asp-page-handler="Delete" asp-route-id="@s.Id" class="modal-content">
+                    <input type="hidden" name="back" value="@back" />
+                    <div class="modal-header">
+                        <h2 class="modal-title h5" id="delete-title-@s.Id">Delete “@s.Name”?</h2>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        It stops running and moves to the <strong>Deleted</strong> tab. Its run history and imported data are kept,
+                        and you can restore it later.
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-sm btn-soft" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-sm btn-danger"><partial name="_Icon" model='"trash"' /> Delete schedule</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        if (s.ReportType != AmazonReportType.FbaInventory)
+        {
+            <div class="modal fade" id="backfill-@s.Id" tabindex="-1" aria-labelledby="backfill-title-@s.Id" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2 class="modal-title h5" id="backfill-title-@s.Id">Backfill “@s.Name”</h2>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="small text-muted-token">
+                                Re-pull history from Amazon (up to @SyncScheduleService.MaxLookbackDays days at a time). Data already imported is
+                                updated, never duplicated, and the regular schedule isn't affected.
+                            </p>
+                            <div class="form-label">Quick pick</div>
+                            <div class="quick-picks mb-3">
+                                @foreach (var days in new[] { 7, 14, 30 })
+                                {
+                                    <form method="post" asp-page-handler="Backfill" asp-route-id="@s.Id">
+                                        <input type="hidden" name="back" value="@back" />
+                                        <input type="hidden" name="days" value="@days" />
+                                        <button type="submit" class="btn btn-sm btn-soft">Last @days days</button>
+                                    </form>
+                                }
+                            </div>
+                            <form method="post" asp-page-handler="Backfill" asp-route-id="@s.Id">
+                                <input type="hidden" name="back" value="@back" />
+                                <div class="form-label">Or a date range (UTC)</div>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col">
+                                        <label for="from-@s.Id" class="form-label small mb-1">From</label>
+                                        <input type="date" id="from-@s.Id" name="from" class="form-control form-control-sm" required
+                                               max="@today.ToString("yyyy-MM-dd")" value="@today.AddDays(-7).ToString("yyyy-MM-dd")" />
+                                    </div>
+                                    <div class="col">
+                                        <label for="to-@s.Id" class="form-label small mb-1">To</label>
+                                        <input type="date" id="to-@s.Id" name="to" class="form-control form-control-sm" required
+                                               max="@today.ToString("yyyy-MM-dd")" value="@today.ToString("yyyy-MM-dd")" />
+                                    </div>
+                                    <div class="col-auto">
+                                        <button type="submit" class="btn btn-sm btn-primary">Backfill range</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+}
+
+@section Scripts {
+    <script src="~/js/schedules.js" asp-append-version="true"></script>
+}

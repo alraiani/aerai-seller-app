@@ -1,0 +1,37 @@
+@page
+@model AERai.Web.UI.Pages.Admin.Users.CreateModel
+@{
+    ViewData["Title"] = "New user";
+}
+<div class="card col-lg-6">
+    <div class="card-body">
+        <form method="post">
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+            <div class="mb-3">
+                <label asp-for="Input.Email" class="form-label"></label>
+                <input asp-for="Input.Email" class="form-control" autocomplete="off" />
+                <span asp-validation-for="Input.Email" class="text-danger small"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Input.DisplayName" class="form-label"></label>
+                <input asp-for="Input.DisplayName" class="form-control" />
+                <span asp-validation-for="Input.DisplayName" class="text-danger small"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Input.Password" class="form-label">Initial password</label>
+                <input asp-for="Input.Password" class="form-control" autocomplete="new-password" />
+                <span asp-validation-for="Input.Password" class="text-danger small"></span>
+                <div class="form-text">At least 12 characters with upper-case, lower-case, and a digit.</div>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Input.Role" class="form-label"></label>
+                <select asp-for="Input.Role" asp-items="@(new SelectList(Model.Roles))" class="form-select"></select>
+            </div>
+            <button type="submit" class="btn btn-primary">Create user</button>
+            <a asp-page="Index" class="btn btn-link">Cancel</a>
+        </form>
+    </div>
+</div>
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

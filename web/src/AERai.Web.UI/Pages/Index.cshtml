@@ -1,0 +1,348 @@
+@page
+@using System.Globalization
+@using AERai.Web.Application.Dashboard
+@using AERai.Web.Domain.Ingestion
+@model IndexModel
+@{
+    ViewData["Title"] = "Dashboard";
+    var s = Model.Snapshot;
+    var c = s.Currency;
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var orders = s.Sync.FirstOrDefault(x => x.ReportType == AmazonReportType.Orders);
+    var zoneName = s.TimeZoneId.Split('/').Last().Replace('_', ' ');
+
+    // Chart geometry in SVG units; bars scale to the busiest bucket. Gridlines at 50% and 100%.
+    const double width = 720, height = 190, top = 12, bottom = 22;
+    var plot = height - top - bottom;
+    var max = s.Chart.Count == 0 ? 0m : s.Chart.Max(p => p.Revenue);
+    var slot = s.Chart.Count == 0 ? 0d : width / s.Chart.Count;
+    var labelEvery = s.Granularity == ChartGranularity.Hour ? 3 : s.Chart.Count > 14 ? 5 : 1;
+    var currentIndex = s.Granularity == ChartGranularity.Hour
+        ? s.Chart.ToList().FindLastIndex(p => !p.IsFuture)
+        : s.Chart.Count - 1;
+
+    string Label(ChartPoint p) => s.Granularity == ChartGranularity.Hour
+        ? p.LocalStart.ToString("h tt", en).ToLowerInvariant()
+        : s.Chart.Count > 7 ? p.LocalStart.ToString("MMM d", en) : p.LocalStart.ToString("ddd", en);
+    string F(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+}
+
+@* ---------- Data freshness + period ---------- *@
+<div class="card sync-head mb-3">
+    <div class="sync-head-status">
+        <span class="status-light @DashboardFormat.SyncLight(orders, s.GeneratedAt, Model.StaleAfter)" aria-hidden="true"></span>
+        <div class="sync-head-text">
+            <span class="sync-head-label">
+                @(orders?.LastSuccessAt is null ? "Sales not synced yet" : $"Sales updated {DashboardFormat.Ago(orders.LastSuccessAt, s.GeneratedAt)}")
+                <partial name="_Tip" model='"Green = sales data from Amazon is fresh. Amber = it is stale or has never synced. Red = the latest Orders sync failed. Details under Data from Amazon."' />
+            </span>
+            <span class="sync-head-detail" title="Times shown in @s.TimeZoneId">@zoneName time</span>
+        </div>
+    </div>
+    <div class="sync-head-actions">
+        <nav class="segmented" aria-label="Period">
+            <a asp-page="/Index" asp-route-period="today" class="@(s.Period == DashboardPeriod.Today ? "active" : "")">Today</a>
+            <a asp-page="/Index" asp-route-period="7d" class="@(s.Period == DashboardPeriod.Last7Days ? "active" : "")">7 days</a>
+            <a asp-page="/Index" asp-route-period="30d" class="@(s.Period == DashboardPeriod.Last30Days ? "active" : "")">30 days</a>
+        </nav>
+    </div>
+</div>
+
+@* ---------- Headline numbers ---------- *@
+<div class="row g-3 mb-3">
+    @{
+        var compare = s.ComparisonAvailable ? DashboardFormat.ComparisonLabel(s.Period) : "no earlier data to compare";
+        var tiles = new (string Label, string Tip, string Value, decimal? Change, string? Extra)[]
+        {
+            ("Revenue", $"Item sales from orders placed in the period, in {c}. The chip compares the same elapsed time in the previous period. Click for the orders.",
+                DashboardFormat.Money(s.Revenue.Current, c), s.Revenue.Change, null),
+            ("Orders", "Orders placed in the period, including ones Amazon still lists as pending. Click for the orders.",
+                s.Orders.Current.ToString("N0", en), s.Orders.Change, s.PendingOrders > 0 ? $"{s.PendingOrders:N0} pending" : null),
+            ("Units sold", "Units across all orders placed in the period. Click for the orders.",
+                s.Units.Current.ToString("N0", en), s.Units.Change, null),
+            ("Avg. order value", "Revenue divided by orders for the period. Click for the orders.",
+                DashboardFormat.Money(s.AverageOrderValue.Current, c), s.AverageOrderValue.Change, null),
+        };
+    }
+    @foreach (var tile in tiles)
+    {
+        <div class="col-6 col-xl-3">
+            <a class="card tile h-100" asp-page="/Orders/Index">
+                <div class="kpi">
+                    <div class="kpi-label">@tile.Label <partial name="_Tip" model="tile.Tip" /></div>
+                    <div class="kpi-value">
+                        @tile.Value
+                        @if (tile.Extra is { } extra)
+                        {
+                            <span class="kpi-of">@extra</span>
+                        }
+                    </div>
+                    <div class="kpi-foot">
+                        <span class="delta @DashboardFormat.DeltaClass(tile.Change)">@DashboardFormat.Delta(tile.Change)</span>
+                        <span>@compare</span>
+                    </div>
+                </div>
+            </a>
+        </div>
+    }
+</div>
+
+<div class="row g-3 mb-3">
+    @* ---------- Sales chart ---------- *@
+    <div class="col-xl-8">
+        <div class="card h-100">
+            <div class="card-toolbar">
+                <span class="card-toolbar-title">
+                    Sales @(s.Granularity == ChartGranularity.Hour ? "by hour" : "by day")
+                    <partial name="_Tip" model='"Revenue per bar in local business time. The darker bar is the current one; dashed slots are still to come. Hover a bar for orders and units."' />
+                </span>
+                <span class="chart-summary">Peak @DashboardFormat.Money(max, c)</span>
+            </div>
+            <div class="card-body">
+                @if (max == 0)
+                {
+                    <div class="empty-state">
+                        <div class="empty-title">No sales in this period yet</div>
+                        <div class="empty-detail">Sales appear here once Orders sync from Amazon.</div>
+                        <a asp-page="/Tools/Schedules/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"plug"' /> Amazon sync</a>
+                    </div>
+                }
+                else
+                {
+                    <svg class="chart" viewBox="0 0 @F(width) @F(height)" role="img" aria-label="Revenue by @(s.Granularity == ChartGranularity.Hour ? "hour" : "day")">
+                        <line class="grid" x1="0" x2="@F(width)" y1="@F(top)" y2="@F(top)" />
+                        <line class="grid" x1="0" x2="@F(width)" y1="@F(top + plot / 2)" y2="@F(top + plot / 2)" />
+                        <line class="grid" x1="0" x2="@F(width)" y1="@F(top + plot)" y2="@F(top + plot)" />
+                        @for (var i = 0; i < s.Chart.Count; i++)
+                        {
+                            var p = s.Chart[i];
+                            var h = (double)(p.Revenue / max) * plot;
+                            var x = i * slot + slot * 0.15;
+                            var w = slot * 0.7;
+                            if (p.IsFuture)
+                            {
+                                <rect class="bar-future" x="@F(x)" y="@F(top + plot - 2)" width="@F(w)" height="2" />
+                            }
+                            else
+                            {
+                                <rect class="@(i == currentIndex ? "bar-current" : "bar")" x="@F(x)" y="@F(top + plot - Math.Max(h, 1))" width="@F(w)" height="@F(Math.Max(h, 1))" rx="2">
+                                    <title>@Label(p): @DashboardFormat.Money(p.Revenue, c) · @p.Orders orders · @p.Units units</title>
+                                </rect>
+                            }
+                            if (i % labelEvery == 0 || i == s.Chart.Count - 1)
+                            {
+                                // Edge labels anchor inward so they are never clipped by the chart bounds.
+                                var anchor = i == 0 ? "start" : i == s.Chart.Count - 1 ? "end" : "middle";
+                                var labelX = i == 0 ? x : i == s.Chart.Count - 1 ? x + w : i * slot + slot / 2;
+                                @* Razor reserves <text>, so the SVG element is emitted as a literal markup line. *@
+                                @:<text class="axis" x="@F(labelX)" y="@F(height - 6)" text-anchor="@anchor">@Label(p)</text>
+                            }
+                        }
+                    </svg>
+                }
+            </div>
+        </div>
+    </div>
+
+    @* ---------- Needs attention ---------- *@
+    <div class="col-xl-4">
+        <div class="card h-100">
+            <div class="card-toolbar">
+                <span class="card-toolbar-title">
+                    Needs attention
+                    <partial name="_Tip" model='"Red = act now (e.g. selling but out of stock, sync failing). Amber = worth a look soon. Blue = for your information. Click an item to go fix it."' />
+                </span>
+                @if (s.Attention.Count > 0)
+                {
+                    <span class="count-badge">@s.Attention.Count</span>
+                }
+            </div>
+            @if (s.Attention.Count == 0)
+            {
+                <div class="all-clear">
+                    <span class="all-clear-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg></span>
+                    <div><div class="fw-semibold">All clear</div><div class="text-muted-token small">Stock, syncs, and data look healthy.</div></div>
+                </div>
+            }
+            else
+            {
+                <ul class="attention-list">
+                    @foreach (var item in s.Attention)
+                    {
+                        <li>
+                            <a class="attention-item" asp-page="@DashboardFormat.PageFor(item.Target)">
+                                <span class="status-light @DashboardFormat.SeverityLight(item.Severity)" role="img" aria-label="@item.Severity"></span>
+                                <span>
+                                    <span class="attention-title d-block">@item.Title</span>
+                                    <span class="attention-detail d-block">@item.Detail</span>
+                                </span>
+                                <span class="attention-go" aria-hidden="true">›</span>
+                            </a>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    @* ---------- Best sellers ---------- *@
+    <div class="col-xl-8">
+        <div class="card h-100">
+            <div class="card-toolbar">
+                <span class="card-toolbar-title">
+                    Best sellers
+                    <partial name="_Tip" model='"Top products by revenue in the period. Share is the slice of total revenue; Change compares the previous period."' />
+                </span>
+                <a asp-page="/Orders/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"search"' /> All orders</a>
+            </div>
+            <div class="card-body p-0">
+                @if (s.TopProducts.Count == 0)
+                {
+                    <div class="empty-state">
+                        <div class="empty-title">No sales in this period yet</div>
+                        <div class="empty-detail">Your best sellers show up once Orders sync from Amazon.</div>
+                        <a asp-page="/Tools/Schedules/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"plug"' /> Amazon sync</a>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                    <table class="table data-table align-middle mb-0">
+                        <thead><tr><th>Product</th><th class="text-end">Units</th><th class="text-end">Revenue</th><th class="d-none d-md-table-cell">Share</th><th class="text-end">Change</th></tr></thead>
+                        <tbody>
+                        @foreach (var p in s.TopProducts)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="product-title" title="@p.Title">@(p.Title ?? p.Sku)</div>
+                                    <div class="product-sku">@p.Sku</div>
+                                </td>
+                                <td class="text-end">@p.Units.ToString("N0", en)</td>
+                                <td class="text-end fw-semibold">@DashboardFormat.Money(p.Revenue, c)</td>
+                                <td class="d-none d-md-table-cell">
+                                    <svg class="share" viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label="@p.Share.ToString("P0", en) of revenue">
+                                        <rect class="track" x="0" y="0" width="100" height="6" rx="3" />
+                                        <rect class="fill" x="0" y="0" width="@F((double)(p.Share * 100))" height="6" rx="3" />
+                                    </svg>
+                                    <span class="product-sku">@p.Share.ToString("P0", en)</span>
+                                </td>
+                                <td class="text-end"><span class="delta @DashboardFormat.DeltaClass(p.Change)">@DashboardFormat.Delta(p.Change)</span></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4 d-flex flex-column gap-3">
+        @* ---------- Inventory ---------- *@
+        <div class="card">
+            <div class="card-toolbar">
+                <span class="card-toolbar-title">
+                    Inventory
+                    <partial name="_Tip" model='"FBA stock from the latest inventory sync. Out of stock and selling = no units left on a SKU that sold recently."' />
+                </span>
+                <a asp-page="/Inventory/Index" class="btn btn-sm btn-soft">Details</a>
+            </div>
+            <div class="card-body">
+                @if (s.Inventory.SkusTotal == 0)
+                {
+                    <div class="empty-state">
+                        <div class="empty-title">No inventory yet</div>
+                        <div class="empty-detail">Stock levels appear once FBA inventory syncs from Amazon.</div>
+                        <a asp-page="/Tools/Schedules/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"plug"' /> Amazon sync</a>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex align-items-baseline gap-2 mb-2">
+                        <span class="big-number">@s.Inventory.SkusInStock</span>
+                        <span class="text-muted-token">of @s.Inventory.SkusTotal SKUs in stock</span>
+                    </div>
+                    <div class="stat-row"><span class="label">Available units</span><span>@s.Inventory.AvailableUnits.ToString("N0", en)</span></div>
+                    <div class="stat-row"><span class="label">Inbound units</span><span>@s.Inventory.InboundUnits.ToString("N0", en)</span></div>
+                    <div class="stat-row">
+                        <span class="label">Out of stock &amp; selling</span>
+                        <span class="@(s.Inventory.OutOfStockSelling > 0 ? "pill pill-bad" : "")">@s.Inventory.OutOfStockSelling</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="label">Low stock</span>
+                        <span class="@(s.Inventory.LowStock > 0 ? "pill pill-warn" : "")">@s.Inventory.LowStock</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ---------- Latest payout ---------- *@
+        <div class="card">
+            <div class="card-toolbar">
+                <span class="card-toolbar-title">
+                    Latest payout
+                    <partial name="_Tip" model='"The most recent settlement Amazon paid out in the dashboard currency, with its sales, fees, and refunds."' />
+                </span>
+                <a asp-page="/Settlements/Index" class="btn btn-sm btn-soft">Settlements</a>
+            </div>
+            <div class="card-body">
+                @if (s.LatestPayout is { } pay)
+                {
+                    <div class="big-number">@DashboardFormat.Money(pay.Net, c)</div>
+                    <div class="text-muted-token small mb-2">
+                        @(pay.PeriodStart?.ToString("MMM d", en)) – @(pay.PeriodEnd?.ToString("MMM d", en))
+                    </div>
+                    <div class="stat-row"><span class="label">Sales</span><span>@DashboardFormat.Money(pay.Sales, c)</span></div>
+                    <div class="stat-row">
+                        <span class="label">Amazon fees @(pay.FeeRate is { } rate ? $"({rate.ToString("P0", en)})" : "")</span>
+                        <span>@DashboardFormat.Money(pay.Fees, c)</span>
+                    </div>
+                    <div class="stat-row"><span class="label">Refunds</span><span>@DashboardFormat.Money(pay.Refunds, c)</span></div>
+                }
+                else
+                {
+                    <div class="empty-state">
+                        <div class="empty-title">No payouts yet</div>
+                        <div class="empty-detail">No @c settlements have synced from Amazon.</div>
+                        <a asp-page="/Tools/Schedules/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"plug"' /> Amazon sync</a>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ---------- Data sources ---------- *@
+        <div class="card">
+            <div class="card-toolbar">
+                <span class="card-toolbar-title">
+                    Data from Amazon
+                    <partial name="_Tip" model='"Fresh = the last successful pull is recent. Stale = it is older than expected. Failed = the latest run failed; hover it for why. Manual = no schedule is on, so it only updates when someone runs it."' />
+                </span>
+                <a asp-page="/Tools/Schedules/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"refresh"' /> Sync</a>
+            </div>
+            <div class="card-body py-2">
+                <ul class="sync-list">
+                    @foreach (var source in s.Sync)
+                    {
+                        <li>
+                            <span class="@ScheduleDisplay.ReportTag(source.ReportType)">@DashboardFormat.ReportLabel(source.ReportType)</span>
+                            @if (!source.IsScheduled)
+                            {
+                                <span class="cell-sub">manual</span>
+                            }
+                            <span class="when">
+                                <span class="@DashboardFormat.SyncPill(source, s.GeneratedAt, Model.StaleAfter)" title="@(source.LastMessage ?? $"Last successful pull {DashboardFormat.Ago(source.LastSuccessAt, s.GeneratedAt)}")">@DashboardFormat.SyncPillLabel(source, s.GeneratedAt, Model.StaleAfter)</span>
+                                <span class="cell-sub">@DashboardFormat.Ago(source.LastSuccessAt, s.GeneratedAt)</span>
+                            </span>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+<p class="page-footnote">
+    Times are in @zoneName time (@s.TimeZoneId). Changes compare the same elapsed time in the previous period and are hidden
+    when synced history doesn't cover it. Hover a <strong>?</strong> for what each number means.
+</p>

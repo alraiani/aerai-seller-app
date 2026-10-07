@@ -1,0 +1,34 @@
+@page
+@model AERai.Web.UI.Pages.Admin.Users.IndexModel
+@{
+    ViewData["Title"] = "Users";
+}
+<div class="mb-3"><a asp-page="Create" class="btn btn-sm btn-primary">New user</a></div>
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var u in Model.Users)
+            {
+                <tr>
+                    <td>@u.DisplayName</td>
+                    <td>@u.Email</td>
+                    <td>@string.Join(", ", u.Roles)</td>
+                    <td>@(u.IsLockedOut ? "Locked" : "Active")</td>
+                    <td class="text-end">
+                        @if (u.Id != Model.CurrentUserId)
+                        {
+                            <form method="post" asp-page-handler="SetLockout" asp-route-userId="@u.Id" asp-route-locked="@(!u.IsLockedOut)">
+                                <button type="submit" class="btn btn-sm @(u.IsLockedOut ? "btn-outline-success" : "btn-outline-danger")">@(u.IsLockedOut ? "Unlock" : "Lock")</button>
+                            </form>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
