@@ -25,6 +25,9 @@ public sealed class Product
     /// <summary>MIME type of the picture (image/jpeg, image/png, or image/webp).</summary>
     public string? ImageContentType { get; set; }
 
+    /// <summary>The variant's color, used to group and color-code SKUs on the worksheet, if set.</summary>
+    public ProductColor? Color { get; set; }
+
     /// <summary>When the SKU was first seen.</summary>
     public DateTimeOffset CreatedAt { get; set; }
 

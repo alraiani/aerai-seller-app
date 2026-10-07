@@ -74,14 +74,14 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
                 var units30 = sales.Where(s => s.Day >= recentStart).Sum(s => s.Quantity);
                 var velocity = Velocity(sales.Select(s => s.Day).DefaultIfEmpty().Min(), units90, today);
                 var times = settings.Resolve(leadTimes.GetValueOrDefault(p.Sku));
-                var plan = RestockPlanner.Plan(today, velocity, p.SellThroughStock, p.HomeStock, times);
+                var plan = RestockPlanner.Plan(today, velocity, p.SellThroughStock, p.HomeStock, times, AmazonRecommendation.From(p.AmazonRecommendedQuantity, p.AmazonRecommendedShipDate));
                 var status = StatusOf(p, units30, velocity, plan, settings.AlertLeadDays);
                 var average30 = AveragePerDay(sales.Where(s => s.Day >= recentStart).Select(s => (s.Day, s.Quantity)), RecentSalesDays, today);
                 var average90 = AveragePerDay(sales.Select(s => (s.Day, s.Quantity)), VelocityWindowDays, today);
                 return new InventoryItem(p, units30, units90, velocity, DaysOfInventory(p, velocity), times, plan, status, average30, average90);
             })
             .OrderBy(i => i.Status)
-            .ThenBy(i => i.Restock?.DaysUntilAction is null)
+            .ThenBy(i => i.Restock is null)
             .ThenBy(i => i.Restock?.DaysUntilAction)
             .ThenBy(i => i.DaysOfInventory is null)
             .ThenBy(i => i.DaysOfInventory)

@@ -31,6 +31,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Raw reserved-inventory report rows.</summary>
     public DbSet<StgFbaReservedRow> StgFbaReservedRows => Set<StgFbaReservedRow>();
 
+    /// <summary>Raw restock-recommendation report rows.</summary>
+    public DbSet<StgFbaRestockRow> StgFbaRestockRows => Set<StgFbaRestockRow>();
+
     /// <summary>Raw settlement lines.</summary>
     public DbSet<StgSettlementLine> StgSettlementLines => Set<StgSettlementLine>();
 
@@ -49,8 +52,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Stock held outside Amazon, per marketplace.</summary>
     public DbSet<HomeStock> HomeStocks => Set<HomeStock>();
 
+    /// <summary>Home-stock ledger entries (each SKU's entries add up to its home stock).</summary>
+    public DbSet<HomeStockMovement> HomeStockMovements => Set<HomeStockMovement>();
+
     /// <summary>Per-marketplace lead-time overrides for restock planning.</summary>
     public DbSet<LeadTimeProfile> LeadTimeProfiles => Set<LeadTimeProfile>();
+
+    /// <summary>Amazon's latest restock recommendation per marketplace and SKU.</summary>
+    public DbSet<RestockRecommendation> RestockRecommendations => Set<RestockRecommendation>();
 
     /// <summary>Low/out-of-stock alerts.</summary>
     public DbSet<StockAlert> StockAlerts => Set<StockAlert>();

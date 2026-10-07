@@ -15,5 +15,6 @@ internal sealed class InventoryPositionConfiguration : IEntityTypeConfiguration<
     {
         builder.ToView("vw_InventoryPosition", Schemas.Reporting).HasNoKey();
         builder.Property(v => v.MarketplaceId).HasMaxLength(16);
+        builder.Property(v => v.Color).HasConversion<string>().HasMaxLength(20);
     }
 }

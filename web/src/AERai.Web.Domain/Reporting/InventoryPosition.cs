@@ -1,3 +1,5 @@
+using AERai.Web.Domain.Core;
+
 namespace AERai.Web.Domain.Reporting;
 
 /// <summary>
@@ -26,6 +28,18 @@ public sealed class InventoryPosition
 
     /// <summary>Blob path of the product picture, if one was uploaded (changes with every upload).</summary>
     public string? ImagePath { get; set; }
+
+    /// <summary>The variant's color, if set.</summary>
+    public ProductColor? Color { get; set; }
+
+    /// <summary>
+    /// Units Amazon's latest restock report recommends sending in, or <see langword="null"/> when no
+    /// report covers the SKU.
+    /// </summary>
+    public int? AmazonRecommendedQuantity { get; set; }
+
+    /// <summary>The date Amazon recommends shipping by, when it gives one.</summary>
+    public DateOnly? AmazonRecommendedShipDate { get; set; }
 
     /// <summary>
     /// Date of the most recent Amazon snapshot for the SKU, or <see langword="null"/> when the SKU is

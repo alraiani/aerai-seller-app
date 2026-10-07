@@ -130,7 +130,7 @@ public sealed class InventoryServiceTests
         Assert.True(item.LeadTimes.IsCustom);
         Assert.Equal((_options.SupplierLeadTimeDays, 5, 0, 60), (item.LeadTimes.SupplierLeadTimeDays, item.LeadTimes.TransitDays, item.LeadTimes.SafetyStockDays, item.LeadTimes.TargetStockDays));
         Assert.NotNull(item.Restock);
-        Assert.Equal((30, 10, 20), (item.Restock.UnitsNeeded, item.Restock.SendFromHome, item.Restock.OrderFromSupplier));
+        Assert.Equal((30, 10, 20), (item.Restock.UnitsNeeded, item.Restock.SendToAmazon, item.Restock.ShortAtHome));
     }
 
     [Fact]

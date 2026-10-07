@@ -195,7 +195,7 @@
                         <th class="text-end col-sold"><a href="@Model.SortLink(InventorySort.Sold30d)" class="sort-link">Sold 30d @Model.SortArrow(InventorySort.Sold30d)</a></th>
                         <th class="text-end col-sold"><a href="@Model.SortLink(InventorySort.Sold90d)" class="sort-link">Sold 90d @Model.SortArrow(InventorySort.Sold90d)</a>
                             <partial name="_Tip" model='"Units sold in the window. Per day averages over the days since the first sale in that window, so a SKU (or sales history) newer than the window isn’t understated."' /></th>
-                        <th>Next step <partial name="_Tip" model='"What to do to stay in stock: send home stock first, order the rest from your supplier, each by the last day it still arrives in time. Hover a row’s step for the stockout date and lead times."' /></th>
+                        <th>Next step <partial name="_Tip" model='"How many home-stock units to send into Amazon, and the last day to ship them: enough to cover the target days of sales, or Amazon’s own recommendation if it asks for more or sooner. Hover a row for the stockout date, reorder date, and lead times. Supplier reorders are on the Worksheet."' /></th>
                         @if (Model.CanEdit)
                         {
                             <th class="text-end"><span class="visually-hidden">Actions</span></th>
@@ -259,20 +259,43 @@
                             }
                         </td>
                         <td>
-                            @if (item.Restock is { } plan && plan.UnitsNeeded > 0)
+                            @{
+                                var amazon = InventoryFormat.AmazonAdvice(p.AmazonRecommendedQuantity, p.AmazonRecommendedShipDate);
+                            }
+                            @if (item.Restock is { } plan && InventoryFormat.Send(plan) is { } send)
                             {
-                                var steps = InventoryFormat.Steps(plan);
                                 <div class="next-step" title="@InventoryFormat.StepsTip(item)">
-                                    <div><strong>@steps[0].Action</strong> <span class="text-muted-token">@steps[0].When</span></div>
-                                    @if (steps.Count > 1)
+                                    <div><strong>@send.Action</strong> <span class="text-muted-token">@send.When</span></div>
+                                    @if (amazon is not null)
                                     {
-                                        <div class="cell-sub">then @steps[1].Action.ToLowerInvariant() @steps[1].When</div>
+                                        <div class="cell-sub">@amazon</div>
+                                    }
+                                    @if (plan.ShortAtHome > 0)
+                                    {
+                                        <div class="cell-sub text-warn">@plan.ShortAtHome.ToString("N0", en) more needed than home stock holds</div>
                                     }
                                 </div>
                             }
                             else if (item.Restock is { } covered)
                             {
-                                <span class="cell-sub" title="@InventoryFormat.StepsTip(item)">Covered until @InventoryFormat.ShortDate(covered.ProjectedStockout)</span>
+                                <div title="@InventoryFormat.StepsTip(item)">
+                                    @if (covered.ShortAtHome > 0)
+                                    {
+                                        <div class="text-warn">Nothing at home to send</div>
+                                    }
+                                    else
+                                    {
+                                        <span class="cell-sub">Covered until @InventoryFormat.ShortDate(covered.ProjectedStockout)</span>
+                                    }
+                                    @if (amazon is not null)
+                                    {
+                                        <div class="cell-sub">@amazon</div>
+                                    }
+                                </div>
+                            }
+                            else if (amazon is not null)
+                            {
+                                <span class="cell-sub">@amazon</span>
                             }
                             else
                             {

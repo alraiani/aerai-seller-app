@@ -8,7 +8,7 @@ public static class AmazonReportTypeExtensions
     /// for a past date (so it has no history to backfill).
     /// </summary>
     /// <param name="reportType">The report type.</param>
-    /// <returns><see langword="true"/> for inventory snapshots.</returns>
+    /// <returns><see langword="true"/> for inventory snapshots and restock recommendations.</returns>
     public static bool IsSnapshot(this AmazonReportType reportType) =>
-        reportType is AmazonReportType.FbaInventory or AmazonReportType.FbaReservedInventory;
+        reportType is AmazonReportType.FbaInventory or AmazonReportType.FbaReservedInventory or AmazonReportType.RestockRecommendations;
 }
