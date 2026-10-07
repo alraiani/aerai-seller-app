@@ -217,6 +217,8 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
 .chart .bar-future { fill: none; stroke: var(--chart-grid); stroke-dasharray: 3 3; }
 .chart .grid { stroke: var(--chart-grid); stroke-width: 1; }
 .chart .axis { font-size: 11px; fill: var(--muted); }
+.chart .axis-strong { font-weight: 700; fill: var(--text); }
+.chart .axis-group { font-weight: 600; fill: var(--text); text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; }
 .chart .bar-value { font-size: 11px; font-weight: 600; fill: var(--text); }
 .chart .bar-units { font-size: 10px; font-weight: 500; fill: var(--muted); }
 .chart-summary { font-size: 0.8rem; color: var(--muted); }

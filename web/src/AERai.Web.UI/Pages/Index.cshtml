@@ -14,13 +14,18 @@
     // Chart geometry in SVG units; bars scale to the busiest bucket. Gridlines at 50% and 100%.
     // Each bar carries its revenue and units above it: two stacked lines when slots are wide, one
     // upright line when they are too narrow (30 days, hourly), so the plot leaves headroom for them.
-    const double width = 720, plot = 156, bottom = 22;
+    // Dense charts (30 days, hourly) label every bar with a short tick (day of month, or hour 12/1/2…)
+    // and add a group row underneath (month, or AM/PM) at the start and wherever the group changes,
+    // so any bar reads at a glance.
+    var hourly = s.Granularity == ChartGranularity.Hour;
+    var denseAxis = hourly || s.Chart.Count > 7;
+    const double width = 720, plot = 156;
+    var bottom = denseAxis ? 36d : 22d;
     var slot = s.Chart.Count == 0 ? 0d : width / s.Chart.Count;
     var uprightValues = slot < 48;
     var top = uprightValues ? 70d : 34d;
     var height = top + plot + bottom;
     var max = s.Chart.Count == 0 ? 0m : s.Chart.Max(p => p.Revenue);
-    var labelEvery = s.Granularity == ChartGranularity.Hour ? 3 : s.Chart.Count > 14 ? 5 : 1;
     var currentIndex = s.Granularity == ChartGranularity.Hour
         ? s.Chart.ToList().FindLastIndex(p => !p.IsFuture)
         : s.Chart.Count - 1;
@@ -28,6 +33,8 @@
     string Label(ChartPoint p) => s.Granularity == ChartGranularity.Hour
         ? p.LocalStart.ToString("h tt", en).ToLowerInvariant()
         : s.Chart.Count > 7 ? p.LocalStart.ToString("MMM d", en) : p.LocalStart.ToString("ddd", en);
+    string Tick(ChartPoint p) => hourly ? p.LocalStart.ToString("%h", en) : p.LocalStart.Day.ToString(en);
+    string Group(ChartPoint p) => hourly ? p.LocalStart.ToString("tt", en) : p.LocalStart.ToString("MMM", en);
     string F(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
 }
 
@@ -147,13 +154,22 @@
                                     }
                                 }
                             }
-                            if (i % labelEvery == 0 || i == s.Chart.Count - 1)
+                            if (denseAxis)
                             {
-                                // Edge labels anchor inward so they are never clipped by the chart bounds.
-                                var anchor = i == 0 ? "start" : i == s.Chart.Count - 1 ? "end" : "middle";
-                                var labelX = i == 0 ? x : i == s.Chart.Count - 1 ? x + w : i * slot + slot / 2;
-                                @* Razor reserves <text>, so the SVG element is emitted as a literal markup line. *@
-                                @:<text class="axis" x="@F(labelX)" y="@F(height - 6)" text-anchor="@anchor">@Label(p)</text>
+                                var groupStarts = i > 0 && Group(p) != Group(s.Chart[i - 1]);
+                                // The first bar names its group unless a new one starts right after it,
+                                // where the two group labels would collide.
+                                var firstGroup = i == 0 && !s.Chart.Take(3).Skip(1).Any(q => Group(q) != Group(p));
+                                @* Razor reserves <text>, so SVG text elements are emitted as literal markup lines. *@
+                                @:<text class="@(groupStarts ? "axis axis-strong" : "axis")" x="@F(i * slot + slot / 2)" y="@F(top + plot + 14)" text-anchor="middle">@Tick(p)</text>
+                                if (groupStarts || firstGroup)
+                                {
+                                    @:<text class="axis axis-group" x="@F(i * slot + 1)" y="@F(height - 4)" text-anchor="start">@Group(p)</text>
+                                }
+                            }
+                            else
+                            {
+                                @:<text class="axis" x="@F(i * slot + slot / 2)" y="@F(height - 6)" text-anchor="middle">@Label(p)</text>
                             }
                         }
                     </svg>
