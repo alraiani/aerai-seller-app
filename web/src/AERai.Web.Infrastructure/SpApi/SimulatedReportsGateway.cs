@@ -58,6 +58,7 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
             AmazonReportType.Orders => () => OrdersReport(marketplace, reportId, start, end),
             AmazonReportType.FbaInventory => () => InventoryReport(marketplace, reportId),
             AmazonReportType.FbaReservedInventory => () => ReservedInventoryReport(reportId),
+            AmazonReportType.RestockRecommendations => () => RestockReport(marketplace, reportId),
             _ => throw new InvalidOperationException($"{reportType} reports cannot be requested; they are listed."),
         };
 
@@ -172,6 +173,28 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
             int customerOrders = random.Next(0, 8), transfers = random.Next(0, 3) == 0 ? random.Next(5, 40) : 0, processing = random.Next(0, 4);
             builder.Append(CultureInfo.InvariantCulture,
                 $"{sku}\tX00{asin[4..]}\t{asin}\t{title}\t{customerOrders + transfers + processing}\t{customerOrders}\t{transfers}\t{processing}\n");
+        }
+#pragma warning restore CA5394
+
+        return builder.ToString();
+    }
+
+    private string RestockReport(Marketplace marketplace, string reportId)
+    {
+        var random = Seeded(reportId);
+        var country = marketplace.Code;
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var builder = new StringBuilder("Country\tProduct Name\tFNSKU\tMerchant SKU\tASIN\tCondition\tRecommended replenishment qty\tRecommended ship date\tRecommended action\n");
+
+#pragma warning disable CA5394 // Simulated data; randomness is not security-sensitive.
+        foreach (var (sku, asin, title, _) in Catalog)
+        {
+            // Roughly half the catalog needs restocking, with ship dates a few days to two weeks out.
+            var quantity = random.Next(0, 2) == 0 ? 0 : random.Next(10, 120);
+            var shipDate = quantity > 0 ? today.AddDays(random.Next(2, 15)).ToString("MM/dd/yyyy", CultureInfo.InvariantCulture) : string.Empty;
+            var action = quantity > 0 ? "Create shipping plan" : "No action required";
+            builder.Append(CultureInfo.InvariantCulture,
+                $"{country}\t{title}\tX00{asin[4..]}\t{sku}\t{asin}\tNew\t{quantity}\t{shipDate}\t{action}\n");
         }
 #pragma warning restore CA5394
 

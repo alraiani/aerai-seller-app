@@ -1,3 +1,4 @@
+using System.Data;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Inventory;
 using AERai.Web.Domain.Core;
@@ -31,7 +32,8 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
              h == null ? 0 : h.Quantity,
              l == null
                  ? LeadTimeSettings.None
-                 : new LeadTimeSettings(l.SupplierLeadTimeDays, l.PrepTimeDays, l.TransitDays, l.SafetyStockDays, l.TargetStockDays)))
+                 : new LeadTimeSettings(l.SupplierLeadTimeDays, l.PrepTimeDays, l.TransitDays, l.SafetyStockDays, l.TargetStockDays),
+             p.Color))
         .SingleOrDefaultAsync(cancellationToken);
 
     /// <inheritdoc/>
@@ -47,7 +49,9 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
         return await strategy.ExecuteAsync(async () =>
         {
             dbContext.ChangeTracker.Clear();
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            // Serializable: the ledger entry is the difference from the balance read here, so two
+            // concurrent saves must not both start from the same old balance.
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
 
             var familyId = family is null ? (int?)null : await GetOrCreateFamilyAsync(family, cancellationToken).ConfigureAwait(false);
             if (!await SetFamilyAsync(sku, familyId, cancellationToken).ConfigureAwait(false))
@@ -119,6 +123,49 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
             .ConfigureAwait(false) > 0;
 
     /// <inheritdoc/>
+    public async Task<IReadOnlyDictionary<string, HomeStockSnapshot>> GetHomeStockAsync(string marketplaceId, IReadOnlyCollection<string> skus, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(skus);
+
+        var found = new Dictionary<string, HomeStockSnapshot>(StringComparer.Ordinal);
+
+        // Chunked so a large upload stays well under SQL Server's 2,100-parameter limit.
+        foreach (var chunk in skus.Distinct(StringComparer.Ordinal).Chunk(1000))
+        {
+            var rows = await (
+                from p in dbContext.Products.AsNoTracking()
+                where chunk.Contains(p.Sku)
+                join h in dbContext.HomeStocks.Where(h => h.MarketplaceId == marketplaceId) on p.Sku equals h.Sku into stock
+                from h in stock.DefaultIfEmpty()
+                select new HomeStockSnapshot(p.Sku, h == null ? 0 : h.Quantity, p.Title, p.Color))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var row in rows)
+            {
+                found[row.Sku] = row;
+            }
+        }
+
+        return found;
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> SetColorAsync(IReadOnlyCollection<string> skus, ProductColor? color, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(skus);
+
+        var updated = 0;
+        foreach (var chunk in skus.Distinct(StringComparer.Ordinal).Chunk(1000))
+        {
+            updated += await dbContext.Products.Where(p => chunk.Contains(p.Sku))
+                .ExecuteUpdateAsync(setters => setters.SetProperty(p => p.Color, color), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return updated;
+    }
+
+    /// <inheritdoc/>
     public async Task<IReadOnlySet<string>> GetExistingSkusAsync(IReadOnlyCollection<string> skus, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(skus);
@@ -186,13 +233,18 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
         await strategy.ExecuteAsync(async () =>
         {
             dbContext.ChangeTracker.Clear();
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            // Serializable: the ledger entry is the difference from the balance read here, so two
+            // concurrent saves must not both start from the same old balance.
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
             await ApplyHomeStockAsync(marketplaceId, entries, updatedAt, updatedBy, cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 
-    /// <summary>Upserts home-stock rows within the caller's transaction; a quantity of 0 removes the row.</summary>
+    /// <summary>
+    /// Sets home-stock counts within the caller's transaction, logging each change as a count
+    /// correction in the ledger (unchanged counts log nothing).
+    /// </summary>
     private async Task ApplyHomeStockAsync(string marketplaceId, IReadOnlyList<HomeStockEntry> entries, DateTimeOffset updatedAt, string updatedBy, CancellationToken cancellationToken)
     {
         var existing = new Dictionary<string, HomeStock>(StringComparer.Ordinal);
@@ -207,24 +259,11 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
         foreach (var entry in entries)
         {
             existing.TryGetValue(entry.Sku, out var row);
-
-            // Zero is stored as "no row", the same way an unset cost of goods is.
-            if (entry.Quantity == 0)
+            var change = entry.Quantity - (row?.Quantity ?? 0);
+            if (change != 0)
             {
-                if (row is not null)
-                {
-                    dbContext.HomeStocks.Remove(row);
-                }
-            }
-            else if (row is null)
-            {
-                dbContext.HomeStocks.Add(new HomeStock { Sku = entry.Sku, MarketplaceId = marketplaceId, Quantity = entry.Quantity, UpdatedAt = updatedAt, UpdatedBy = updatedBy });
-            }
-            else if (row.Quantity != entry.Quantity)
-            {
-                row.Quantity = entry.Quantity;
-                row.UpdatedAt = updatedAt;
-                row.UpdatedBy = updatedBy;
+                HomeStockBalance.Apply(dbContext, row, new HomeStockLedgerWrite(
+                    marketplaceId, entry.Sku, HomeStockMovementType.CountCorrection, change, updatedAt, null, null, null, updatedAt, updatedBy));
             }
         }
 

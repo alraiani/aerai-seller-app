@@ -53,6 +53,20 @@ public interface IInventoryItemRepository
     /// <returns>The existing SKUs (ordinal comparison).</returns>
     Task<IReadOnlySet<string>> GetExistingSkusAsync(IReadOnlyCollection<string> skus, CancellationToken cancellationToken);
 
+    /// <summary>Current home stock, title, and color for several SKUs; unknown SKUs are left out.</summary>
+    /// <param name="marketplaceId">Marketplace the stock is held for.</param>
+    /// <param name="skus">Seller SKUs.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The SKUs that exist, keyed by SKU.</returns>
+    Task<IReadOnlyDictionary<string, HomeStockSnapshot>> GetHomeStockAsync(string marketplaceId, IReadOnlyCollection<string> skus, CancellationToken cancellationToken);
+
+    /// <summary>Sets (or clears) the color of several SKUs.</summary>
+    /// <param name="skus">Seller SKUs; unknown ones are ignored.</param>
+    /// <param name="color">The color, or <see langword="null"/> to clear it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>How many SKUs were updated.</returns>
+    Task<int> SetColorAsync(IReadOnlyCollection<string> skus, ProductColor? color, CancellationToken cancellationToken);
+
     /// <summary>Sets home stock for several SKUs in one marketplace; a quantity of 0 removes the row.</summary>
     /// <param name="marketplaceId">Marketplace the stock is held for.</param>
     /// <param name="entries">Validated entries for existing SKUs, one per SKU.</param>

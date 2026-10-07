@@ -74,14 +74,14 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
                 var units30 = sales.Where(s => s.Day >= recentStart).Sum(s => s.Quantity);
                 var velocity = Velocity(sales.Select(s => s.Day).DefaultIfEmpty().Min(), units90, today);
                 var times = settings.Resolve(leadTimes.GetValueOrDefault(p.Sku));
-                var plan = RestockPlanner.Plan(today, velocity, p.SellThroughStock, p.HomeStock, times);
+                var plan = RestockPlanner.Plan(today, velocity, p.SellThroughStock, p.HomeStock, times, AmazonRecommendation.From(p.AmazonRecommendedQuantity, p.AmazonRecommendedShipDate));
                 var status = StatusOf(p, units30, velocity, plan, settings.AlertLeadDays);
                 var average30 = AveragePerDay(sales.Where(s => s.Day >= recentStart).Select(s => (s.Day, s.Quantity)), RecentSalesDays, today);
                 var average90 = AveragePerDay(sales.Select(s => (s.Day, s.Quantity)), VelocityWindowDays, today);
                 return new InventoryItem(p, units30, units90, velocity, DaysOfInventory(p, velocity), times, plan, status, average30, average90);
             })
             .OrderBy(i => i.Status)
-            .ThenBy(i => i.Restock?.DaysUntilAction is null)
+            .ThenBy(i => i.Restock is null)
             .ThenBy(i => i.Restock?.DaysUntilAction)
             .ThenBy(i => i.DaysOfInventory is null)
             .ThenBy(i => i.DaysOfInventory)
@@ -109,6 +109,29 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
     }
 
     /// <summary>The SKU's stock state; the order of the checks is the order of urgency.</summary>
+    /// <inheritdoc/>
+    public async Task<InventoryWorksheet> GetWorksheetAsync(Marketplace marketplace, int familyId, CancellationToken cancellationToken)
+    {
+        var items = (await GetItemsAsync(marketplace, cancellationToken).ConfigureAwait(false))
+            .Where(i => i.Position.FamilyId == familyId)
+            .ToList();
+        var soon = options.Value.AlertLeadDays;
+
+        // Palette order, like the printed sheet; SKUs without a color come last so they stand out.
+        var groups = items
+            .GroupBy(i => i.Position.Color)
+            .OrderBy(g => g.Key is null)
+            .ThenBy(g => g.Key)
+            .Select(g =>
+            {
+                var skus = g.OrderBy(i => i.Sku, StringComparer.Ordinal).ToList();
+                return new WorksheetGroup(g.Key, skus, WorksheetTotals.Of(skus, soon));
+            })
+            .ToList();
+
+        return new InventoryWorksheet(familyId, groups, WorksheetTotals.Of(items, soon));
+    }
+
     private static StockStatus StatusOf(InventoryPosition position, int unitsSold30d, decimal? velocity, RestockPlan? plan, int soonDays) =>
         position.SnapshotDate is null ? StockStatus.NotAtAmazon
         : position.Available == 0 && unitsSold30d > 0 ? StockStatus.OutOfStock

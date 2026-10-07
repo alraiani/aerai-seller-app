@@ -121,6 +121,77 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.HomeStockMovement", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("BalanceAfter")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<long?>("ReversesId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("Units")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReversesId")
+                        .IsUnique()
+                        .HasFilter("[ReversesId] IS NOT NULL");
+
+                    b.HasIndex("Sku");
+
+                    b.HasIndex("MarketplaceId", "OccurredAt");
+
+                    b.HasIndex("MarketplaceId", "Sku", "Id");
+
+                    b.ToTable("HomeStockMovement", "core", t =>
+                        {
+                            t.HasCheckConstraint("CK_HomeStockMovement_BalanceAfter", "[BalanceAfter] >= 0");
+
+                            t.HasCheckConstraint("CK_HomeStockMovement_Units", "[Units] <> 0");
+                        });
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.InventorySnapshot", b =>
                 {
                     b.Property<long>("Id")
@@ -402,6 +473,10 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
 
+                    b.Property<string>("Color")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -476,6 +551,42 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("ProductFamily", "core");
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.RestockRecommendation", b =>
+                {
+                    b.Property<string>("MarketplaceId")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("Sku")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<long>("LastImportBatchId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("RecommendedAction")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("RecommendedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("RecommendedShipDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("SnapshotDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("MarketplaceId", "Sku");
+
+                    b.HasIndex("Sku");
+
+                    b.ToTable("RestockRecommendation", "core", t =>
+                        {
+                            t.HasCheckConstraint("CK_RestockRecommendation_Quantity", "[RecommendedQuantity] >= 0");
+                        });
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Core.Settlement", b =>
@@ -814,11 +925,21 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AERai.Web.Domain.Reporting.InventoryPosition", b =>
                 {
+                    b.Property<int?>("AmazonRecommendedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("AmazonRecommendedShipDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("Asin")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("Available")
                         .HasColumnType("int");
+
+                    b.Property<string>("Color")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("Family")
                         .HasColumnType("nvarchar(max)");
@@ -1194,6 +1315,60 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("FbaReservedRow", "stg");
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Staging.StgFbaRestockRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Asin")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<long>("ImportBatchId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ProductName")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("RawLine")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RecommendedAction")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("RecommendedQuantity")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("RecommendedShipDate")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<int>("RowNumber")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Sku")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ImportBatchId", "RowNumber")
+                        .IsUnique();
+
+                    b.ToTable("FbaRestockRow", "stg");
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Staging.StgInventoryRow", b =>
@@ -1635,6 +1810,26 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.HomeStockMovement", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AERai.Web.Domain.Core.HomeStockMovement", null)
+                        .WithMany()
+                        .HasForeignKey("ReversesId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AERai.Web.Domain.Core.Product", null)
+                        .WithMany()
+                        .HasForeignKey("Sku")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.InventorySnapshot", b =>
                 {
                     b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
@@ -1700,6 +1895,21 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Core.ProductCost", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AERai.Web.Domain.Core.Product", null)
+                        .WithMany()
+                        .HasForeignKey("Sku")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.RestockRecommendation", b =>
                 {
                     b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
                         .WithMany()
@@ -1800,6 +2010,15 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Staging.StgFbaRestockRow", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Staging.ImportBatch", null)
+                        .WithMany("FbaRestockRows")
+                        .HasForeignKey("ImportBatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Staging.StgInventoryRow", b =>
                 {
                     b.HasOne("AERai.Web.Domain.Staging.ImportBatch", null)
@@ -1893,6 +2112,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Navigation("FbaInventoryRows");
 
                     b.Navigation("FbaReservedRows");
+
+                    b.Navigation("FbaRestockRows");
 
                     b.Navigation("InventoryRows");
 

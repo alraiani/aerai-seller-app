@@ -54,25 +54,37 @@ public static class InventoryFormat
         };
     }
 
-    /// <summary>The restock steps to show: the most urgent first, then the other (if any).</summary>
+    /// <summary>The send-to-Amazon instruction, e.g. ("Send 40", "by Jun 11"), or <see langword="null"/> when nothing needs sending.</summary>
     /// <param name="plan">The plan.</param>
-    /// <returns>Up to two lines, e.g. ("Order 428", "by Aug 17").</returns>
-    public static IReadOnlyList<(string Action, string When)> Steps(RestockPlan plan)
+    /// <returns>The action and its deadline.</returns>
+    public static (string Action, string When)? Send(RestockPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        var steps = new List<(string, string, DateOnly)>(2);
-        if (plan.OrderFromSupplier > 0)
-        {
-            steps.Add((string.Create(En, $"Order {plan.OrderFromSupplier:N0}"), $"by {ShortDate(plan.OrderBy)}", plan.OrderBy));
-        }
+        return plan is { SendToAmazon: > 0, SendBy: { } by }
+            ? (string.Create(En, $"Send {plan.SendToAmazon:N0}"), $"by {ShortDate(by)}")
+            : null;
+    }
 
-        if (plan.SendFromHome > 0)
-        {
-            steps.Add((string.Create(En, $"Send {plan.SendFromHome:N0}"), $"by {ShortDate(plan.SendBy)}", plan.SendBy));
-        }
+    /// <summary>Amazon's recommendation as a short line, e.g. "Amazon suggests 35 by Jun 9".</summary>
+    /// <param name="quantity">Amazon's recommended units, or <see langword="null"/> when its report doesn't cover the SKU.</param>
+    /// <param name="shipDate">Amazon's recommended ship date.</param>
+    /// <returns>The line, or <see langword="null"/> when there is no report row.</returns>
+    public static string? AmazonAdvice(int? quantity, DateOnly? shipDate) => quantity switch
+    {
+        null => null,
+        0 => "Amazon: no send needed",
+        { } units => string.Create(En, $"Amazon suggests {units:N0}{(shipDate is { } d ? $" by {ShortDate(d)}" : "")}"),
+    };
 
-        return steps.OrderBy(s => s.Item3).Select(s => (s.Item1, s.Item2)).ToList();
+    /// <summary>The supplier reorder as a short line, e.g. ("Order 270", "by Aug 17").</summary>
+    /// <param name="plan">The plan.</param>
+    /// <returns>The action and its deadline.</returns>
+    public static (string Action, string When) Reorder(RestockPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        return (string.Create(En, $"Order {plan.ReorderQuantity:N0}"), $"by {ShortDate(plan.ReorderBy)}");
     }
 
     /// <summary>Tooltip for the restock column: when stock runs out and which lead times were used.</summary>
@@ -83,7 +95,9 @@ public static class InventoryFormat
         ArgumentNullException.ThrowIfNull(item);
 
         var t = item.LeadTimes;
-        var stockout = item.Restock is { } plan ? $"Stock runs out around {ShortDate(plan.ProjectedStockout)}. " : string.Empty;
+        var stockout = item.Restock is { } plan
+            ? $"Stock at Amazon runs out around {ShortDate(plan.ProjectedStockout)}; reorder from the supplier by {ShortDate(plan.ReorderBy)}. "
+            : string.Empty;
         return $"{stockout}Lead times{(t.IsCustom ? "" : " (defaults)")}: supplier {t.SupplierLeadTimeDays} d, prep {t.PrepTimeDays} d, transit {t.TransitDays} d, safety {t.SafetyStockDays} d; restock covers {t.TargetStockDays} days of sales.";
     }
 
@@ -113,13 +127,25 @@ public static class InventoryFormat
         _ => "cover-ok",
     };
 
+    /// <summary>Highlight for a deadline: overdue, due within the alert window, or neither.</summary>
+    /// <param name="daysUntil">Days from today to the deadline (negative = overdue).</param>
+    /// <param name="soonDays">The alert window in days.</param>
+    /// <returns>CSS class, or empty.</returns>
+    public static string DueClass(int? daysUntil, int soonDays) => daysUntil switch
+    {
+        < 0 => "action-late",
+        { } d when d <= soonDays => "action-due",
+        _ => string.Empty,
+    };
+
     /// <summary>Short date for restock deadlines.</summary>
     /// <param name="date">The date.</param>
     /// <returns>e.g. "Oct 20".</returns>
     public static string ShortDate(DateOnly date) => date.ToString("MMM d", En);
 
+    // Whichever deadline drives the status: a send when one is due first, otherwise the supplier reorder.
     private static string NextVerb(InventoryItem item) =>
-        item.Restock is { OrderFromSupplier: > 0 } ? "order from your supplier" : "send home stock to Amazon";
+        item.Restock is { SendBy: { } by } plan && by <= plan.ReorderBy ? "send home stock to Amazon" : "reorder from your supplier";
 
     private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 }

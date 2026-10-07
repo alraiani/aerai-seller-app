@@ -34,6 +34,9 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     private const string ReservedHeader =
         "sku\tfnsku\tasin\tproduct-name\treserved_qty\treserved_customerorders\treserved_fc-transfers\treserved_fc-processing\n";
 
+    private const string RestockHeader =
+        "Country\tProduct Name\tFNSKU\tMerchant SKU\tASIN\tCondition\tRecommended replenishment qty\tRecommended ship date\tRecommended action\n";
+
     private async Task<PromotionSummary> StageAndPromoteAsync(ImportSource source, string tsv)
     {
         await using var scope = fixture.Services.CreateAsyncScope();
@@ -96,6 +99,26 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
 
         Assert.NotNull(position);
         Assert.Equal((12, 1, 5, 0, 0), (position.Available, position.ReservedCustomerOrder, position.ReservedFcTransfer, position.ReservedFcProcessing, position.ReservedUnsplit));
+    }
+
+    [SqlFact]
+    public async Task RestockRecommendations_LatestReportReplacesThePrevious()
+    {
+        await StageAndPromoteAsync(ImportSource.FbaInventory, MyiHeader + "T-RST-1\tB0RST00001\tWidget\t10\t0\t0\t0\t0\t0\nT-RST-2\tB0RST00002\tGadget\t5\t0\t0\t0\t0\t0\n");
+        await StageAndPromoteAsync(ImportSource.FbaRestockRecommendations,
+            RestockHeader + "US\tWidget\tX001\tT-RST-1\tB0RST00001\tNew\t30\t10/20/2026\tCreate shipping plan\nUS\tGadget\tX002\tT-RST-2\tB0RST00002\tNew\t5\t\tCreate shipping plan\n");
+
+        var first = await PositionAsync("T-RST-1");
+        Assert.NotNull(first);
+        Assert.Equal((30, new DateOnly(2026, 10, 20)), (first.AmazonRecommendedQuantity, first.AmazonRecommendedShipDate));
+
+        // Amazon no longer lists T-RST-2, so its old advice is dropped; a bad quantity is rejected, not fatal.
+        var promoted = await StageAndPromoteAsync(ImportSource.FbaRestockRecommendations,
+            RestockHeader + "US\tWidget\tX001\tT-RST-1\tB0RST00001\tNew\t0\t\tNo action required\nUS\tOther\tX003\tT-RST-3\tB0RST00003\tNew\tlots\t\t\n");
+
+        Assert.Equal(1, promoted.RejectedRowCount);
+        Assert.Equal(0, (await PositionAsync("T-RST-1"))!.AmazonRecommendedQuantity);
+        Assert.Null((await PositionAsync("T-RST-2"))!.AmazonRecommendedQuantity);
     }
 
     [SqlFact]

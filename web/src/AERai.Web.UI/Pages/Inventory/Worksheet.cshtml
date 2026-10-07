@@ -1,0 +1,243 @@
+@page
+@using System.Globalization
+@using AERai.Web.Application.Inventory
+@model AERai.Web.UI.Pages.Inventory.WorksheetModel
+@{
+    ViewData["Title"] = "Inventory worksheet";
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var row = 0;
+}
+
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">Inventory</a>
+    <span aria-hidden="true">/</span>
+    <span>Worksheet</span>
+</nav>
+
+@if (Model.Family is null)
+{
+    <div class="card">
+        <div class="empty-state">
+            <div class="empty-title">No families yet</div>
+            <div class="empty-detail">The worksheet shows one family at a time. Create a family (e.g. Handkerchiefs) on the Inventory page and put its SKUs in it.</div>
+            <a asp-page="Index" asp-route-families="open" class="btn btn-sm btn-soft"><partial name="_Icon" model='"tag"' /> Manage families</a>
+        </div>
+    </div>
+    return;
+}
+
+@* ---------- Family picker + actions ---------- *@
+<div class="list-toolbar mb-3 no-print">
+    @if (Model.Families.Count <= 8)
+    {
+        <nav class="segmented family-tabs" aria-label="Family">
+            @foreach (var f in Model.Families)
+            {
+                <a asp-route-family="@f.Id" class="@(f.Id == Model.FamilyId ? "active" : "")">@f.Name</a>
+            }
+        </nav>
+    }
+    else
+    {
+        <form method="get" class="filters" data-autosubmit-form>
+            <select name="family" class="form-select form-select-sm" aria-label="Family">
+                @foreach (var f in Model.Families)
+                {
+                    <option value="@f.Id" selected="@(f.Id == Model.FamilyId)">@f.Name</option>
+                }
+            </select>
+            <button type="submit" class="btn btn-sm btn-soft js-hide">Show</button>
+        </form>
+    }
+    <div class="card-toolbar-group">
+        <a asp-page="HomeStock/Ledger" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"><partial name="_Icon" model='"list"' /> Home-stock ledger</a>
+        @if (Model.CanEdit)
+        {
+            <a asp-page="HomeStock/Upload" asp-page-handler="Template" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"
+               data-bs-toggle="tooltip" data-bs-title="Excel sheet of this family's SKUs to count home stock and upload back"><partial name="_Icon" model='"download"' /> Count sheet</a>
+            <a asp-page="HomeStock/Upload" class="btn btn-sm btn-soft btn-icon" aria-label="Upload home stock"
+               data-bs-toggle="tooltip" data-bs-title="Upload a filled-in count sheet"><partial name="_Icon" model='"upload"' /></a>
+        }
+        <button type="button" class="btn btn-sm btn-soft" data-print><partial name="_Icon" model='"printer"' /> Print</button>
+    </div>
+</div>
+
+<form method="post" asp-route-family="@Model.FamilyId" data-dirty-form>
+    <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
+    <div class="card">
+        <div class="card-toolbar">
+            <span class="card-toolbar-title list-count">
+                <span class="text-nowrap">@Model.Family.Name</span>
+                <span class="text-muted-token fw-normal">in @Model.Marketplace.Name · @Model.Today.ToString("MMM d, yyyy", en)</span>
+            </span>
+            @if (Model.Sheet is { IsEmpty: false } legendSheet)
+            {
+                <div class="worksheet-legend">
+                    @foreach (var g in legendSheet.Groups)
+                    {
+                        <span class="color-chip @ColorFormat.CssClass(g.Color)"><span class="swatch @(g.Color is null ? "swatch-none" : "")"></span>@ColorFormat.Label(g.Color) · @g.Items.Count</span>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (Model.Sheet is not { IsEmpty: false } sheet)
+        {
+            <div class="empty-state">
+                <div class="empty-title">No SKUs in @Model.Family.Name</div>
+                <div class="empty-detail">Tick SKUs on the Inventory page and use <strong>Set family</strong> to add them, then <strong>Set color</strong> to group them here.</div>
+                <a asp-page="Index" class="btn btn-sm btn-soft">Go to Inventory</a>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table data-table worksheet-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="sku-cell">SKU</th>
+                            <th class="text-end">30 day</th>
+                            <th class="text-end">90 day</th>
+                            <th class="text-end">Amazon <partial name="_Tip" model='"Units sellable at Amazon now, plus units already on their way in."' /></th>
+                            <th class="text-end">Days of inv. <partial name="_Tip" model='"How long Amazon stock (sellable, inbound, and FC transfers) lasts at the current sales rate. Home stock isn’t counted."' /></th>
+                            <th class="col-send">Send to Amazon <partial name="_Tip" model='"Home-stock units to ship in and the last day to ship them: enough for the target cover, or Amazon’s recommendation if it asks for more or sooner (shown underneath)."' /></th>
+                            <th class="text-end">Home inv. <partial name="_Tip" model='"Units at home for this marketplace. Edit a count and save; every change is logged in the home-stock ledger."' /></th>
+                            <th>Order next <partial name="_Tip" model='"The next supplier order from the sales rate: how many and the last day to place it so it arrives (through prep and transit) before all stock — Amazon and home — runs out."' /></th>
+                        </tr>
+                    </thead>
+                    @foreach (var group in sheet.Groups)
+                    {
+                        var css = ColorFormat.CssClass(group.Color);
+                        var sub = group.Subtotals;
+                        <tbody>
+                            <tr class="group-head @css">
+                                <th colspan="8" scope="rowgroup">
+                                    <span class="group-name"><span class="swatch @(group.Color is null ? "swatch-none" : "")"></span>@ColorFormat.Label(group.Color)</span>
+                                    <span class="group-sub ms-2">@group.Items.Count SKU@(group.Items.Count == 1 ? "" : "s") · @sub.Sold30d.ToString("N0", en) sold in 30 days · @sub.HomeStock.ToString("N0", en) at home@(sub.SendToAmazon > 0 ? $" · send {sub.SendToAmazon.ToString("N0", en)}" : "")</span>
+                                </th>
+                            </tr>
+                            @foreach (var item in group.Items)
+                            {
+                                var p = item.Position;
+                                var plan = item.Restock;
+                                var amazon = InventoryFormat.AmazonAdvice(p.AmazonRecommendedQuantity, p.AmazonRecommendedShipDate);
+                                <tr class="sku-row @css">
+                                    <td class="sku-cell">
+                                        <span class="sku-code">@p.Sku</span>
+                                        @if (p.Title is { } title)
+                                        {
+                                            <span class="sku-title" title="@title">@title</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <div>@item.UnitsSold30d.ToString("N0", en)</div>
+                                        @if (item.AveragePerDay30d is { } perDay30)
+                                        {
+                                            <div class="cell-sub">@perDay30.ToString("0.0", en)/day</div>
+                                        }
+                                    </td>
+                                    <td class="text-end">@item.UnitsSold90d.ToString("N0", en)</td>
+                                    <td class="text-end">
+                                        @if (p.SnapshotDate is null)
+                                        {
+                                            <span class="cell-sub">Not at Amazon</span>
+                                        }
+                                        else
+                                        {
+                                            <div class="fw-semibold">@p.Available.ToString("N0", en)</div>
+                                            @if (p.Inbound > 0)
+                                            {
+                                                <div class="cell-sub">+@p.Inbound.ToString("N0", en) inbound</div>
+                                            }
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        @if (item.DaysOfInventory is { } days)
+                                        {
+                                            <span class="@InventoryFormat.DueClass(plan?.DaysUntilAction, Model.SoonDays)">@days.ToString("N0", en)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="cell-sub" title="Not enough sales history to estimate">—</span>
+                                        }
+                                    </td>
+                                    <td class="col-send" title="@InventoryFormat.StepsTip(item)">
+                                        @if (plan is not null && InventoryFormat.Send(plan) is { } send)
+                                        {
+                                            <div><strong>@send.Action</strong> <span class="@InventoryFormat.DueClass(plan.DaysUntilSend, Model.SoonDays)">@send.When</span></div>
+                                            @if (plan.ShortAtHome > 0)
+                                            {
+                                                <div class="cell-sub text-warn">@plan.ShortAtHome.ToString("N0", en) short at home</div>
+                                            }
+                                        }
+                                        else if (plan is { ShortAtHome: > 0 })
+                                        {
+                                            <div class="text-warn">Nothing at home to send</div>
+                                        }
+                                        else
+                                        {
+                                            <span class="cell-sub">—</span>
+                                        }
+                                        @if (amazon is not null)
+                                        {
+                                            <div class="cell-sub">@amazon</div>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        @if (Model.CanEdit)
+                                        {
+                                            <input type="hidden" name="Rows[@row].Sku" value="@p.Sku" />
+                                            <input type="hidden" name="Rows[@row].Original" value="@p.HomeStock" />
+                                            <input type="number" name="Rows[@row].Quantity" value="@Model.ValueFor(item)" data-original="@p.HomeStock" min="0" step="1"
+                                                   class="form-control form-control-sm home-input" aria-label="Home stock for @p.Sku" />
+                                            row++;
+                                        }
+                                        else
+                                        {
+                                            <span class="fw-semibold">@p.HomeStock.ToString("N0", en)</span>
+                                        }
+                                        <div class="cell-sub no-print"><a asp-page="HomeStock/Ledger" asp-route-sku="@p.Sku">ledger</a></div>
+                                    </td>
+                                    <td>
+                                        @if (plan is null)
+                                        {
+                                            <span class="cell-sub" title="Not enough sales history to estimate a sales rate">—</span>
+                                        }
+                                        else
+                                        {
+                                            var reorder = InventoryFormat.Reorder(plan);
+                                            <div><strong>@reorder.Action</strong> <span class="@InventoryFormat.DueClass(plan.DaysUntilReorder, Model.SoonDays)">@reorder.When</span></div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    }
+                    <tfoot>
+                        <tr>
+                            <td class="sku-cell">Total</td>
+                            <td class="text-end">@sheet.Totals.Sold30d.ToString("N0", en)</td>
+                            <td class="text-end">@sheet.Totals.Sold90d.ToString("N0", en)</td>
+                            <td class="text-end">@sheet.Totals.Available.ToString("N0", en)@(sheet.Totals.Inbound > 0 ? $" +{sheet.Totals.Inbound.ToString("N0", en)}" : "")</td>
+                            <td></td>
+                            <td class="col-send">@(sheet.Totals.SendToAmazon > 0 ? $"Send {sheet.Totals.SendToAmazon.ToString("N0", en)}" : "—")</td>
+                            <td class="text-end">@sheet.Totals.HomeStock.ToString("N0", en)</td>
+                            <td title="Units for supplier orders due within @Model.SoonDays days or overdue">@(sheet.Totals.Reorder > 0 ? $"Order {sheet.Totals.Reorder.ToString("N0", en)} now" : "Nothing due")</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        }
+    </div>
+
+    @if (Model.CanEdit && Model.Sheet is { IsEmpty: false })
+    {
+        <div class="save-bar" data-save-bar>
+            <span class="text-muted-token" data-save-count>Change any home counts, then save.</span>
+            <div class="d-flex gap-2">
+                <a asp-route-family="@Model.FamilyId" class="btn btn-sm btn-link">Discard</a>
+                <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"check"' /> Save home stock</button>
+            </div>
+        </div>
+    }
+</form>

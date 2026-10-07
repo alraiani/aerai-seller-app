@@ -71,10 +71,17 @@ public sealed partial class InventoryItemService(
             return Result.Failure(leadTimeError);
         }
 
+        if (update.Color is { } color && !Enum.IsDefined(color))
+        {
+            return Result.Failure("Choose a color from the list.");
+        }
+
         if (!await repository.SaveItemAsync(sku, marketplaceId, name, update.HomeStock, update.LeadTimes, clock.GetUtcNow(), user, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure($"Product '{sku}' was not found.");
         }
+
+        await repository.SetColorAsync([sku], update.Color, cancellationToken).ConfigureAwait(false);
 
         LogItemUpdated(sku, marketplaceId, name, update.HomeStock);
         return Result.Success();
@@ -170,6 +177,31 @@ public sealed partial class InventoryItemService(
     }
 
     /// <inheritdoc/>
+    public async Task<Result<int>> SetColorAsync(IReadOnlyList<string> skus, ProductColor? color, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(skus);
+
+        if (skus.Count == 0)
+        {
+            return Result.Failure<int>("Tick at least one SKU first.");
+        }
+
+        if (skus.Count > ProductFamilyService.MaxSkusPerAssignment)
+        {
+            return Result.Failure<int>($"Set the color of at most {ProductFamilyService.MaxSkusPerAssignment:N0} SKUs at a time.");
+        }
+
+        if (color is { } value && !Enum.IsDefined(value))
+        {
+            return Result.Failure<int>("Choose a color from the list.");
+        }
+
+        var updated = await repository.SetColorAsync(skus, color, cancellationToken).ConfigureAwait(false);
+        LogColorSet(updated, color);
+        return Result.Success(updated);
+    }
+
+    /// <inheritdoc/>
     public async Task<Result<int>> SetHomeStockAsync(string marketplaceId, IReadOnlyList<HomeStockEntry> entries, string user, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
@@ -196,12 +228,11 @@ public sealed partial class InventoryItemService(
     }
 
     /// <inheritdoc/>
-    public async Task<Result<HomeStockImportResult>> ImportHomeStockAsync(string marketplaceId, string fileName, Stream content, string user, CancellationToken cancellationToken)
+    public async Task<Result<HomeStockReconciliation>> PreviewHomeStockImportAsync(string marketplaceId, string fileName, Stream content, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         ArgumentNullException.ThrowIfNull(content);
-        ArgumentException.ThrowIfNullOrWhiteSpace(user);
 
         var parsed = Path.GetExtension(fileName).ToLowerInvariant() switch
         {
@@ -211,20 +242,20 @@ public sealed partial class InventoryItemService(
         };
         if (parsed.IsFailure)
         {
-            return Result.Failure<HomeStockImportResult>(parsed.Error);
+            return Result.Failure<HomeStockReconciliation>(parsed.Error);
         }
 
         if (HomeStockColumns.FirstOrDefault(c => !parsed.Value.Headers.Contains(c, StringComparer.Ordinal)) is { } missing)
         {
-            return Result.Failure<HomeStockImportResult>($"The file has no '{missing}' column. Use the template: columns sku and home-stock.");
+            return Result.Failure<HomeStockReconciliation>($"The file has no '{missing}' column. Use the count sheet: columns sku and home-stock.");
         }
 
         var records = parsed.Value.Records;
-        var existing = await repository.GetExistingSkusAsync(
-            records.Select(r => r.Get("sku")).OfType<string>().Distinct(StringComparer.Ordinal).ToList(), cancellationToken).ConfigureAwait(false);
+        var current = await repository.GetHomeStockAsync(
+            marketplaceId, records.Select(r => r.Get("sku")).OfType<string>().Distinct(StringComparer.Ordinal).ToList(), cancellationToken).ConfigureAwait(false);
 
         var rejected = new List<RejectedRow>();
-        var valid = new List<HomeStockEntry>();
+        var counted = new List<HomeStockEntry>();
         foreach (var record in records)
         {
             var sku = record.Get("sku");
@@ -233,7 +264,7 @@ public sealed partial class InventoryItemService(
             {
                 rejected.Add(new RejectedRow(record.RowNumber, "Missing sku.", record.RawLine));
             }
-            else if (!existing.Contains(sku))
+            else if (!current.ContainsKey(sku))
             {
                 rejected.Add(new RejectedRow(record.RowNumber, $"Unknown SKU '{sku}'.", record.RawLine));
             }
@@ -243,18 +274,22 @@ public sealed partial class InventoryItemService(
             }
             else
             {
-                valid.Add(new HomeStockEntry(sku, quantity));
+                counted.Add(new HomeStockEntry(sku, quantity));
             }
         }
 
-        var unique = valid.GroupBy(e => e.Sku, StringComparer.Ordinal).Select(g => g.Last()).ToList();
-        if (unique.Count > 0)
-        {
-            await repository.SetHomeStockAsync(marketplaceId, unique, clock.GetUtcNow(), user, cancellationToken).ConfigureAwait(false);
-        }
+        // The same SKU twice keeps the last row, like a sheet read top to bottom.
+        var latest = counted.GroupBy(e => e.Sku, StringComparer.Ordinal).Select(g => g.Last()).ToList();
+        var changes = latest
+            .Select(e => (Entry: e, Now: current[e.Sku]))
+            .Where(x => x.Entry.Quantity != x.Now.HomeStock)
+            .Select(x => new HomeStockCountChange(x.Entry.Sku, x.Now.HomeStock, x.Entry.Quantity, x.Now.Title, x.Now.Color))
+            .OrderByDescending(c => Math.Abs(c.Difference))
+            .ThenBy(c => c.Sku, StringComparer.Ordinal)
+            .ToList();
 
-        LogHomeStockImported(fileName, unique.Count, rejected.Count, marketplaceId);
-        return Result.Success(new HomeStockImportResult(unique.Count, rejected));
+        LogHomeStockPreviewed(fileName, changes.Count, latest.Count - changes.Count, rejected.Count, marketplaceId);
+        return Result.Success(new HomeStockReconciliation(changes, latest.Count - changes.Count, rejected));
     }
 
     /// <summary>Checks that every set lead-time field is in range; the target must also be at least a day.</summary>
@@ -305,12 +340,15 @@ public sealed partial class InventoryItemService(
     [LoggerMessage(Level = LogLevel.Information, Message = "Updated {Sku} in {MarketplaceId}: family {Family}, home stock {HomeStock}")]
     private partial void LogItemUpdated(string sku, string marketplaceId, string? family, int homeStock);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Set the color of {Count} SKUs to {Color}")]
+    private partial void LogColorSet(int count, ProductColor? color);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Stored a new picture for {Sku} at {ImagePath}")]
     private partial void LogImageSet(string sku, string imagePath);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Saved home stock for {Count} SKUs in {MarketplaceId}")]
     private partial void LogHomeStockSaved(int count, string marketplaceId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Imported home stock from {FileName}: {Saved} saved, {Rejected} rejected in {MarketplaceId}")]
-    private partial void LogHomeStockImported(string fileName, int saved, int rejected, string marketplaceId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Checked count sheet {FileName}: {Changed} changed, {Unchanged} unchanged, {Rejected} rejected in {MarketplaceId}")]
+    private partial void LogHomeStockPreviewed(string fileName, int changed, int unchanged, int rejected, string marketplaceId);
 }

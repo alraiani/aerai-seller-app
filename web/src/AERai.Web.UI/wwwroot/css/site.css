@@ -35,6 +35,22 @@
     --violet-soft: rgba(124, 58, 237, 0.10);
     --teal: #0f766e;
     --teal-soft: rgba(15, 118, 110, 0.10);
+    /* Product colors (worksheet grouping): readable as text on the surface, so dark mode lightens them. */
+    --c-black: #1f2937;
+    --c-white: #94a3b8;
+    --c-gray: #6b7280;
+    --c-red: #dc2626;
+    --c-orange: #ea580c;
+    --c-yellow: #ca8a04;
+    --c-green: #16a34a;
+    --c-teal: #0d9488;
+    --c-blue: #2563eb;
+    --c-navy: #1e3a8a;
+    --c-purple: #7c3aed;
+    --c-pink: #db2777;
+    --c-brown: #92400e;
+    --c-beige: #a8875a;
+    --c-multi: #9333ea;
 }
 
 [data-bs-theme="dark"] {
@@ -67,6 +83,21 @@
     --violet-soft: rgba(167, 139, 250, 0.14);
     --teal: #2dd4bf;
     --teal-soft: rgba(45, 212, 191, 0.12);
+    --c-black: #cbd5e1;
+    --c-white: #f1f5f9;
+    --c-gray: #9ca3af;
+    --c-red: #f87171;
+    --c-orange: #fb923c;
+    --c-yellow: #facc15;
+    --c-green: #4ade80;
+    --c-teal: #2dd4bf;
+    --c-blue: #60a5fa;
+    --c-navy: #818cf8;
+    --c-purple: #a78bfa;
+    --c-pink: #f472b6;
+    --c-brown: #d6a26a;
+    --c-beige: #e2c9a0;
+    --c-multi: #c084fc;
 }
 
 /* Bootstrap integration: surfaces and text use the tokens in both themes. */
@@ -98,6 +129,8 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
 .text-muted-token { color: var(--muted); }
 .text-bad { color: var(--negative); }
 .text-warn { color: var(--warning); }
+.text-positive { color: var(--positive); }
+.text-negative { color: var(--negative); }
 
 /* ---------- Shell ---------- */
 .app-shell { display: flex; min-height: 100vh; }
@@ -544,3 +577,79 @@ th .tip { text-transform: none; }
 .alert-row .pill { flex: 0 0 auto; margin-top: 0.1rem; }
 .alert-body { flex: 1 1 auto; min-width: 0; }
 .alert-message { font-size: 0.875rem; }
+
+/* Sub-page link under a section in the sidebar (e.g. Inventory → Worksheet). */
+.app-sidebar .nav-link.nav-sub { padding-left: 1.9rem; font-size: 0.85rem; }
+.bulk-divider { width: 1px; align-self: stretch; margin: 0.2rem 0.25rem; background: var(--border); }
+
+/* ---------- Product colors ----------
+   A .sku-color-* class sets --sku; the pieces below use it, so one class colors a whole row or group. */
+.sku-color-black { --sku: var(--c-black); }
+.sku-color-white { --sku: var(--c-white); }
+.sku-color-gray { --sku: var(--c-gray); }
+.sku-color-red { --sku: var(--c-red); }
+.sku-color-orange { --sku: var(--c-orange); }
+.sku-color-yellow { --sku: var(--c-yellow); }
+.sku-color-green { --sku: var(--c-green); }
+.sku-color-teal { --sku: var(--c-teal); }
+.sku-color-blue { --sku: var(--c-blue); }
+.sku-color-navy { --sku: var(--c-navy); }
+.sku-color-purple { --sku: var(--c-purple); }
+.sku-color-pink { --sku: var(--c-pink); }
+.sku-color-brown { --sku: var(--c-brown); }
+.sku-color-beige { --sku: var(--c-beige); }
+.sku-color-multi { --sku: var(--c-multi); }
+.swatch { display: inline-block; flex: 0 0 auto; width: 0.75rem; height: 0.75rem; border-radius: 50%; background: var(--sku, var(--border)); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); vertical-align: -0.05rem; }
+.swatch-none { background: transparent; box-shadow: inset 0 0 0 1px var(--muted); }
+.color-chip { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--muted); }
+
+/* ---------- Inventory worksheet ---------- */
+.worksheet-table td, .worksheet-table th { white-space: nowrap; vertical-align: middle; }
+.worksheet-table .sku-cell { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 11rem; border-left: 4px solid var(--sku, transparent); }
+.worksheet-table thead .sku-cell { background: var(--surface-2); z-index: 2; border-left-color: transparent; }
+.worksheet-table .sku-code { font-weight: 600; color: var(--sku, var(--text)); letter-spacing: 0.01em; }
+.worksheet-table .sku-title { display: block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; font-size: 0.75rem; color: var(--muted); }
+.worksheet-table tbody tr.sku-row:hover > td { background: var(--surface-2); }
+.worksheet-table tr.group-head > th { background: color-mix(in srgb, var(--sku, var(--muted)) 10%, var(--surface)); color: var(--text); font-size: 0.8rem; text-transform: none; letter-spacing: 0; border-top: 1px solid var(--border); }
+.worksheet-table tr.group-head .group-name { display: inline-flex; align-items: center; gap: 0.45rem; font-weight: 700; color: var(--sku, var(--text)); }
+.worksheet-table tr.group-head .group-sub { font-weight: 600; color: var(--muted); }
+.worksheet-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); background: var(--surface-2); }
+.worksheet-table .col-send { background: color-mix(in srgb, var(--brand) 5%, transparent); }
+.worksheet-table .home-input { width: 6.5rem; margin-left: auto; text-align: right; }
+.worksheet-table .home-input.is-changed { border-color: var(--brand); box-shadow: 0 0 0 0.15rem var(--brand-soft); }
+.worksheet-table .action-due { color: var(--warning); font-weight: 600; }
+.worksheet-table .action-late { color: var(--negative); font-weight: 600; }
+.worksheet-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
+.save-bar { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.75rem; padding: 0.6rem 0.9rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--surface); box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.08); }
+.save-bar[hidden] { display: none; }
+.family-tabs { flex-wrap: wrap; }
+@media (max-width: 767.98px) {
+    /* On phones the SKU code is enough; titles would push the numbers off screen. */
+    .worksheet-table .sku-title { display: none; }
+    .worksheet-table .sku-cell { min-width: 6.5rem; }
+}
+
+/* ---------- Home-stock ledger ---------- */
+.ledger-table td { vertical-align: middle; }
+.ledger-table .ledger-when { white-space: nowrap; }
+.ledger-table .cell-truncate { max-width: min(16rem, 30vw); }
+.ledger-table .ledger-note { min-width: 10rem; max-width: 18rem; white-space: normal; }
+.filters .date-filter { width: auto; max-width: 10.5rem; background-color: var(--surface); }
+.ledger-units { font-weight: 700; }
+.ledger-units.in { color: var(--positive); }
+.ledger-units.out { color: var(--negative); }
+.ledger-reversed { opacity: 0.55; }
+.ledger-reversed .ledger-units { text-decoration: line-through; }
+
+/* ---------- Print: the worksheet as a clean sheet of paper ---------- */
+@media print {
+    .app-sidebar, .app-topbar, .no-print, .save-bar, .list-toolbar, .crumbs, .alert { display: none !important; }
+    .app-main, .app-content { margin: 0 !important; padding: 0 !important; }
+    .card { border: 0; box-shadow: none; }
+    .table-responsive { overflow: visible; }
+    .worksheet-table { font-size: 10pt; }
+    .worksheet-table .home-input { border: 0; box-shadow: none; padding: 0; width: auto; }
+    .worksheet-table .sku-cell { position: static; }
+    .worksheet-table tr { break-inside: avoid; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

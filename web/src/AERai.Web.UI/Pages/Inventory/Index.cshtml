@@ -133,9 +133,13 @@
             <div class="card-toolbar-group">
                 <a asp-page="Families" asp-route-back="@Model.Back" class="btn btn-sm btn-soft" data-bs-toggle="modal" data-bs-target="#families-dialog"
                    title="Create, rename, or delete families"><partial name="_Icon" model='"tag"' /> Families</a>
+                <a asp-page="Worksheet" class="btn btn-sm btn-soft"><partial name="_Icon" model='"grid"' /> Worksheet</a>
+                <a asp-page="HomeStock/Ledger" class="btn btn-sm btn-soft"><partial name="_Icon" model='"list"' /> Ledger</a>
                 <a asp-page="HomeStock/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"edit"' /> Edit home stock</a>
+                <a asp-page="HomeStock/Upload" asp-page-handler="Template" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft btn-icon" aria-label="Download the count sheet"
+                   data-bs-toggle="tooltip" data-bs-title="Download the count sheet (.xlsx) with current home stock@(Model.FamilyId is null ? "" : " for this family") to adjust and upload back."><partial name="_Icon" model='"download"' /></a>
                 <a asp-page="HomeStock/Upload" class="btn btn-sm btn-soft btn-icon" aria-label="Upload home stock"
-                   data-bs-toggle="tooltip" data-bs-title="Upload home stock from a spreadsheet (.xlsx or .csv)."><partial name="_Icon" model='"upload"' /></a>
+                   data-bs-toggle="tooltip" data-bs-title="Upload a filled-in count sheet; you'll review the changes before they're logged."><partial name="_Icon" model='"upload"' /></a>
             </div>
         }
     </div>
@@ -145,7 +149,7 @@
            then type or pick a family. A new name creates the family. *@
         <form method="post" asp-page="Families" asp-page-handler="Assign" asp-route-back="@Model.Back" id="family-bulk-form"
               class="bulk-bar bulk-bar-row" data-bulk-bar data-bulk-noun="SKU">
-            <span class="bulk-count" data-bulk-count>Tick SKUs to put them in a family.</span>
+            <span class="bulk-count" data-bulk-count>Tick SKUs to set their family or color.</span>
             <input type="text" name="family" list="family-names" class="form-control form-control-sm bulk-input" placeholder="Family name…"
                    maxlength="@FamilyNames.MaxLength" autocomplete="off" aria-label="Family for the selected SKUs" data-bulk-button />
             <datalist id="family-names">
@@ -158,6 +162,16 @@
                     data-bs-toggle="tooltip" data-bs-title="Put the ticked SKUs in this family. A new name creates it."><partial name="_Icon" model='"tag"' /> Set family</button>
             <button type="submit" name="clear" value="true" class="btn btn-sm btn-soft btn-icon" data-bulk-button aria-label="Remove the ticked SKUs from their family"
                     data-bs-toggle="tooltip" data-bs-title="Take the ticked SKUs out of their family."><partial name="_Icon" model='"x"' /></button>
+            <span class="bulk-divider" aria-hidden="true"></span>
+            <select name="color" class="form-select form-select-sm bulk-input" aria-label="Color for the selected SKUs" data-bulk-button>
+                <option value="">No color</option>
+                @foreach (var c in ColorFormat.All)
+                {
+                    <option value="@c">@ColorFormat.Label(c)</option>
+                }
+            </select>
+            <button type="submit" asp-page="Colors" asp-page-handler="Assign" asp-route-back="@Model.Back" class="btn btn-sm btn-soft" data-bulk-button
+                    data-bs-toggle="tooltip" data-bs-title="Give the ticked SKUs this color (groups them on the Worksheet). No color clears it.">Set color</button>
         </form>
     }
 
@@ -195,7 +209,7 @@
                         <th class="text-end col-sold"><a href="@Model.SortLink(InventorySort.Sold30d)" class="sort-link">Sold 30d @Model.SortArrow(InventorySort.Sold30d)</a></th>
                         <th class="text-end col-sold"><a href="@Model.SortLink(InventorySort.Sold90d)" class="sort-link">Sold 90d @Model.SortArrow(InventorySort.Sold90d)</a>
                             <partial name="_Tip" model='"Units sold in the window. Per day averages over the days since the first sale in that window, so a SKU (or sales history) newer than the window isn’t understated."' /></th>
-                        <th>Next step <partial name="_Tip" model='"What to do to stay in stock: send home stock first, order the rest from your supplier, each by the last day it still arrives in time. Hover a row’s step for the stockout date and lead times."' /></th>
+                        <th>Next step <partial name="_Tip" model='"How many home-stock units to send into Amazon, and the last day to ship them: enough to cover the target days of sales, or Amazon’s own recommendation if it asks for more or sooner. Hover a row for the stockout date, reorder date, and lead times. Supplier reorders are on the Worksheet."' /></th>
                         @if (Model.CanEdit)
                         {
                             <th class="text-end"><span class="visually-hidden">Actions</span></th>
@@ -259,20 +273,43 @@
                             }
                         </td>
                         <td>
-                            @if (item.Restock is { } plan && plan.UnitsNeeded > 0)
+                            @{
+                                var amazon = InventoryFormat.AmazonAdvice(p.AmazonRecommendedQuantity, p.AmazonRecommendedShipDate);
+                            }
+                            @if (item.Restock is { } plan && InventoryFormat.Send(plan) is { } send)
                             {
-                                var steps = InventoryFormat.Steps(plan);
                                 <div class="next-step" title="@InventoryFormat.StepsTip(item)">
-                                    <div><strong>@steps[0].Action</strong> <span class="text-muted-token">@steps[0].When</span></div>
-                                    @if (steps.Count > 1)
+                                    <div><strong>@send.Action</strong> <span class="text-muted-token">@send.When</span></div>
+                                    @if (amazon is not null)
                                     {
-                                        <div class="cell-sub">then @steps[1].Action.ToLowerInvariant() @steps[1].When</div>
+                                        <div class="cell-sub">@amazon</div>
+                                    }
+                                    @if (plan.ShortAtHome > 0)
+                                    {
+                                        <div class="cell-sub text-warn">@plan.ShortAtHome.ToString("N0", en) more needed than home stock holds</div>
                                     }
                                 </div>
                             }
                             else if (item.Restock is { } covered)
                             {
-                                <span class="cell-sub" title="@InventoryFormat.StepsTip(item)">Covered until @InventoryFormat.ShortDate(covered.ProjectedStockout)</span>
+                                <div title="@InventoryFormat.StepsTip(item)">
+                                    @if (covered.ShortAtHome > 0)
+                                    {
+                                        <div class="text-warn">Nothing at home to send</div>
+                                    }
+                                    else
+                                    {
+                                        <span class="cell-sub">Covered until @InventoryFormat.ShortDate(covered.ProjectedStockout)</span>
+                                    }
+                                    @if (amazon is not null)
+                                    {
+                                        <div class="cell-sub">@amazon</div>
+                                    }
+                                </div>
+                            }
+                            else if (amazon is not null)
+                            {
+                                <span class="cell-sub">@amazon</span>
                             }
                             else
                             {

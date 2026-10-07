@@ -30,6 +30,13 @@ public interface IInventoryItemService
     /// <returns>Success, or a validation failure (nothing is saved then).</returns>
     Task<Result> UpdateAsync(string sku, string marketplaceId, InventoryItemUpdate update, string user, CancellationToken cancellationToken);
 
+    /// <summary>Sets (or clears) the color of several SKUs at once.</summary>
+    /// <param name="skus">Seller SKUs.</param>
+    /// <param name="color">The color, or <see langword="null"/> to clear it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>How many SKUs changed, or why nothing was done.</returns>
+    Task<Result<int>> SetColorAsync(IReadOnlyList<string> skus, ProductColor? color, CancellationToken cancellationToken);
+
     /// <summary>Validates and stores a new picture for a SKU, replacing any previous one.</summary>
     /// <param name="sku">Seller SKU.</param>
     /// <param name="content">Uploaded bytes.</param>
@@ -59,14 +66,14 @@ public interface IInventoryItemService
     Task<Result<int>> SetHomeStockAsync(string marketplaceId, IReadOnlyList<HomeStockEntry> entries, string user, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Imports home stock from a .csv, .tsv, or .xlsx file with columns <c>sku</c> and <c>home-stock</c>.
-    /// Valid rows are saved; invalid rows are reported and skipped.
+    /// Reads a count sheet (.csv, .tsv, or .xlsx with columns <c>sku</c> and <c>home-stock</c>) and
+    /// checks it against current home stock. <b>Nothing is saved</b>; the changes are applied with
+    /// <see cref="IHomeStockLedgerService.ApplyCountsAsync"/> once reviewed.
     /// </summary>
     /// <param name="marketplaceId">Marketplace the stock is held for.</param>
     /// <param name="fileName">Original file name (its extension picks the format).</param>
     /// <param name="content">File content.</param>
-    /// <param name="user">Email of the user making the change.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>What was saved and rejected, or a failure when the file cannot be read at all.</returns>
-    Task<Result<HomeStockImportResult>> ImportHomeStockAsync(string marketplaceId, string fileName, Stream content, string user, CancellationToken cancellationToken);
+    /// <returns>The changes, unchanged count, and rejected rows, or a failure when the file can't be read at all.</returns>
+    Task<Result<HomeStockReconciliation>> PreviewHomeStockImportAsync(string marketplaceId, string fileName, Stream content, CancellationToken cancellationToken);
 }
