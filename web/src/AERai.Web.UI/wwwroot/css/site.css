@@ -211,12 +211,13 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
 .delta-down { color: var(--negative); background: var(--negative-soft); }
 .delta-flat { color: var(--muted); background: var(--surface-2); }
 
-.chart { width: 100%; height: auto; max-height: 260px; display: block; }
+.chart { width: 100%; height: auto; max-height: 300px; display: block; }
 .chart .bar { fill: var(--chart-bar); }
 .chart .bar-current { fill: var(--chart-bar-current); }
 .chart .bar-future { fill: none; stroke: var(--chart-grid); stroke-dasharray: 3 3; }
 .chart .grid { stroke: var(--chart-grid); stroke-width: 1; }
 .chart .axis { font-size: 11px; fill: var(--muted); }
+.chart .bar-value { font-size: 11px; font-weight: 600; fill: var(--text); }
 .chart-summary { font-size: 0.8rem; color: var(--muted); }
 
 .attention-list { list-style: none; margin: 0; padding: 0; }
