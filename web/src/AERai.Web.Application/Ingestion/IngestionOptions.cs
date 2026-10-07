@@ -16,9 +16,17 @@ public sealed class IngestionOptions
     /// </summary>
     public bool SchedulerEnabled { get; set; } = true;
 
-    /// <summary>How often the scheduler checks for due schedules.</summary>
-    [Range(typeof(TimeSpan), "00:00:05", "00:10:00")]
-    public TimeSpan SchedulerTick { get; set; } = TimeSpan.FromSeconds(30);
+    /// <summary>
+    /// Longest the scheduler sleeps without re-reading the database. It normally sleeps until the next
+    /// due schedule and is woken by schedule changes made on this instance; this cap only bounds how
+    /// late it notices changes made through another app instance.
+    /// </summary>
+    /// <remarks>
+    /// Keep this well above the database's auto-pause delay: every wake reads the database, and a
+    /// serverless Azure SQL database only pauses after that long without any query.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:01:00", "1.00:00:00")]
+    public TimeSpan SchedulerMaxSleep { get; set; } = TimeSpan.FromHours(6);
 
     /// <summary>Delay between report status checks while Amazon generates a report.</summary>
     [Range(typeof(TimeSpan), "00:00:01", "00:05:00")]

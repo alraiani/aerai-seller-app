@@ -82,6 +82,21 @@ public sealed class SyncScheduleServiceTests
     }
 
     [Fact]
+    public async Task ScheduleChanges_WakeTheScheduler()
+    {
+        var service = CreateService();
+        var id = (await service.CreateAsync(Input(), "ops", CancellationToken.None)).Value;
+        await service.UpdateAsync(id, Input() with { Notes = "edited" }, "ops", CancellationToken.None);
+        await service.SetEnabledAsync(id, enabled: false, "ops", CancellationToken.None);
+        await service.SetPausedAsync(paused: true, "ops", CancellationToken.None);
+        await service.DeleteAsync(id, "ops", CancellationToken.None);
+        await service.RestoreAsync(id, "ops", CancellationToken.None);
+
+        // The scheduler sleeps until the next due slot, so every change to when schedules run must wake it.
+        Assert.Equal(6, _channel.Wakes);
+    }
+
+    [Fact]
     public async Task RunNowAsync_Connected_QueuesRequest()
     {
         var id = (await CreateService().CreateAsync(Input(), "ops", CancellationToken.None)).Value;

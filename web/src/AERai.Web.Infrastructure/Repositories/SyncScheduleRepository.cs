@@ -114,6 +114,12 @@ internal sealed class SyncScheduleRepository(AppDbContext dbContext) : ISyncSche
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
+    public Task<DateTimeOffset?> GetNextRunAtAsync(CancellationToken cancellationToken) =>
+        dbContext.SyncSchedules
+            .Where(s => s.IsEnabled && s.NextRunAt != null)
+            .MinAsync(s => s.NextRunAt, cancellationToken);
+
+    /// <inheritdoc/>
     public async Task<bool> TryClaimAsync(int id, DateTimeOffset expectedNextRunAt, DateTimeOffset newNextRunAt, DateTimeOffset startedAt, CancellationToken cancellationToken)
     {
         // Compare-and-swap on NextRunAt: of several instances racing for the same slot, exactly one

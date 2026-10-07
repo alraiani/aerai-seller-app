@@ -36,6 +36,9 @@ internal sealed partial class SyncSchedulerWorker(
     /// <summary>Recorded as <see cref="SyncRun.TriggeredBy"/> for scheduled runs.</summary>
     public const string SchedulerUser = "scheduler";
 
+    /// <summary>Pause before retrying after an unexpected loop error (e.g. the database briefly unavailable).</summary>
+    private static readonly TimeSpan ErrorRetryDelay = TimeSpan.FromMinutes(1);
+
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -46,17 +49,22 @@ internal sealed partial class SyncSchedulerWorker(
             return;
         }
 
-        LogStarted(connection.Mode, settings.SchedulerTick.TotalSeconds);
+        LogStarted(connection.Mode, settings.SchedulerMaxSleep.TotalMinutes);
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                if (await channel.DequeueAsync(settings.SchedulerTick, stoppingToken).ConfigureAwait(false) is { } manual)
+                await RunDueSchedulesAsync(stoppingToken).ConfigureAwait(false);
+
+                // Sleep until the next known event rather than polling the database on a fixed tick, so
+                // the serverless database can auto-pause while nothing is due. A "Run now" or a schedule
+                // change wakes the wait early.
+                var sleep = await GetSleepAsync(settings, stoppingToken).ConfigureAwait(false);
+                LogSleeping(sleep.TotalMinutes);
+                if (await channel.DequeueAsync(sleep, stoppingToken).ConfigureAwait(false) is { } manual)
                 {
                     await RunAsync(manual.ScheduleId, SyncTrigger.Manual, manual.RequestedBy, manual.Backfill, stoppingToken).ConfigureAwait(false);
                 }
-
-                await RunDueSchedulesAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -67,9 +75,30 @@ internal sealed partial class SyncSchedulerWorker(
 #pragma warning restore CA1031
             {
                 LogLoopError(ex);
-                await Task.Delay(settings.SchedulerTick, clock, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(ErrorRetryDelay, clock, stoppingToken).ConfigureAwait(false);
             }
         }
+    }
+
+    /// <summary>How long to sleep: until the next due schedule, capped at <see cref="IngestionOptions.SchedulerMaxSleep"/>.</summary>
+    private async Task<TimeSpan> GetSleepAsync(IngestionOptions settings, CancellationToken cancellationToken)
+    {
+        if (!connection.CanRun)
+        {
+            return settings.SchedulerMaxSleep;
+        }
+
+        DateTimeOffset? nextRunAt = null;
+        await using (var scope = scopes.CreateAsyncScope())
+        {
+            // While paused, scheduled slots don't run, so they don't need a wake; un-pausing wakes the scheduler.
+            if (!(await scope.ServiceProvider.GetRequiredService<ISyncSettingsRepository>().GetAsync(cancellationToken).ConfigureAwait(false)).IsPaused)
+            {
+                nextRunAt = await scope.ServiceProvider.GetRequiredService<ISyncScheduleRepository>().GetNextRunAtAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return SchedulerSleep.Until(clock.GetUtcNow(), settings.SchedulerMaxSleep, nextRunAt);
     }
 
     private async Task RunDueSchedulesAsync(CancellationToken cancellationToken)
@@ -119,12 +148,15 @@ internal sealed partial class SyncSchedulerWorker(
             .RunAsync(scheduleId, trigger, triggeredBy, backfill, cancellationToken).ConfigureAwait(false);
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Sync scheduler started (SP-API mode {Mode}, tick {TickSeconds}s)")]
-    private partial void LogStarted(string mode, double tickSeconds);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sync scheduler started (SP-API mode {Mode}, max sleep {MaxSleepMinutes} min)")]
+    private partial void LogStarted(string mode, double maxSleepMinutes);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Sync scheduler sleeping for {SleepMinutes:0.#} min")]
+    private partial void LogSleeping(double sleepMinutes);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync scheduler disabled on this instance (Ingestion:SchedulerEnabled = false)")]
     private partial void LogDisabled();
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Sync scheduler loop error; retrying after one tick")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "Sync scheduler loop error; retrying in a minute")]
     private partial void LogLoopError(Exception exception);
 }

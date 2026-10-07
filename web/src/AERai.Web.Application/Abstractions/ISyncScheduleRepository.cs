@@ -73,6 +73,11 @@ public interface ISyncScheduleRepository
     /// <returns>Due schedules, earliest first.</returns>
     Task<IReadOnlyList<SyncSchedule>> GetDueAsync(DateTimeOffset now, CancellationToken cancellationToken);
 
+    /// <summary>Gets the earliest next run time of any enabled schedule.</summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The earliest <see cref="SyncSchedule.NextRunAt"/>, or <see langword="null"/> when nothing is scheduled.</returns>
+    Task<DateTimeOffset?> GetNextRunAtAsync(CancellationToken cancellationToken);
+
     /// <summary>
     /// Atomically claims a due schedule by moving its next run time forward, but only if no one else
     /// has already done so. Guarantees a schedule runs once per slot even with several app instances.

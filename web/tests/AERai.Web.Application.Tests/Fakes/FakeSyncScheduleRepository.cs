@@ -69,6 +69,9 @@ internal sealed class FakeSyncScheduleRepository : ISyncScheduleRepository
     public Task<IReadOnlyList<SyncSchedule>> GetDueAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<SyncSchedule>>(Active.Where(s => s.IsEnabled && s.NextRunAt <= now).ToList());
 
+    public Task<DateTimeOffset?> GetNextRunAtAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(Active.Where(s => s.IsEnabled).Min(s => s.NextRunAt));
+
     public Task<bool> TryClaimAsync(int id, DateTimeOffset expectedNextRunAt, DateTimeOffset newNextRunAt, DateTimeOffset startedAt, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 

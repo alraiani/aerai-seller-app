@@ -18,6 +18,10 @@ internal sealed class FakeManualRunChannel : IManualRunChannel
 {
     public List<ManualRunRequest> Enqueued { get; } = [];
 
+    public int Wakes { get; private set; }
+
+    public void Wake() => Wakes++;
+
     public ValueTask EnqueueAsync(ManualRunRequest request, CancellationToken cancellationToken)
     {
         Enqueued.Add(request);
