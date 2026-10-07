@@ -40,6 +40,16 @@ public static class DashboardFormat
         return amount < 0 ? "-" + text : text;
     }
 
+    /// <summary>Short money for chart bar values, where space is tight.</summary>
+    /// <param name="amount">Amount.</param>
+    /// <returns>e.g. "$842", "$2.6k", or "$12k" (no currency code; the chart is single-currency).</returns>
+    public static string MoneyCompact(decimal amount) => Math.Abs(amount) switch
+    {
+        < 1000 => amount.ToString("C0", Culture),
+        < 10_000 => (amount / 1000).ToString("C1", Culture) + "k",
+        _ => (amount / 1000).ToString("C0", Culture) + "k",
+    };
+
     /// <summary>CSS class for a change chip.</summary>
     /// <param name="change">Relative change, or <see langword="null"/>.</param>
     /// <returns>A delta class.</returns>

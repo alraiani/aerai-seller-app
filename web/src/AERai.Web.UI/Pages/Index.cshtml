@@ -12,10 +12,14 @@
     var zoneName = s.TimeZoneId.Split('/').Last().Replace('_', ' ');
 
     // Chart geometry in SVG units; bars scale to the busiest bucket. Gridlines at 50% and 100%.
-    const double width = 720, height = 190, top = 12, bottom = 22;
-    var plot = height - top - bottom;
-    var max = s.Chart.Count == 0 ? 0m : s.Chart.Max(p => p.Revenue);
+    // Each bar carries its revenue above it. When slots are too narrow for a horizontal value
+    // (30 days, hourly) the values stand upright, so the plot leaves more headroom for them.
+    const double width = 720, plot = 156, bottom = 22;
     var slot = s.Chart.Count == 0 ? 0d : width / s.Chart.Count;
+    var uprightValues = slot < 48;
+    var top = uprightValues ? 42d : 20d;
+    var height = top + plot + bottom;
+    var max = s.Chart.Count == 0 ? 0m : s.Chart.Max(p => p.Revenue);
     var labelEvery = s.Granularity == ChartGranularity.Hour ? 3 : s.Chart.Count > 14 ? 5 : 1;
     var currentIndex = s.Granularity == ChartGranularity.Hour
         ? s.Chart.ToList().FindLastIndex(p => !p.IsFuture)
@@ -128,6 +132,19 @@
                                 <rect class="@(i == currentIndex ? "bar-current" : "bar")" x="@F(x)" y="@F(top + plot - Math.Max(h, 1))" width="@F(w)" height="@F(Math.Max(h, 1))" rx="2">
                                     <title>@Label(p): @DashboardFormat.Money(p.Revenue, c) · @p.Orders orders · @p.Units units</title>
                                 </rect>
+                                if (p.Revenue > 0)
+                                {
+                                    var valueX = i * slot + slot / 2;
+                                    var valueY = top + plot - Math.Max(h, 1) - 5;
+                                    if (uprightValues)
+                                    {
+                                        @:<text class="bar-value" x="@F(valueX)" y="@F(valueY)" text-anchor="start" dominant-baseline="central" transform="rotate(-90 @F(valueX) @F(valueY))">@DashboardFormat.MoneyCompact(p.Revenue)</text>
+                                    }
+                                    else
+                                    {
+                                        @:<text class="bar-value" x="@F(valueX)" y="@F(valueY)" text-anchor="middle">@DashboardFormat.MoneyCompact(p.Revenue)</text>
+                                    }
+                                }
                             }
                             if (i % labelEvery == 0 || i == s.Chart.Count - 1)
                             {
