@@ -103,6 +103,8 @@ public static class DependencyInjection
 
         services.AddSingleton<IManualRunChannel, ManualRunChannel>();
         services.AddHostedService<SyncSchedulerWorker>();
+        services.AddSingleton<StockAlertRefreshSignal>();
+        services.AddSingleton<IStockAlertRefreshSignal>(sp => sp.GetRequiredService<StockAlertRefreshSignal>());
         services.AddHostedService<StockAlertWorker>();
 
         return services;

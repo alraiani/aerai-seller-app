@@ -7,9 +7,10 @@ namespace AERai.Web.Application.Inventory;
 
 /// <summary>Default <see cref="IHomeStockLedgerService"/>.</summary>
 /// <param name="repository">Ledger persistence.</param>
+/// <param name="alerts">Asks for a stock-alert refresh after home stock changes (it drives reorder timing).</param>
 /// <param name="clock">Clock.</param>
 /// <param name="logger">Logger.</param>
-public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository repository, TimeProvider clock, ILogger<HomeStockLedgerService> logger) : IHomeStockLedgerService
+public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository repository, IStockAlertRefreshSignal alerts, TimeProvider clock, ILogger<HomeStockLedgerService> logger) : IHomeStockLedgerService
 {
     /// <summary>Longest reference accepted.</summary>
     public const int MaxReferenceLength = 100;
@@ -49,6 +50,7 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
         {
             case HomeStockLedgerOutcome.Recorded:
                 LogRecorded(id, input.Type, sku, units, marketplaceId);
+                alerts.Request();
                 return Result.Success(Describe(input, sku));
             case HomeStockLedgerOutcome.Unchanged:
                 return Result.Success($"{sku} already has {input.Quantity:N0} at home; nothing to record.");
@@ -102,6 +104,11 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
         var unitsIn = applied.Where(c => c.Difference > 0).Sum(c => c.Difference);
         var unitsOut = -applied.Where(c => c.Difference < 0).Sum(c => c.Difference);
         LogCountsApplied(applied.Count, unitsIn, unitsOut, stale.Count, marketplaceId);
+        if (applied.Count > 0)
+        {
+            alerts.Request();
+        }
+
         return Result.Success(new HomeStockCountResult(applied.Count, unitsIn, unitsOut, stale));
     }
 
@@ -116,6 +123,7 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
         {
             case HomeStockLedgerOutcome.Recorded:
                 LogReversed(id, reversalId, marketplaceId);
+                alerts.Request();
                 return Result.Success();
             case HomeStockLedgerOutcome.NotFound:
                 return Result.Failure("That entry no longer exists.");

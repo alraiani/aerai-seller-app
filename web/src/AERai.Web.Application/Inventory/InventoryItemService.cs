@@ -15,12 +15,14 @@ namespace AERai.Web.Application.Inventory;
 /// <param name="repository">Item persistence.</param>
 /// <param name="images">Picture storage.</param>
 /// <param name="spreadsheets">Excel reader for home-stock uploads.</param>
+/// <param name="alerts">Asks for a stock-alert refresh after home stock or lead times change.</param>
 /// <param name="clock">Clock for change timestamps.</param>
 /// <param name="logger">Logger.</param>
 public sealed partial class InventoryItemService(
     IInventoryItemRepository repository,
     IProductImageStore images,
     ISpreadsheetReader spreadsheets,
+    IStockAlertRefreshSignal alerts,
     TimeProvider clock,
     ILogger<InventoryItemService> logger) : IInventoryItemService
 {
@@ -84,6 +86,7 @@ public sealed partial class InventoryItemService(
         await repository.SetColorAsync([sku], update.Color, cancellationToken).ConfigureAwait(false);
 
         LogItemUpdated(sku, marketplaceId, name, update.HomeStock);
+        alerts.Request();
         return Result.Success();
     }
 
@@ -224,6 +227,7 @@ public sealed partial class InventoryItemService(
         await repository.SetHomeStockAsync(marketplaceId, unique, clock.GetUtcNow(), user, cancellationToken).ConfigureAwait(false);
 
         LogHomeStockSaved(unique.Count, marketplaceId);
+        alerts.Request();
         return Result.Success(unique.Count);
     }
 

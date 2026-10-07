@@ -20,7 +20,9 @@ public sealed class HomeStockLedgerServiceTests
         _repository.Skus.Add("FOB00BL");
     }
 
-    private HomeStockLedgerService CreateService() => new(_repository, _clock, NullLogger<HomeStockLedgerService>.Instance);
+    private readonly FakeStockAlertRefreshSignal _alerts = new();
+
+    private HomeStockLedgerService CreateService() => new(_repository, _alerts, _clock, NullLogger<HomeStockLedgerService>.Instance);
 
     private Task<Result<string>> RecordAsync(HomeStockMovementType type, int quantity, string? note = null, DateTimeOffset? at = null) =>
         CreateService().RecordAsync(Us, new HomeStockMovementInput("FOB00BL", type, quantity, at, null, note), User, CancellationToken.None);
@@ -47,6 +49,7 @@ public sealed class HomeStockLedgerServiceTests
         Assert.Equal(-5, _repository.Entries[^1].Units);
         Assert.Equal(2, _repository.Entries.Count);
         Assert.Contains("nothing to record", same.Value, StringComparison.Ordinal);
+        Assert.Equal(2, _alerts.Requests); // Only the two recorded movements ask for an alert refresh.
     }
 
     [Fact]
