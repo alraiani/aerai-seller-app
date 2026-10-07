@@ -12,12 +12,12 @@
     var zoneName = s.TimeZoneId.Split('/').Last().Replace('_', ' ');
 
     // Chart geometry in SVG units; bars scale to the busiest bucket. Gridlines at 50% and 100%.
-    // Each bar carries its revenue above it. When slots are too narrow for a horizontal value
-    // (30 days, hourly) the values stand upright, so the plot leaves more headroom for them.
+    // Each bar carries its revenue and units above it: two stacked lines when slots are wide, one
+    // upright line when they are too narrow (30 days, hourly), so the plot leaves headroom for them.
     const double width = 720, plot = 156, bottom = 22;
     var slot = s.Chart.Count == 0 ? 0d : width / s.Chart.Count;
     var uprightValues = slot < 48;
-    var top = uprightValues ? 42d : 20d;
+    var top = uprightValues ? 70d : 34d;
     var height = top + plot + bottom;
     var max = s.Chart.Count == 0 ? 0m : s.Chart.Max(p => p.Revenue);
     var labelEvery = s.Granularity == ChartGranularity.Hour ? 3 : s.Chart.Count > 14 ? 5 : 1;
@@ -98,7 +98,7 @@
             <div class="card-toolbar">
                 <span class="card-toolbar-title">
                     Sales @(s.Granularity == ChartGranularity.Hour ? "by hour" : "by day")
-                    <partial name="_Tip" model='"Revenue per bar in local business time. The darker bar is the current one; dashed slots are still to come. Hover a bar for orders and units."' />
+                    <partial name="_Tip" model='"Each bar is revenue in local business time, labeled with revenue and units sold. The darker bar is the current one; dashed slots are still to come. Hover a bar for orders and units."' />
                 </span>
                 <span class="chart-summary">Peak @DashboardFormat.Money(max, c)</span>
             </div>
@@ -138,11 +138,12 @@
                                     var valueY = top + plot - Math.Max(h, 1) - 5;
                                     if (uprightValues)
                                     {
-                                        @:<text class="bar-value" x="@F(valueX)" y="@F(valueY)" text-anchor="start" dominant-baseline="central" transform="rotate(-90 @F(valueX) @F(valueY))">@DashboardFormat.MoneyCompact(p.Revenue)</text>
+                                        @:<text class="bar-value" x="@F(valueX)" y="@F(valueY)" text-anchor="start" dominant-baseline="central" transform="rotate(-90 @F(valueX) @F(valueY))">@DashboardFormat.MoneyCompact(p.Revenue)<tspan class="bar-units"> · @p.Units.ToString("N0", en)u</tspan></text>
                                     }
                                     else
                                     {
-                                        @:<text class="bar-value" x="@F(valueX)" y="@F(valueY)" text-anchor="middle">@DashboardFormat.MoneyCompact(p.Revenue)</text>
+                                        @:<text class="bar-value" x="@F(valueX)" y="@F(valueY - 13)" text-anchor="middle">@DashboardFormat.MoneyCompact(p.Revenue)</text>
+                                        @:<text class="bar-units" x="@F(valueX)" y="@F(valueY)" text-anchor="middle">@p.Units.ToString("N0", en) @(p.Units == 1 ? "unit" : "units")</text>
                                     }
                                 }
                             }
