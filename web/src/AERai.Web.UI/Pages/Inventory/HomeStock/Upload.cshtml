@@ -12,46 +12,164 @@
     <span>Upload</span>
 </nav>
 
-@if (Model.Outcome is { } outcome)
+@if (Model.Preview is { } preview)
 {
-    <div class="card mb-3">
-        <div class="card-toolbar">
-            <span class="card-toolbar-title">Upload result</span>
-            <div class="card-toolbar-group">
-                <span class="pill pill-ok">@outcome.Saved.ToString("N0") saved</span>
-                @if (outcome.Rejected.Count > 0)
-                {
-                    <span class="pill pill-warn">@outcome.Rejected.Count.ToString("N0") skipped</span>
-                }
-                <a asp-page="../Index" class="btn btn-sm btn-soft">Back to inventory</a>
+    var en = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+    @* ---------- Review: the sheet checked against current home stock; nothing saved yet ---------- *@
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-xl-3">
+            <div class="card tile h-100"><div class="kpi">
+                <div class="kpi-label">Going up</div>
+                <div class="kpi-value @(preview.UnitsIn > 0 ? "text-positive" : "")">@(preview.UnitsIn > 0 ? "+" : "")@preview.UnitsIn.ToString("N0", en)</div>
+                <div class="kpi-foot">@preview.IncreaseCount.ToString("N0", en) SKU@(preview.IncreaseCount == 1 ? "" : "s")</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card tile h-100"><div class="kpi">
+                <div class="kpi-label">Going down</div>
+                <div class="kpi-value @(preview.UnitsOut > 0 ? "text-negative" : "")">@(preview.UnitsOut > 0 ? "−" : "")@preview.UnitsOut.ToString("N0", en)</div>
+                <div class="kpi-foot">@preview.DecreaseCount.ToString("N0", en) SKU@(preview.DecreaseCount == 1 ? "" : "s")</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card tile h-100"><div class="kpi">
+                <div class="kpi-label">Unchanged</div>
+                <div class="kpi-value">@preview.UnchangedCount.ToString("N0", en)</div>
+                <div class="kpi-foot">Match what's on record</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card tile h-100 @(preview.Rejected.Count > 0 ? "tile-bad" : "")"><div class="kpi">
+                <div class="kpi-label">Skipped rows</div>
+                <div class="kpi-value">@preview.Rejected.Count.ToString("N0", en)</div>
+                <div class="kpi-foot">@(preview.Rejected.Count == 0 ? "Every row could be read" : "Listed below; not applied")</div>
+            </div></div>
+        </div>
+    </div>
+
+    @if (preview.Changes.Count == 0)
+    {
+        <div class="card mb-3">
+            <div class="empty-state">
+                <div class="empty-title">Nothing to change</div>
+                <div class="empty-detail">Every count in the sheet already matches home stock in @Model.Marketplace.Name.</div>
+                <a asp-page="Upload" class="btn btn-sm btn-soft">Upload another sheet</a>
             </div>
         </div>
-        @if (outcome.Rejected.Count > 0)
-        {
+    }
+    else
+    {
+        <form method="post" asp-page-handler="Apply" class="card mb-3">
+            <div class="card-toolbar">
+                <span class="card-toolbar-title">
+                    Review @preview.Changes.Count.ToString("N0", en) change@(preview.Changes.Count == 1 ? "" : "s") in @Model.Marketplace.Name
+                    <partial name="_Tip" model='"Each row compares the count in your sheet with home stock on record now. Nothing is saved until you apply; then each SKU gets one ledger entry for the difference. A SKU whose stock changes before you apply is skipped."' />
+                </span>
+                <span class="text-muted-token small">Nothing is saved until you apply</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table data-table ledger-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th class="text-end">On record</th>
+                            <th class="text-end">In sheet</th>
+                            <th class="text-end">Change</th>
+                            <th>Direction</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var c in preview.Changes)
+                    {
+                        <tr>
+                            <td class="@ColorFormat.CssClass(c.Color)">
+                                <span class="d-inline-flex align-items-center gap-2"><span class="swatch @(c.Color is null ? "swatch-none" : "")"></span><span class="fw-semibold">@c.Sku</span></span>
+                                @if (c.Title is { } title)
+                                {
+                                    <div class="cell-sub cell-truncate" title="@title">@title</div>
+                                }
+                            </td>
+                            <td class="text-end">@c.Current.ToString("N0", en)</td>
+                            <td class="text-end fw-semibold">@c.New.ToString("N0", en)</td>
+                            <td class="text-end"><span class="ledger-units @(c.Difference > 0 ? "in" : "out")">@c.Difference.ToString("+#,0;−#,0", en)</span></td>
+                            <td><span class="@(c.Difference > 0 ? "pill pill-ok" : "pill pill-warn")">@(c.Difference > 0 ? "Increase" : "Decrease")</span></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="form-section-body border-top">
+                <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
+                <input type="hidden" asp-for="Apply.Changes" />
+                <div class="row g-3">
+                    @if (preview.IncreaseCount > 0)
+                    {
+                        <div class="col-md-6">
+                            <label asp-for="Apply.IncreaseType" class="form-label">Log increases (+@preview.UnitsIn.ToString("N0", en)) as</label>
+                            <select asp-for="Apply.IncreaseType" class="form-select">
+                                @foreach (var type in HomeStockCountOptions.IncreaseTypes)
+                                {
+                                    <option value="@type">@UploadModel.Label(type)</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    @if (preview.DecreaseCount > 0)
+                    {
+                        <div class="col-md-6">
+                            <label asp-for="Apply.DecreaseType" class="form-label">Log decreases (−@preview.UnitsOut.ToString("N0", en)) as</label>
+                            <select asp-for="Apply.DecreaseType" class="form-select">
+                                @foreach (var type in HomeStockCountOptions.DecreaseTypes)
+                                {
+                                    <option value="@type">@UploadModel.Label(type)</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <div class="col-md-6">
+                        <label asp-for="Apply.Reference" class="form-label">Reference <span class="text-muted-token">(PO, FBA shipment id…, optional)</span></label>
+                        <input asp-for="Apply.Reference" class="form-control" />
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="Apply.OccurredAt" class="form-label">When (@Model.Marketplace.TimeZoneId)</label>
+                        <input asp-for="Apply.OccurredAt" type="datetime-local" step="60" asp-format="{0:yyyy-MM-ddTHH:mm}" class="form-control" />
+                    </div>
+                    <div class="col-12">
+                        <label asp-for="Apply.Note" class="form-label">Note <span class="text-muted-token">(required for Other)</span></label>
+                        <input asp-for="Apply.Note" class="form-control" />
+                    </div>
+                </div>
+                <div class="d-flex gap-2 justify-content-end mt-3">
+                    <a asp-page="Upload" class="btn btn-link">Cancel</a>
+                    <button type="submit" class="btn btn-primary"><partial name="_Icon" model='"check"' /> Apply @preview.Changes.Count.ToString("N0", en) change@(preview.Changes.Count == 1 ? "" : "s")</button>
+                </div>
+            </div>
+        </form>
+    }
+
+    @if (preview.Rejected.Count > 0)
+    {
+        <div class="card mb-3">
+            <div class="card-toolbar"><span class="card-toolbar-title">Skipped rows</span></div>
             <div class="table-responsive">
                 <table class="table data-table mb-0">
                     <thead><tr><th>Row</th><th>Problem</th><th>Line</th></tr></thead>
                     <tbody>
-                    @foreach (var row in outcome.Rejected.Take(UploadModel.RejectedRowsShown))
+                    @foreach (var row in preview.Rejected.Take(UploadModel.RejectedRowsShown))
                     {
                         <tr><td>@row.RowNumber</td><td>@row.ErrorMessage</td><td class="raw-line">@row.RawLine</td></tr>
                     }
                     </tbody>
                 </table>
             </div>
-            @if (outcome.Rejected.Count > UploadModel.RejectedRowsShown)
+            @if (preview.Rejected.Count > UploadModel.RejectedRowsShown)
             {
-                <p class="page-footnote px-3 pb-2">Showing the first @UploadModel.RejectedRowsShown of @outcome.Rejected.Count.ToString("N0") skipped rows.</p>
+                <p class="page-footnote px-3 pb-2">Showing the first @UploadModel.RejectedRowsShown of @preview.Rejected.Count.ToString("N0") skipped rows.</p>
             }
-        }
-        else
-        {
-            <div class="all-clear">
-                <span class="all-clear-icon"><partial name="_Icon" model='"check"' /></span>
-                <span>Every row was saved.</span>
-            </div>
-        }
-    </div>
+        </div>
+    }
+    return;
 }
 
 <div class="row g-3">
@@ -84,8 +202,8 @@
             <div class="form-section-head">
                 <span class="step">2</span>
                 <div>
-                    <h2>Upload the counts</h2>
-                    <p>Each row sets that SKU's home stock in @Model.Marketplace.Name. SKUs not in the file are left alone.</p>
+                    <h2>Upload, review, apply</h2>
+                    <p>The sheet is checked against home stock on record in @Model.Marketplace.Name. You'll see every increase and decrease and choose how they're logged before anything is saved. SKUs not in the file are left alone.</p>
                 </div>
             </div>
             <div class="form-section-body">
@@ -96,7 +214,7 @@
                         <input asp-for="Spreadsheet" type="file" class="form-control" accept=".xlsx,.csv,.tsv" />
                         <div class="form-text">.xlsx, .csv, or .tsv, up to @(UploadModel.MaxFileBytes / (1024 * 1024)) MB and @InventoryItemService.MaxHomeStockRows.ToString("N0") rows.</div>
                     </div>
-                    <button type="submit" class="btn btn-primary"><partial name="_Icon" model='"upload"' /> Upload</button>
+                    <button type="submit" class="btn btn-primary"><partial name="_Icon" model='"upload"' /> Upload and review</button>
                 </form>
             </div>
         </section>
@@ -107,7 +225,7 @@
                 <div class="kpi-label mb-2">File layout</div>
                 <ul class="summary-facts">
                     <li>A header row with <code>sku</code> and <code>home-stock</code> columns; others are ignored (the downloaded sheet already has them)</li>
-                    <li>Each changed count is logged in the <a asp-page="Ledger">home-stock ledger</a> as a count correction</li>
+                    <li>Nothing is saved until you review and apply; each change then becomes one entry in the <a asp-page="Ledger">home-stock ledger</a>, logged as the type you choose</li>
                     <li><code>0</code> clears a SKU</li>
                     <li>Unknown SKUs and bad numbers are skipped and listed</li>
                     <li>If a SKU appears twice, the last row wins</li>

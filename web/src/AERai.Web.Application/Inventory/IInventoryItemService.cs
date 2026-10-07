@@ -66,14 +66,14 @@ public interface IInventoryItemService
     Task<Result<int>> SetHomeStockAsync(string marketplaceId, IReadOnlyList<HomeStockEntry> entries, string user, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Imports home stock from a .csv, .tsv, or .xlsx file with columns <c>sku</c> and <c>home-stock</c>.
-    /// Valid rows are saved; invalid rows are reported and skipped.
+    /// Reads a count sheet (.csv, .tsv, or .xlsx with columns <c>sku</c> and <c>home-stock</c>) and
+    /// checks it against current home stock. <b>Nothing is saved</b>; the changes are applied with
+    /// <see cref="IHomeStockLedgerService.ApplyCountsAsync"/> once reviewed.
     /// </summary>
     /// <param name="marketplaceId">Marketplace the stock is held for.</param>
     /// <param name="fileName">Original file name (its extension picks the format).</param>
     /// <param name="content">File content.</param>
-    /// <param name="user">Email of the user making the change.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>What was saved and rejected, or a failure when the file cannot be read at all.</returns>
-    Task<Result<HomeStockImportResult>> ImportHomeStockAsync(string marketplaceId, string fileName, Stream content, string user, CancellationToken cancellationToken);
+    /// <returns>The changes, unchanged count, and rejected rows, or a failure when the file can't be read at all.</returns>
+    Task<Result<HomeStockReconciliation>> PreviewHomeStockImportAsync(string marketplaceId, string fileName, Stream content, CancellationToken cancellationToken);
 }

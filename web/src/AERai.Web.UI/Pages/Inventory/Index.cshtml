@@ -136,8 +136,10 @@
                 <a asp-page="Worksheet" class="btn btn-sm btn-soft"><partial name="_Icon" model='"grid"' /> Worksheet</a>
                 <a asp-page="HomeStock/Ledger" class="btn btn-sm btn-soft"><partial name="_Icon" model='"list"' /> Ledger</a>
                 <a asp-page="HomeStock/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"edit"' /> Edit home stock</a>
+                <a asp-page="HomeStock/Upload" asp-page-handler="Template" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft btn-icon" aria-label="Download the count sheet"
+                   data-bs-toggle="tooltip" data-bs-title="Download the count sheet (.xlsx) with current home stock@(Model.FamilyId is null ? "" : " for this family") to adjust and upload back."><partial name="_Icon" model='"download"' /></a>
                 <a asp-page="HomeStock/Upload" class="btn btn-sm btn-soft btn-icon" aria-label="Upload home stock"
-                   data-bs-toggle="tooltip" data-bs-title="Upload home stock from a spreadsheet (.xlsx or .csv)."><partial name="_Icon" model='"upload"' /></a>
+                   data-bs-toggle="tooltip" data-bs-title="Upload a filled-in count sheet; you'll review the changes before they're logged."><partial name="_Icon" model='"upload"' /></a>
             </div>
         }
     </div>

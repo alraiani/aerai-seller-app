@@ -53,6 +53,13 @@ public interface IInventoryItemRepository
     /// <returns>The existing SKUs (ordinal comparison).</returns>
     Task<IReadOnlySet<string>> GetExistingSkusAsync(IReadOnlyCollection<string> skus, CancellationToken cancellationToken);
 
+    /// <summary>Current home stock, title, and color for several SKUs; unknown SKUs are left out.</summary>
+    /// <param name="marketplaceId">Marketplace the stock is held for.</param>
+    /// <param name="skus">Seller SKUs.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The SKUs that exist, keyed by SKU.</returns>
+    Task<IReadOnlyDictionary<string, HomeStockSnapshot>> GetHomeStockAsync(string marketplaceId, IReadOnlyCollection<string> skus, CancellationToken cancellationToken);
+
     /// <summary>Sets (or clears) the color of several SKUs.</summary>
     /// <param name="skus">Seller SKUs; unknown ones are ignored.</param>
     /// <param name="color">The color, or <see langword="null"/> to clear it.</param>

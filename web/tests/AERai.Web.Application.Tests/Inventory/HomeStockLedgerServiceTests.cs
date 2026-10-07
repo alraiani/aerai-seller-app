@@ -128,4 +128,60 @@ public sealed class HomeStockLedgerServiceTests
 
         Assert.Contains("below zero", result.Error, StringComparison.Ordinal);
     }
+
+    private static HomeStockCountOptions Options(HomeStockMovementType up = HomeStockMovementType.ReceivedFromSupplier, HomeStockMovementType down = HomeStockMovementType.ShippedToAmazon, string? note = null) =>
+        new(up, down, "PO-77", note, null);
+
+    [Fact]
+    public async Task ApplyCountsAsync_LogsIncreasesAndDecreasesWithTheirTypes()
+    {
+        _repository.Skus.Add("FOB00PI");
+        await RecordAsync(HomeStockMovementType.ReceivedFromSupplier, 50);
+
+        var result = await CreateService().ApplyCountsAsync(Us, [new("FOB00BL", 50, 30), new("FOB00PI", 0, 25)], Options(), User, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal((2, 25, 20), (result.Value.Applied, result.Value.UnitsIn, result.Value.UnitsOut));
+        Assert.Equal(
+            [(HomeStockMovementType.ShippedToAmazon, -20, "PO-77"), (HomeStockMovementType.ReceivedFromSupplier, 25, "PO-77")],
+            _repository.Entries.Skip(1).Select(e => (e.Type, e.Units, e.Reference)));
+        Assert.Equal(30, _repository.Balance(Us, "FOB00BL"));
+    }
+
+    [Fact]
+    public async Task ApplyCountsAsync_BalanceChangedSinceReview_SkipsItAsStale()
+    {
+        await RecordAsync(HomeStockMovementType.ReceivedFromSupplier, 10);
+
+        // Reviewed when the balance was 0; it is 10 now.
+        var result = await CreateService().ApplyCountsAsync(Us, [new("FOB00BL", 0, 40)], Options(), User, CancellationToken.None);
+
+        Assert.Equal(0, result.Value.Applied);
+        Assert.Equal(["FOB00BL"], result.Value.Stale);
+        Assert.Equal(10, _repository.Balance(Us, "FOB00BL"));
+    }
+
+    [Fact]
+    public async Task ApplyCountsAsync_OtherNeedsANoteAndWrongDirectionTypesFail()
+    {
+        var service = CreateService();
+        IReadOnlyList<HomeStockCountChange> up = [new("FOB00BL", 0, 5)];
+
+        Assert.True((await service.ApplyCountsAsync(Us, up, Options(up: HomeStockMovementType.Other), User, CancellationToken.None)).IsFailure);
+        Assert.True((await service.ApplyCountsAsync(Us, up, Options(up: HomeStockMovementType.ShippedToAmazon), User, CancellationToken.None)).IsFailure);
+        Assert.True((await service.ApplyCountsAsync(Us, up, Options(up: HomeStockMovementType.Other, note: "Found a box"), User, CancellationToken.None)).IsSuccess);
+        Assert.True((await service.ApplyCountsAsync(Us, [], Options(), User, CancellationToken.None)).IsFailure);
+    }
+
+    [Fact]
+    public void Payload_RoundTripsAndRejectsBadLines()
+    {
+        var text = HomeStockCountPayload.Write([new("FOB00BL", 50, 30), new("FOB00PI", 0, 25)]);
+
+        Assert.Equal([("FOB00BL", 50, 30), ("FOB00PI", 0, 25)], HomeStockCountPayload.Read(text).Value.Select(c => (c.Sku, c.Current, c.New)));
+        Assert.True(HomeStockCountPayload.Read("FOB00BL\t-1\t5").IsFailure);
+        Assert.True(HomeStockCountPayload.Read("FOB00BL\t5").IsFailure);
+        Assert.True(HomeStockCountPayload.Read("FOB00BL\t0\t2000000").IsFailure);
+        Assert.True(HomeStockCountPayload.Read("").IsFailure);
+    }
 }

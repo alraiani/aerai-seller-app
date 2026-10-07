@@ -62,6 +62,50 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
     }
 
     /// <inheritdoc/>
+    public async Task<Result<HomeStockCountResult>> ApplyCountsAsync(string marketplaceId, IReadOnlyList<HomeStockCountChange> changes, HomeStockCountOptions options, string user, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(changes);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(user);
+
+        var now = clock.GetUtcNow();
+        var reference = Tidy(options.Reference);
+        var note = Tidy(options.Note);
+        var wanted = changes.Where(c => c.Difference != 0).ToList();
+        var hasIncreases = wanted.Any(c => c.Difference > 0);
+        var hasDecreases = wanted.Any(c => c.Difference < 0);
+
+        string? error =
+            wanted.Count == 0 ? "There are no changes to apply."
+            : wanted.Count > InventoryItemService.MaxHomeStockRows ? $"Apply at most {InventoryItemService.MaxHomeStockRows:N0} changes at a time."
+            : wanted.Any(c => c.Current is < 0 or > InventoryItemService.MaxHomeStock || c.New is < 0 or > InventoryItemService.MaxHomeStock)
+                ? $"Counts must be between 0 and {InventoryItemService.MaxHomeStock:N0}."
+            : hasIncreases && !HomeStockCountOptions.IncreaseTypes.Contains(options.IncreaseType) ? "Choose how to log the increases."
+            : hasDecreases && !HomeStockCountOptions.DecreaseTypes.Contains(options.DecreaseType) ? "Choose how to log the decreases."
+            : note is null && ((hasIncreases && options.IncreaseType == HomeStockMovementType.Other) || (hasDecreases && options.DecreaseType == HomeStockMovementType.Other))
+                ? "Add a note saying what these movements were (required for Other)."
+            : reference?.Length > MaxReferenceLength ? $"The reference can be at most {MaxReferenceLength} characters."
+            : note?.Length > MaxNoteLength ? $"The note can be at most {MaxNoteLength} characters."
+            : options.OccurredAt > now + FutureTolerance ? "The date can't be in the future."
+            : null;
+        if (error is not null)
+        {
+            return Result.Failure<HomeStockCountResult>(error);
+        }
+
+        // The same SKU twice keeps the last line, matching how the sheet was reviewed.
+        var unique = wanted.GroupBy(c => c.Sku, StringComparer.Ordinal).Select(g => g.Last()).ToList();
+        var template = new HomeStockLedgerWrite(marketplaceId, string.Empty, HomeStockMovementType.CountCorrection, 0, options.OccurredAt ?? now, reference, note, null, now, user);
+        var (applied, stale) = await repository.ApplyCountsAsync(marketplaceId, unique, options.IncreaseType, options.DecreaseType, template, cancellationToken).ConfigureAwait(false);
+
+        var unitsIn = applied.Where(c => c.Difference > 0).Sum(c => c.Difference);
+        var unitsOut = -applied.Where(c => c.Difference < 0).Sum(c => c.Difference);
+        LogCountsApplied(applied.Count, unitsIn, unitsOut, stale.Count, marketplaceId);
+        return Result.Success(new HomeStockCountResult(applied.Count, unitsIn, unitsOut, stale));
+    }
+
+    /// <inheritdoc/>
     public async Task<Result> ReverseAsync(string marketplaceId, long id, string user, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
@@ -152,6 +196,9 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Recorded home-stock entry {Id}: {Type} {Sku} {Units} in {MarketplaceId}")]
     private partial void LogRecorded(long? id, HomeStockMovementType type, string sku, int units, string marketplaceId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Applied a count sheet in {MarketplaceId}: {Applied} entries, +{UnitsIn}/-{UnitsOut} units, {Stale} stale")]
+    private partial void LogCountsApplied(int applied, int unitsIn, int unitsOut, int stale, string marketplaceId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Reversed home-stock entry {Id} with {ReversalId} in {MarketplaceId}")]
     private partial void LogReversed(long id, long? reversalId, string marketplaceId);

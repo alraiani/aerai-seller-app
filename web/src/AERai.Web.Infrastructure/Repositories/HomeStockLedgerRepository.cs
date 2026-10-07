@@ -77,6 +77,61 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
         });
 
     /// <inheritdoc/>
+    public async Task<(IReadOnlyList<HomeStockCountChange> Applied, IReadOnlyList<string> Stale)> ApplyCountsAsync(
+        string marketplaceId,
+        IReadOnlyList<HomeStockCountChange> changes,
+        HomeStockMovementType increaseType,
+        HomeStockMovementType decreaseType,
+        HomeStockLedgerWrite template,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        ArgumentNullException.ThrowIfNull(template);
+
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            dbContext.ChangeTracker.Clear();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
+
+            var known = new HashSet<string>(StringComparer.Ordinal);
+            var balances = new Dictionary<string, HomeStock>(StringComparer.Ordinal);
+
+            // Chunked so a large sheet stays well under SQL Server's 2,100-parameter limit.
+            foreach (var chunk in changes.Select(c => c.Sku).Chunk(1000))
+            {
+                known.UnionWith(await dbContext.Products.Where(p => chunk.Contains(p.Sku)).Select(p => p.Sku).ToListAsync(cancellationToken).ConfigureAwait(false));
+                foreach (var row in await dbContext.HomeStocks.Where(h => h.MarketplaceId == marketplaceId && chunk.Contains(h.Sku)).ToListAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    balances[row.Sku] = row;
+                }
+            }
+
+            var applied = new List<HomeStockCountChange>();
+            var stale = new List<string>();
+            foreach (var change in changes)
+            {
+                balances.TryGetValue(change.Sku, out var row);
+
+                // The reviewed difference only holds if nobody changed the balance since the review.
+                if (!known.Contains(change.Sku) || (row?.Quantity ?? 0) != change.Current || change.Difference == 0)
+                {
+                    stale.Add(change.Sku);
+                    continue;
+                }
+
+                var type = change.Difference > 0 ? increaseType : decreaseType;
+                HomeStockBalance.Apply(dbContext, row, template with { Sku = change.Sku, Type = type, Units = change.Difference });
+                applied.Add(change);
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return ((IReadOnlyList<HomeStockCountChange>)applied, (IReadOnlyList<string>)stale);
+        }).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async Task<PagedResult<HomeStockLedgerEntry>> ListAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(filter);
