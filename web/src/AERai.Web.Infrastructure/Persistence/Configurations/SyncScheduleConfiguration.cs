@@ -32,7 +32,7 @@ internal sealed class SyncScheduleConfiguration : IEntityTypeConfiguration<SyncS
         // opts in with IgnoreQueryFilters().
         builder.HasQueryFilter(s => s.DeletedAt == null);
 
-        // The scheduler polls "enabled and due" every tick.
+        // The scheduler reads "enabled and due" and the earliest next run on each wake.
         builder.HasIndex(s => new { s.IsEnabled, s.NextRunAt });
     }
 }

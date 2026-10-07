@@ -10,11 +10,13 @@ namespace AERai.Web.Application.Ingestion;
 /// <param name="Frequency">Interval or daily.</param>
 /// <param name="IntervalMinutes">Minutes between runs (interval schedules).</param>
 /// <param name="DailyTime">Local time of day (daily schedules).</param>
-/// <param name="TimeZoneId">IANA time zone for <paramref name="DailyTime"/>.</param>
+/// <param name="TimeZoneId">IANA time zone for <paramref name="DailyTime"/> and the active window.</param>
 /// <param name="LookbackDays">How far back the first run reaches.</param>
 /// <param name="AutoPromote">Promote staged batches immediately.</param>
 /// <param name="Notes">Optional free-text notes.</param>
 /// <param name="OwnerEmail">Optional responsible user's email.</param>
+/// <param name="ActiveFrom">Interval schedules: start of the local window they run in (optional).</param>
+/// <param name="ActiveUntil">Interval schedules: end of that window (optional; set both or neither).</param>
 public sealed record SyncScheduleInput(
     string Name,
     AmazonReportType ReportType,
@@ -27,4 +29,6 @@ public sealed record SyncScheduleInput(
     int LookbackDays,
     bool AutoPromote,
     string? Notes = null,
-    string? OwnerEmail = null);
+    string? OwnerEmail = null,
+    TimeOnly? ActiveFrom = null,
+    TimeOnly? ActiveUntil = null);

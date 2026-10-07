@@ -290,6 +290,16 @@ public sealed partial class SyncScheduleService(
                 $"Interval must be between {MinIntervalMinutes} minutes and {MaxIntervalMinutes / (24 * 60)} days.");
         }
 
+        if (input.Frequency == ScheduleFrequency.Interval && (input.ActiveFrom is null) != (input.ActiveUntil is null))
+        {
+            return Result.Failure<SyncSchedule>("Set both the start and end of the active hours, or leave both empty to run around the clock.");
+        }
+
+        if (input.Frequency == ScheduleFrequency.Interval && input.ActiveFrom is { } from && from == input.ActiveUntil)
+        {
+            return Result.Failure<SyncSchedule>("Active hours must start and end at different times. Leave both empty to run around the clock.");
+        }
+
         if (input.Frequency == ScheduleFrequency.Daily && input.DailyTime is null)
         {
             return Result.Failure<SyncSchedule>("Choose a time of day for a daily schedule.");
@@ -326,6 +336,8 @@ public sealed partial class SyncScheduleService(
             // Keep only the field that applies, so the stored schedule is unambiguous.
             IntervalMinutes = input.Frequency == ScheduleFrequency.Interval ? input.IntervalMinutes : null,
             DailyTime = input.Frequency == ScheduleFrequency.Daily ? input.DailyTime : null,
+            ActiveFrom = input.Frequency == ScheduleFrequency.Interval ? input.ActiveFrom : null,
+            ActiveUntil = input.Frequency == ScheduleFrequency.Interval ? input.ActiveUntil : null,
             TimeZoneId = input.TimeZoneId,
             LookbackDays = input.LookbackDays,
             AutoPromote = input.AutoPromote,

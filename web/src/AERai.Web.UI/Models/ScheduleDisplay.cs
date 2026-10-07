@@ -15,19 +15,21 @@ public static class ScheduleDisplay
     public static IReadOnlyList<(string Id, string Label)> TimeZones { get; } =
     [
         ("America/New_York", "Eastern (New York)"),
+        ("America/Toronto", "Eastern (Toronto)"),
         ("America/Chicago", "Central (Chicago)"),
         ("America/Denver", "Mountain (Denver)"),
         ("America/Phoenix", "Arizona (Phoenix)"),
         ("America/Los_Angeles", "Pacific (Los Angeles)"),
         ("America/Anchorage", "Alaska (Anchorage)"),
         ("Pacific/Honolulu", "Hawaii (Honolulu)"),
+        ("Europe/London", "UK (London)"),
         ("UTC", "UTC"),
     ];
 
     /// <summary>Report types offered in the editor, with a one-line description of each.</summary>
     public static IReadOnlyList<(AmazonReportType Type, string Description)> ReportTypes { get; } =
     [
-        (AmazonReportType.Orders, "Orders created or updated since the last run. Hourly is typical."),
+        (AmazonReportType.Orders, "Orders created or updated since the last run. Every few hours during the day is typical; use Run now for fresher data."),
         (AmazonReportType.FbaInventory, "A snapshot of FBA stock by state. Once or twice a day is plenty."),
         (AmazonReportType.FbaReservedInventory, "Why stock is reserved (customer orders, FC transfers, FC processing). Run just after FBA inventory."),
         (AmazonReportType.RestockRecommendations, "How many units Amazon recommends sending in, and by when. Once a day is plenty."),
@@ -43,12 +45,24 @@ public static class ScheduleDisplay
 
         return schedule.Frequency switch
         {
-            ScheduleFrequency.Interval when schedule.IntervalMinutes is { } minutes => Interval(minutes),
+            ScheduleFrequency.Interval when schedule.IntervalMinutes is { } minutes =>
+                Interval(minutes, schedule.ActiveFrom, schedule.ActiveUntil, schedule.TimeZoneId),
             ScheduleFrequency.Daily when schedule.DailyTime is { } time =>
                 $"Daily at {time.ToString("h:mm tt", En)} {ShortZone(schedule.TimeZoneId)}",
             _ => "—",
         };
     }
+
+    /// <summary>Formats an interval with its active hours, if any.</summary>
+    /// <param name="minutes">Minutes between runs.</param>
+    /// <param name="from">Start of the active hours.</param>
+    /// <param name="until">End of the active hours.</param>
+    /// <param name="timeZoneId">IANA zone id of the active hours.</param>
+    /// <returns>e.g. "Every 4 h, 7:00 AM–9:00 PM ET".</returns>
+    public static string Interval(int minutes, TimeOnly? from, TimeOnly? until, string timeZoneId) =>
+        from is { } start && until is { } end
+            ? $"{Interval(minutes)}, {start.ToString("h:mm tt", En)}–{end.ToString("h:mm tt", En)} {ShortZone(timeZoneId)}"
+            : Interval(minutes);
 
     /// <summary>Formats an interval in minutes.</summary>
     /// <param name="minutes">Minutes between runs.</param>
@@ -65,7 +79,8 @@ public static class ScheduleDisplay
     /// <returns>e.g. "ET", "PT", "UTC".</returns>
     public static string ShortZone(string timeZoneId) => timeZoneId switch
     {
-        "America/New_York" => "ET",
+        "America/New_York" or "America/Toronto" => "ET",
+        "Europe/London" => "UK",
         "America/Chicago" => "CT",
         "America/Denver" => "MT",
         "America/Phoenix" => "AZ",

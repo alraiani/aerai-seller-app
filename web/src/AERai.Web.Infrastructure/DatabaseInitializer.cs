@@ -104,7 +104,9 @@ public static partial class DatabaseInitializer
         {
             SyncSchedule[] defaults =
             [
-                DefaultSchedule(m, "Orders — hourly", AmazonReportType.Orders, ScheduleFrequency.Interval, 60, null, 7, now),
+                // Every 4 h rather than hourly: hourly pulls keep the serverless database from ever
+                // auto-pausing. Fresher data is a "Run now" away.
+                DefaultSchedule(m, "Orders — every 4 h", AmazonReportType.Orders, ScheduleFrequency.Interval, 240, null, 7, now),
                 DefaultSchedule(m, "FBA inventory — daily 6:00 AM", AmazonReportType.FbaInventory, ScheduleFrequency.Daily, null, new TimeOnly(6, 0), 1, now),
                 // Just after the main inventory snapshot, so both land on the same snapshot date.
                 DefaultSchedule(m, "FBA reserved inventory — daily 6:15 AM", AmazonReportType.FbaReservedInventory, ScheduleFrequency.Daily, null, new TimeOnly(6, 15), 1, now),

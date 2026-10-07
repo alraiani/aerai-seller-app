@@ -72,7 +72,7 @@
         function checked(name) { return form.querySelector("[name='Input." + name + "']:checked"); }
 
         function zoneShort(id) {
-            var map = { "America/New_York": "ET", "America/Chicago": "CT", "America/Denver": "MT", "America/Phoenix": "AZ",
+            var map = { "America/New_York": "ET", "America/Toronto": "ET", "Europe/London": "UK", "America/Chicago": "CT", "America/Denver": "MT", "America/Phoenix": "AZ",
                 "America/Los_Angeles": "PT", "America/Anchorage": "AKT", "Pacific/Honolulu": "HT" };
             return map[id] || id;
         }
@@ -98,9 +98,13 @@
             }
 
             var report = checked("ReportType");
+            var zone = zoneShort(field("TimeZoneId").value);
+            var from = field("ActiveFrom").value;
+            var until = field("ActiveUntil").value;
             var when = frequency === "Daily"
-                ? "daily at " + timeText(field("DailyTime").value) + " " + zoneShort(field("TimeZoneId").value)
-                : intervalText(parseInt(field("IntervalMinutes").value, 10));
+                ? "daily at " + timeText(field("DailyTime").value) + " " + zone
+                : intervalText(parseInt(field("IntervalMinutes").value, 10))
+                    + (from && until ? ", " + timeText(from) + "–" + timeText(until) + " " + zone : "");
             summary.textContent = (report ? report.getAttribute("data-report-label") : "Report") + " · " + when;
             enabledFact.textContent = field("IsEnabled").checked ? "Runs automatically" : "Manual only";
             promoteFact.textContent = field("AutoPromote").checked ? "New data goes straight into reports" : "New data waits for review";
