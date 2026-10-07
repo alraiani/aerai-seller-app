@@ -1,3 +1,5 @@
+using AERai.Web.Domain.Core;
+
 namespace AERai.Web.Application.Inventory;
 
 /// <summary>The user-editable details of one SKU in one marketplace.</summary>
@@ -8,4 +10,5 @@ namespace AERai.Web.Application.Inventory;
 /// <param name="ImagePath">Blob path of the picture, if one was uploaded.</param>
 /// <param name="HomeStock">Units held outside Amazon for the marketplace.</param>
 /// <param name="LeadTimes">The SKU's own lead-time overrides in the marketplace (blank fields use the defaults).</param>
-public sealed record InventoryItemDetails(string Sku, string? Asin, string? Title, string? Family, string? ImagePath, int HomeStock, LeadTimeSettings LeadTimes);
+/// <param name="Color">The variant's color, if set.</param>
+public sealed record InventoryItemDetails(string Sku, string? Asin, string? Title, string? Family, string? ImagePath, int HomeStock, LeadTimeSettings LeadTimes, ProductColor? Color = null);

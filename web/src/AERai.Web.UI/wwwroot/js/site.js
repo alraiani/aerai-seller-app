@@ -60,8 +60,51 @@
         update();
     }
 
+    // ---------- Unsaved-changes bar ----------
+    // In a [data-dirty-form], inputs marked [data-original] are compared with their starting value:
+    // changed ones get .is-changed, the [data-save-bar] shows how many, and leaving the page asks first.
+    // Without JavaScript the bar's Save button is always visible (it is only hidden by script).
+    function setupDirtyForm(form) {
+        var inputs = form.querySelectorAll("[data-original]");
+        var bar = form.querySelector("[data-save-bar]");
+        var count = form.querySelector("[data-save-count]");
+        var submitting = false;
+
+        function changed() {
+            var n = 0;
+            for (var i = 0; i < inputs.length; i++) {
+                var dirty = inputs[i].value !== inputs[i].getAttribute("data-original");
+                inputs[i].classList.toggle("is-changed", dirty);
+                if (dirty) { n++; }
+            }
+            return n;
+        }
+
+        function update() {
+            var n = changed();
+            if (bar) { bar.hidden = n === 0; }
+            if (count) { count.textContent = n + " unsaved change" + (n === 1 ? "" : "s"); }
+        }
+
+        form.addEventListener("input", update);
+        form.addEventListener("submit", function () { submitting = true; });
+        window.addEventListener("beforeunload", function (event) {
+            if (!submitting && changed() > 0) { event.preventDefault(); event.returnValue = ""; }
+        });
+        update();
+    }
+
+    // ---------- Print buttons ----------
+    document.addEventListener("click", function (event) {
+        var button = event.target.closest && event.target.closest("[data-print]");
+        if (button) { window.print(); }
+    });
+
     document.addEventListener("DOMContentLoaded", function () {
         setupTooltips();
+
+        var dirty = document.querySelectorAll("[data-dirty-form]");
+        for (var d = 0; d < dirty.length; d++) { setupDirtyForm(dirty[d]); }
 
         var bulk = document.querySelector("[data-bulk-bar]");
         if (bulk) { setupBulk(bulk); }

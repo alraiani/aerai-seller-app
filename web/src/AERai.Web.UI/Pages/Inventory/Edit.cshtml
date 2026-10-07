@@ -23,7 +23,7 @@
                     <span class="step">1</span>
                     <div>
                         <h2>Details</h2>
-                        <p>Group the product with similar ones and record stock you hold outside Amazon.</p>
+                        <p>Group the product with similar ones, give it a color, and record stock you hold outside Amazon.</p>
                     </div>
                 </div>
                 <div class="form-section-body">
@@ -44,7 +44,18 @@
                             <label asp-for="Input.HomeStock" class="form-label"></label>
                             <input asp-for="Input.HomeStock" class="form-control" type="number" min="0" step="1" />
                             <span asp-validation-for="Input.HomeStock" class="text-danger small"></span>
-                            <div class="form-text">Held outside Amazon for @Model.Marketplace.Name. Not counted in days of inventory.</div>
+                            <div class="form-text">Held outside Amazon for @Model.Marketplace.Name. A change is logged in the <a asp-page="HomeStock/Ledger" asp-route-sku="@item.Sku">home-stock ledger</a> as a count correction.</div>
+                        </div>
+                        <div class="col-md-7">
+                            <label asp-for="Input.Color" class="form-label"></label>
+                            <select asp-for="Input.Color" class="form-select">
+                                <option value="">No color</option>
+                                @foreach (var c in ColorFormat.All)
+                                {
+                                    <option value="@c">@ColorFormat.Label(c)</option>
+                                }
+                            </select>
+                            <div class="form-text">Groups and color-codes the SKU on the inventory worksheet.</div>
                         </div>
                     </div>
                 </div>

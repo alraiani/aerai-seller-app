@@ -75,6 +75,7 @@ public static class RestockPlanner
             reorder,
             reorderBy,
             reorderBy.DayNumber - today.DayNumber,
+            sendBy?.DayNumber - today.DayNumber,
             nextAction.DayNumber - today.DayNumber);
     }
 

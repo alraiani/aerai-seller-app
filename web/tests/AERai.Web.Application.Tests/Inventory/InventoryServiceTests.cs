@@ -229,4 +229,31 @@ public sealed class InventoryServiceTests
 
         Assert.Equal((null, null), (item.AveragePerDay30d, item.AveragePerDay90d));
     }
+
+    [Fact]
+    public async Task GetWorksheetAsync_GroupsAFamilyByColorInPaletteOrderWithSubtotals()
+    {
+        Stock("HTS00PU", available: 28, p => { p.FamilyId = 1; p.Color = ProductColor.Purple; p.HomeStock = 30; });
+        Stock("FOB00BL", available: 24, p => { p.FamilyId = 1; p.Color = ProductColor.Blue; p.HomeStock = 75; });
+        Stock("FOB00PU", available: 7, p => { p.FamilyId = 1; p.Color = ProductColor.Purple; p.HomeStock = 40; });
+        Stock("SBP001", available: 5, p => p.FamilyId = 1);
+        Stock("MAT-BLK", available: 90, p => { p.FamilyId = 2; p.Color = ProductColor.Black; });
+        Sold("FOB00PU", Eastern(9, 10, 12), 3);
+        Sold("HTS00PU", Eastern(9, 20, 12), 15);
+
+        var sheet = await CreateService().GetWorksheetAsync(Us, 1, CancellationToken.None);
+
+        Assert.Equal([ProductColor.Blue, ProductColor.Purple, null], sheet.Groups.Select(g => g.Color));
+        Assert.Equal(["FOB00PU", "HTS00PU"], sheet.Groups[1].Items.Select(i => i.Sku));
+        Assert.Equal((35, 70, 18), (sheet.Groups[1].Subtotals.Available, sheet.Groups[1].Subtotals.HomeStock, sheet.Groups[1].Subtotals.Sold30d));
+        Assert.Equal((64, 145), (sheet.Totals.Available, sheet.Totals.HomeStock));
+    }
+
+    [Fact]
+    public async Task GetWorksheetAsync_FamilyWithNoSkus_IsEmpty()
+    {
+        Stock("A", available: 1, p => p.FamilyId = 2);
+
+        Assert.True((await CreateService().GetWorksheetAsync(Us, 1, CancellationToken.None)).IsEmpty);
+    }
 }

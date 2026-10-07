@@ -1,0 +1,220 @@
+@page
+@using System.Globalization
+@using AERai.Web.Domain.Core
+@model AERai.Web.UI.Pages.Inventory.HomeStock.LedgerModel
+@{
+    ViewData["Title"] = "Home-stock ledger";
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var rows = Model.Entries.Items;
+}
+
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="../Index">Inventory</a>
+    <span aria-hidden="true">/</span>
+    @if (Model.FamilyId is not null)
+    {
+        <a asp-page="../Worksheet" asp-route-family="@Model.FamilyId">Worksheet</a>
+        <span aria-hidden="true">/</span>
+    }
+    <span>Home-stock ledger</span>
+</nav>
+
+@* ---------- Filters ---------- *@
+<div class="list-toolbar mb-3">
+    <form method="get" class="filters" data-autosubmit-form role="search">
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search SKU, name, reference, note…" aria-label="Search the ledger" />
+        </div>
+        @if (Model.Sku is not null)
+        {
+            <input type="hidden" name="sku" value="@Model.Sku" />
+        }
+        <select name="family" class="form-select form-select-sm" aria-label="Family">
+            <option value="">All families</option>
+            @foreach (var f in Model.Families)
+            {
+                <option value="@f.Id" selected="@(Model.FamilyId == f.Id)">@f.Name</option>
+            }
+        </select>
+        <select name="type" class="form-select form-select-sm" aria-label="Movement type">
+            <option value="">All movements</option>
+            @foreach (var type in Enum.GetValues<HomeStockMovementType>())
+            {
+                <option value="@type" selected="@(Model.Type == type)">@AERai.Web.UI.Pages.Inventory.HomeStock.LedgerModel.Label(type)</option>
+            }
+        </select>
+        <input type="date" name="from" value="@Model.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" class="form-control form-control-sm date-filter" aria-label="From date" data-autosubmit />
+        <input type="date" name="to" value="@Model.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" class="form-control form-control-sm date-filter" aria-label="To date" data-autosubmit />
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
+        @if (Model.IsFiltered)
+        {
+            <a asp-page="Ledger" class="btn btn-sm btn-link">Clear filters</a>
+        }
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@Model.Entries.TotalCount.ToString("N0", en) entr@(Model.Entries.TotalCount == 1 ? "y" : "ies")</span>
+            <span class="text-muted-token fw-normal">
+                @(Model.Sku is { } onlySku ? $"for {onlySku} " : "")in @Model.Marketplace.Name · times in @Model.Marketplace.TimeZoneId
+            </span>
+            <partial name="_Tip" model='"Every unit that came into or went out of home stock. Each SKU’s entries add up to its home stock; Balance is the SKU’s count right after the entry. Edits on the Worksheet, Edit page, bulk page, and uploads appear as count corrections. Mistakes are reversed, never deleted."' />
+        </span>
+        @if (Model.CanEdit)
+        {
+            <div class="card-toolbar-group">
+                <a asp-route-log="true" asp-route-sku="@Model.Sku" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#log-dialog"><partial name="_Icon" model='"plus"' /> Log movement</a>
+            </div>
+        }
+    </div>
+
+    @if (rows.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-title">@(Model.IsFiltered ? "No entries match" : "No home-stock movements yet")</div>
+            <div class="empty-detail">@(Model.IsFiltered ? "Try a different search, family, type, or dates." : "Log incoming shipments from your supplier and outgoing shipments to Amazon here. Home-stock edits are logged automatically.")</div>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table data-table ledger-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>When</th>
+                        <th>SKU</th>
+                        <th>Movement</th>
+                        <th class="text-end">Units</th>
+                        <th class="text-end">Balance</th>
+                        <th>Reference / note</th>
+                        <th>Logged by</th>
+                        @if (Model.CanEdit)
+                        {
+                            <th class="text-end"><span class="visually-hidden">Actions</span></th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var e in rows)
+                {
+                    var when = Model.Local(e.OccurredAt);
+                    <tr class="@(e.ReversedById is not null ? "ledger-reversed" : "")">
+                        <td class="ledger-when">
+                            <div>@when.ToString("MMM d, yyyy", en)</div>
+                            <div class="cell-sub">@when.ToString("h:mm tt", en)</div>
+                        </td>
+                        <td class="@ColorFormat.CssClass(e.Color)">
+                            <a asp-route-sku="@e.Sku" class="d-inline-flex align-items-center gap-2 text-decoration-none"><span class="swatch @(e.Color is null ? "swatch-none" : "")"></span><span class="fw-semibold">@e.Sku</span></a>
+                            @if (e.Title is { } title)
+                            {
+                                <div class="cell-sub cell-truncate" title="@title">@title</div>
+                            }
+                        </td>
+                        <td>
+                            <span class="@AERai.Web.UI.Pages.Inventory.HomeStock.LedgerModel.Pill(e.Type)">@AERai.Web.UI.Pages.Inventory.HomeStock.LedgerModel.Label(e.Type)</span>
+                            @if (e.ReversesId is { } reverses)
+                            {
+                                <div class="cell-sub">reverses #@reverses</div>
+                            }
+                            else if (e.ReversedById is { } reversedBy)
+                            {
+                                <div class="cell-sub">reversed by #@reversedBy</div>
+                            }
+                        </td>
+                        <td class="text-end"><span class="ledger-units @(e.Units > 0 ? "in" : "out")">@e.Units.ToString("+#,0;−#,0", en)</span></td>
+                        <td class="text-end fw-semibold">@e.BalanceAfter.ToString("N0", en)</td>
+                        <td class="ledger-note">
+                            @if (e.Reference is { } reference)
+                            {
+                                <div class="fw-semibold">@reference</div>
+                            }
+                            @if (e.Note is { } note)
+                            {
+                                <div class="cell-sub">@note</div>
+                            }
+                            @if (e.Reference is null && e.Note is null)
+                            {
+                                <span class="cell-sub">—</span>
+                            }
+                        </td>
+                        <td>
+                            <div class="cell-sub">@e.CreatedBy</div>
+                            <div class="cell-sub">#@e.Id · @Model.Local(e.CreatedAt).ToString("MMM d, h:mm tt", en)</div>
+                        </td>
+                        @if (Model.CanEdit)
+                        {
+                            <td class="text-end">
+                                @if (e.CanReverse)
+                                {
+                                    <form method="post" asp-page-handler="Reverse" asp-route-id="@e.Id" asp-route-sku="@Model.Sku" asp-route-family="@Model.FamilyId" asp-route-p="@Model.PageNumber"
+                                          data-confirm="Reverse entry #@e.Id? A new entry will undo its @Math.Abs(e.Units).ToString("N0", en) units.">
+                                        <button type="submit" class="btn btn-sm btn-soft btn-icon" aria-label="Reverse entry @e.Id"
+                                                data-bs-toggle="tooltip" data-bs-title="Undo this entry with a reversing entry"><partial name="_Icon" model='"rewind"' /></button>
+                                    </form>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+<partial name="_Pager" model="Model.Entries.ToPager(Model.Search, Model.PagerFilters)" />
+
+@if (Model.CanEdit)
+{
+    <div class="modal fade" id="log-dialog" tabindex="-1" aria-labelledby="log-title" aria-hidden="true" data-open-on-load="@(Model.OpenLog ? "true" : null)" data-open-param="log">
+        <div class="modal-dialog modal-dialog-centered">
+            <form method="post" asp-page-handler="Log" asp-route-sku="@Model.Sku" asp-route-family="@Model.FamilyId" class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h6" id="log-title">Log a home-stock movement</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
+                    <div class="mb-3">
+                        <label asp-for="Input.Type" class="form-label">Movement</label>
+                        <select asp-for="Input.Type" class="form-select">
+                            @foreach (var (type, label) in AERai.Web.UI.Pages.Inventory.HomeStock.LedgerModel.LoggableTypes)
+                            {
+                                <option value="@type">@label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-7">
+                            <label asp-for="Input.Sku" class="form-label">SKU</label>
+                            <input asp-for="Input.Sku" class="form-control" autocomplete="off" />
+                        </div>
+                        <div class="col-5">
+                            <label asp-for="Input.Quantity" class="form-label">Units</label>
+                            <input asp-for="Input.Quantity" type="number" step="1" class="form-control text-end" />
+                        </div>
+                    </div>
+                    <div class="form-text mb-3">Received and shipped: how many units. Count correction: the new counted total. Other: + to add, − to remove.</div>
+                    <div class="mb-3">
+                        <label asp-for="Input.OccurredAt" class="form-label">When (@Model.Marketplace.TimeZoneId)</label>
+                        <input asp-for="Input.OccurredAt" type="datetime-local" step="60" asp-format="{0:yyyy-MM-ddTHH:mm}" class="form-control" />
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Input.Reference" class="form-label">Reference <span class="text-muted-token">(PO, FBA shipment id…)</span></label>
+                        <input asp-for="Input.Reference" class="form-control" />
+                    </div>
+                    <div>
+                        <label asp-for="Input.Note" class="form-label">Note <span class="text-muted-token">(required for Other)</span></label>
+                        <textarea asp-for="Input.Note" rows="2" class="form-control"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-link" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"check"' /> Log movement</button>
+                </div>
+            </form>
+        </div>
+    </div>
+}

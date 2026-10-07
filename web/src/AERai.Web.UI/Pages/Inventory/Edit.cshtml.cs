@@ -59,6 +59,7 @@ public sealed class EditModel(IInventoryItemService items, ICurrentMarketplace c
         }
 
         Input.Family = Item.Family;
+        Input.Color = Item.Color;
         Input.HomeStock = Item.HomeStock;
         (Input.SupplierLeadTimeDays, Input.PrepTimeDays, Input.TransitDays, Input.SafetyStockDays, Input.TargetStockDays) =
             (Item.LeadTimes.SupplierLeadTimeDays, Item.LeadTimes.PrepTimeDays, Item.LeadTimes.TransitDays, Item.LeadTimes.SafetyStockDays, Item.LeadTimes.TargetStockDays);
@@ -86,7 +87,8 @@ public sealed class EditModel(IInventoryItemService items, ICurrentMarketplace c
         var update = new InventoryItemUpdate(
             Input.Family,
             Input.HomeStock,
-            new LeadTimeSettings(Input.SupplierLeadTimeDays, Input.PrepTimeDays, Input.TransitDays, Input.SafetyStockDays, Input.TargetStockDays));
+            new LeadTimeSettings(Input.SupplierLeadTimeDays, Input.PrepTimeDays, Input.TransitDays, Input.SafetyStockDays, Input.TargetStockDays),
+            Input.Color);
         var result = await items.UpdateAsync(sku, Marketplace.MarketplaceId, update, User.Identity!.Name!, cancellationToken);
         if (result.IsFailure)
         {
@@ -147,6 +149,10 @@ public sealed class EditModel(IInventoryItemService items, ICurrentMarketplace c
         [Display(Name = "Family")]
         [StringLength(FamilyNames.MaxLength)]
         public string? Family { get; set; }
+
+        /// <summary>The variant's color, if any.</summary>
+        [Display(Name = "Color")]
+        public ProductColor? Color { get; set; }
 
         /// <summary>Units held outside Amazon for the marketplace.</summary>
         [Display(Name = "Home stock (units)")]

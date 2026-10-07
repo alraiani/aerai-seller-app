@@ -127,6 +127,17 @@ public static class InventoryFormat
         _ => "cover-ok",
     };
 
+    /// <summary>Highlight for a deadline: overdue, due within the alert window, or neither.</summary>
+    /// <param name="daysUntil">Days from today to the deadline (negative = overdue).</param>
+    /// <param name="soonDays">The alert window in days.</param>
+    /// <returns>CSS class, or empty.</returns>
+    public static string DueClass(int? daysUntil, int soonDays) => daysUntil switch
+    {
+        < 0 => "action-late",
+        { } d when d <= soonDays => "action-due",
+        _ => string.Empty,
+    };
+
     /// <summary>Short date for restock deadlines.</summary>
     /// <param name="date">The date.</param>
     /// <returns>e.g. "Oct 20".</returns>

@@ -30,6 +30,13 @@ public interface IInventoryItemService
     /// <returns>Success, or a validation failure (nothing is saved then).</returns>
     Task<Result> UpdateAsync(string sku, string marketplaceId, InventoryItemUpdate update, string user, CancellationToken cancellationToken);
 
+    /// <summary>Sets (or clears) the color of several SKUs at once.</summary>
+    /// <param name="skus">Seller SKUs.</param>
+    /// <param name="color">The color, or <see langword="null"/> to clear it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>How many SKUs changed, or why nothing was done.</returns>
+    Task<Result<int>> SetColorAsync(IReadOnlyList<string> skus, ProductColor? color, CancellationToken cancellationToken);
+
     /// <summary>Validates and stores a new picture for a SKU, replacing any previous one.</summary>
     /// <param name="sku">Seller SKU.</param>
     /// <param name="content">Uploaded bytes.</param>

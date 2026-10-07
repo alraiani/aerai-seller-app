@@ -71,10 +71,17 @@ public sealed partial class InventoryItemService(
             return Result.Failure(leadTimeError);
         }
 
+        if (update.Color is { } color && !Enum.IsDefined(color))
+        {
+            return Result.Failure("Choose a color from the list.");
+        }
+
         if (!await repository.SaveItemAsync(sku, marketplaceId, name, update.HomeStock, update.LeadTimes, clock.GetUtcNow(), user, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure($"Product '{sku}' was not found.");
         }
+
+        await repository.SetColorAsync([sku], update.Color, cancellationToken).ConfigureAwait(false);
 
         LogItemUpdated(sku, marketplaceId, name, update.HomeStock);
         return Result.Success();
@@ -167,6 +174,31 @@ public sealed partial class InventoryItemService(
 
         var stream = await images.OpenReadAsync(image.Path, cancellationToken).ConfigureAwait(false);
         return stream is null ? null : new ProductImage(stream, image.ContentType);
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result<int>> SetColorAsync(IReadOnlyList<string> skus, ProductColor? color, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(skus);
+
+        if (skus.Count == 0)
+        {
+            return Result.Failure<int>("Tick at least one SKU first.");
+        }
+
+        if (skus.Count > ProductFamilyService.MaxSkusPerAssignment)
+        {
+            return Result.Failure<int>($"Set the color of at most {ProductFamilyService.MaxSkusPerAssignment:N0} SKUs at a time.");
+        }
+
+        if (color is { } value && !Enum.IsDefined(value))
+        {
+            return Result.Failure<int>("Choose a color from the list.");
+        }
+
+        var updated = await repository.SetColorAsync(skus, color, cancellationToken).ConfigureAwait(false);
+        LogColorSet(updated, color);
+        return Result.Success(updated);
     }
 
     /// <inheritdoc/>
@@ -304,6 +336,9 @@ public sealed partial class InventoryItemService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Updated {Sku} in {MarketplaceId}: family {Family}, home stock {HomeStock}")]
     private partial void LogItemUpdated(string sku, string marketplaceId, string? family, int homeStock);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Set the color of {Count} SKUs to {Color}")]
+    private partial void LogColorSet(int count, ProductColor? color);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Stored a new picture for {Sku} at {ImagePath}")]
     private partial void LogImageSet(string sku, string imagePath);
