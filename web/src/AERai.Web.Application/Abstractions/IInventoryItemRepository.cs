@@ -47,6 +47,11 @@ public interface IInventoryItemRepository
     /// <returns><see langword="false"/> when the SKU does not exist.</returns>
     Task<bool> SetImageAsync(string sku, string? path, string? contentType, CancellationToken cancellationToken);
 
+    /// <summary>Every SKU with its ASIN and whether it has a picture, for matching picture imports.</summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>All products, by SKU.</returns>
+    Task<IReadOnlyList<PictureTarget>> ListPictureTargetsAsync(CancellationToken cancellationToken);
+
     /// <summary>Which of the given SKUs exist in the product catalog.</summary>
     /// <param name="skus">SKUs to check.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
