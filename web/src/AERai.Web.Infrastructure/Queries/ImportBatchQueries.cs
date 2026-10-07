@@ -57,6 +57,7 @@ internal sealed class ImportBatchQueries(AppDbContext dbContext) : IImportBatchQ
             ImportSource.Settlements => dbContext.StgSettlementLines,
             ImportSource.FbaInventory => dbContext.StgFbaInventoryRows,
             ImportSource.FbaReservedInventory => dbContext.StgFbaReservedRows,
+            ImportSource.FbaRestockRecommendations => dbContext.StgFbaRestockRows,
             _ => null,
         };
 

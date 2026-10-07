@@ -28,7 +28,7 @@ public sealed class StockAlertServiceTests
     private StockAlertService CreateService()
     {
         var options = Options.Create(_options);
-        return new StockAlertService(new InventoryService(_inventory, options, _clock), _repository, _clock, NullLogger<StockAlertService>.Instance);
+        return new StockAlertService(new InventoryService(_inventory, options, _clock), _repository, options, _clock, NullLogger<StockAlertService>.Instance);
     }
 
     /// <summary>A SKU selling 1 unit a day for the last 30 days with this much available.</summary>
@@ -55,7 +55,7 @@ public sealed class StockAlertServiceTests
         Assert.Equal(
             [("LOW", StockAlertLevel.Low), ("OUT", StockAlertLevel.Out)],
             _repository.Open.OrderBy(a => a.Sku).Select(a => (a.Sku, a.Level)));
-        Assert.Contains("Order 45 by Oct 10", _repository.Open.Single(a => a.Sku == "LOW").Message, StringComparison.Ordinal);
+        Assert.Contains("Order 60 from the supplier by Oct 10", _repository.Open.Single(a => a.Sku == "LOW").Message, StringComparison.Ordinal);
     }
 
     [Fact]

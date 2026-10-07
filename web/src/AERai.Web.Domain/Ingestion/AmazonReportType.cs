@@ -25,4 +25,10 @@ public enum AmazonReportType
     /// is reserved (customer orders, FC transfers, FC processing).
     /// </summary>
     FbaReservedInventory = 4,
+
+    /// <summary>
+    /// <c>GET_RESTOCK_INVENTORY_RECOMMENDATIONS_REPORT</c>: requested on demand; a point-in-time snapshot
+    /// of how many units Amazon recommends sending in and by when.
+    /// </summary>
+    RestockRecommendations = 5,
 }

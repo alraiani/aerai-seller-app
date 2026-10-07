@@ -26,4 +26,10 @@ public enum ImportSource
     /// splits reserved stock into customer orders, FC transfers, and FC processing.
     /// </summary>
     FbaReservedInventory = 5,
+
+    /// <summary>
+    /// Amazon's restock inventory report (<c>GET_RESTOCK_INVENTORY_RECOMMENDATIONS_REPORT</c>): one row
+    /// per SKU with Amazon's recommended replenishment quantity and ship date.
+    /// </summary>
+    FbaRestockRecommendations = 6,
 }

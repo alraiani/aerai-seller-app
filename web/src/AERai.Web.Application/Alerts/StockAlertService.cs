@@ -4,6 +4,7 @@ using AERai.Web.Application.Inventory;
 using AERai.Web.Domain.Alerts;
 using AERai.Web.Domain.Core;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AERai.Web.Application.Alerts;
 
@@ -22,11 +23,13 @@ namespace AERai.Web.Application.Alerts;
 /// </remarks>
 /// <param name="inventory">Inventory numbers and restock plans.</param>
 /// <param name="repository">Alert persistence.</param>
+/// <param name="options">Restock settings (when a supplier reorder is close enough to mention).</param>
 /// <param name="clock">Clock.</param>
 /// <param name="logger">Logger.</param>
 public sealed partial class StockAlertService(
     IInventoryService inventory,
     IStockAlertRepository repository,
+    IOptions<InventoryOptions> options,
     TimeProvider clock,
     ILogger<StockAlertService> logger) : IStockAlertService
 {
@@ -120,7 +123,7 @@ public sealed partial class StockAlertService(
         repository.MarkReadAsync(marketplaceId, null, userEmail, clock.GetUtcNow(), cancellationToken);
 
     /// <summary>The alert a SKU should have right now (from its shared <see cref="StockStatus"/>), or null when it is fine.</summary>
-    private static (StockAlertLevel Level, string Message)? Evaluate(InventoryItem item)
+    private (StockAlertLevel Level, string Message)? Evaluate(InventoryItem item)
     {
         switch (item.Status)
         {
@@ -141,7 +144,7 @@ public sealed partial class StockAlertService(
         }
     }
 
-    private static string? Actions(RestockPlan? plan)
+    private string? Actions(RestockPlan? plan)
     {
         if (plan is null)
         {
@@ -149,14 +152,15 @@ public sealed partial class StockAlertService(
         }
 
         var parts = new List<string>(2);
-        if (plan.SendFromHome > 0)
+        if (plan.SendToAmazon > 0)
         {
-            parts.Add(string.Create(En, $"Send {plan.SendFromHome:N0} from home stock by {plan.SendBy:MMM d}"));
+            parts.Add(string.Create(En, $"Send {plan.SendToAmazon:N0} from home stock by {plan.SendBy:MMM d}"));
         }
 
-        if (plan.OrderFromSupplier > 0)
+        // A reorder months away isn't actionable yet, so it is only mentioned once it is due soon.
+        if (plan.DaysUntilReorder <= options.Value.AlertLeadDays)
         {
-            parts.Add(string.Create(En, $"Order {plan.OrderFromSupplier:N0} by {plan.OrderBy:MMM d}"));
+            parts.Add(string.Create(En, $"Order {plan.ReorderQuantity:N0} from the supplier by {plan.ReorderBy:MMM d}"));
         }
 
         return parts.Count == 0 ? null : string.Join("; ", parts) + ".";
