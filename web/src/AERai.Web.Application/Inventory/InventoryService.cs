@@ -76,7 +76,9 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
                 var times = settings.Resolve(leadTimes.GetValueOrDefault(p.Sku));
                 var plan = RestockPlanner.Plan(today, velocity, p.SellThroughStock, p.HomeStock, times);
                 var status = StatusOf(p, units30, velocity, plan, settings.AlertLeadDays);
-                return new InventoryItem(p, units30, units90, velocity, DaysOfInventory(p, velocity), times, plan, status);
+                var average30 = AveragePerDay(sales.Where(s => s.Day >= recentStart).Select(s => (s.Day, s.Quantity)), RecentSalesDays, today);
+                var average90 = AveragePerDay(sales.Select(s => (s.Day, s.Quantity)), VelocityWindowDays, today);
+                return new InventoryItem(p, units30, units90, velocity, DaysOfInventory(p, velocity), times, plan, status, average30, average90);
             })
             .OrderBy(i => i.Status)
             .ThenBy(i => i.Restock?.DaysUntilAction is null)
@@ -164,6 +166,24 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
 
         var coverageDays = Math.Min(VelocityWindowDays, today.DayNumber - firstSale.DayNumber + 1);
         return coverageDays < MinCoverageDays ? null : Math.Round((decimal)unitsSold / coverageDays, 2);
+    }
+
+    /// <summary>
+    /// Units per day over the days the SKU's sales history covers within a window (first sale in the
+    /// window to today), or null when nothing sold. Unlike the planning velocity there is no
+    /// minimum-history rule: this is a plain description of recent sales.
+    /// </summary>
+    private static decimal? AveragePerDay(IEnumerable<(DateOnly Day, int Quantity)> sales, int windowDays, DateOnly today)
+    {
+        var list = sales.ToList();
+        var units = list.Sum(s => s.Quantity);
+        if (units == 0)
+        {
+            return null;
+        }
+
+        var days = Math.Min(windowDays, today.DayNumber - list.Min(s => s.Day).DayNumber + 1);
+        return Math.Round((decimal)units / days, 1);
     }
 
     private static decimal? DaysOfInventory(InventoryPosition position, decimal? velocity) =>

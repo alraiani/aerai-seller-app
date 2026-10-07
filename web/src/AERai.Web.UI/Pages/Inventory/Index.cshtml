@@ -193,7 +193,8 @@
                         <th><a href="@Model.SortLink(InventorySort.DaysOfInventory)" class="sort-link">Cover @Model.SortArrow(InventorySort.DaysOfInventory)</a>
                             <partial name="_Tip" model='"Days of inventory: how long sellable, inbound, and FC-transfer stock lasts at the current sales rate (home stock not counted). The bar compares it with the restock target."' /></th>
                         <th class="text-end col-sold"><a href="@Model.SortLink(InventorySort.Sold30d)" class="sort-link">Sold 30d @Model.SortArrow(InventorySort.Sold30d)</a></th>
-                        <th class="text-end col-sold"><a href="@Model.SortLink(InventorySort.Sold90d)" class="sort-link">Sold 90d @Model.SortArrow(InventorySort.Sold90d)</a></th>
+                        <th class="text-end col-sold"><a href="@Model.SortLink(InventorySort.Sold90d)" class="sort-link">Sold 90d @Model.SortArrow(InventorySort.Sold90d)</a>
+                            <partial name="_Tip" model='"Units sold in the window. Per day averages over the days since the first sale in that window, so a SKU (or sales history) newer than the window isn’t understated."' /></th>
                         <th>Next step <partial name="_Tip" model='"What to do to stay in stock: send home stock first, order the rest from your supplier, each by the last day it still arrives in time. Hover a row’s step for the stockout date and lead times."' /></th>
                         @if (Model.CanEdit)
                         {
@@ -245,12 +246,18 @@
                         </td>
                         <td class="text-end col-sold">
                             <div>@item.UnitsSold30d.ToString("N0", en)</div>
-                            @if (item.DailyVelocity is { } perDay)
+                            @if (item.AveragePerDay30d is { } perDay30)
                             {
-                                <div class="cell-sub">@perDay.ToString("0.0", en)/day</div>
+                                <div class="cell-sub">@perDay30.ToString("0.0", en)/day</div>
                             }
                         </td>
-                        <td class="text-end col-sold">@item.UnitsSold90d.ToString("N0", en)</td>
+                        <td class="text-end col-sold">
+                            <div>@item.UnitsSold90d.ToString("N0", en)</div>
+                            @if (item.AveragePerDay90d is { } perDay90)
+                            {
+                                <div class="cell-sub">@perDay90.ToString("0.0", en)/day</div>
+                            }
+                        </td>
                         <td>
                             @if (item.Restock is { } plan && plan.UnitsNeeded > 0)
                             {

@@ -206,4 +206,27 @@ public sealed class InventoryServiceTests
 
         Assert.Equal(expected, overview.Items.Items.Select(i => i.Sku));
     }
+
+    [Fact]
+    public async Task GetItemsAsync_AveragesPerDayOverTheDaysWithHistoryInEachWindow()
+    {
+        Stock("A", available: 10);
+        Sold("A", Eastern(9, 26, 12), 10);  // 10 local days ago (Sep 26 → Oct 5 = 10 days)
+        Sold("A", Eastern(8, 7, 12), 60);   // 60 days ago: only in the 90-day window
+
+        var item = await SingleItemAsync();
+
+        Assert.Equal(1.0m, item.AveragePerDay30d);  // 10 units / 10 days of history in the 30-day window
+        Assert.Equal(1.2m, item.AveragePerDay90d);  // 70 units / 60 days since the first sale
+    }
+
+    [Fact]
+    public async Task GetItemsAsync_NothingSold_NoAverage()
+    {
+        Stock("A", available: 10);
+
+        var item = await SingleItemAsync();
+
+        Assert.Equal((null, null), (item.AveragePerDay30d, item.AveragePerDay90d));
+    }
 }
