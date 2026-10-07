@@ -19,6 +19,7 @@ namespace AERai.Web.Application.Imports;
 /// <param name="ErrorMessage">Batch-level failure reason, if any.</param>
 /// <param name="RawFilePath">Path of the original file in raw blob storage, if stored.</param>
 /// <param name="RawFileSha256">SHA-256 of the original file, if stored.</param>
+/// <param name="SkippedRowCount">Rows left out on the last promotion because they belong to another marketplace.</param>
 public sealed record ImportBatchSummary(
     long Id,
     ImportSource Source,
@@ -33,4 +34,5 @@ public sealed record ImportBatchSummary(
     DateTimeOffset? PromotedAt,
     string? ErrorMessage,
     string? RawFilePath,
-    string? RawFileSha256);
+    string? RawFileSha256,
+    int SkippedRowCount = 0);

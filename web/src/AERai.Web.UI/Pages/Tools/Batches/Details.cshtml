@@ -23,7 +23,7 @@
                 }
             </dd>
             <dt class="col-sm-3">Uploaded</dt><dd class="col-sm-9">@b.UploadedAt.ToString("u") by @b.UploadedBy</dd>
-            <dt class="col-sm-3">Rows</dt><dd class="col-sm-9">@b.RowCount.ToString("N0") staged · @b.PromotedRowCount.ToString("N0") promoted · @b.RejectedRowCount.ToString("N0") rejected</dd>
+            <dt class="col-sm-3">Rows</dt><dd class="col-sm-9">@b.RowCount.ToString("N0") staged · @b.PromotedRowCount.ToString("N0") promoted · @b.RejectedRowCount.ToString("N0") rejected@(b.SkippedRowCount > 0 ? $" · {b.SkippedRowCount:N0} for other marketplaces" : "")</dd>
             <dt class="col-sm-3">Status</dt><dd class="col-sm-9"><partial name="_BatchStatusBadge" model="b.Status" /></dd>
             @if (b.ErrorMessage is not null)
             {

@@ -313,7 +313,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
 
         var promoted = await _promotion.PromoteAsync(batchId, cancellationToken).ConfigureAwait(false);
         context.Notes.Add(promoted.IsSuccess
-            ? $"Batch {batchId}: {promoted.Value.PromotedRowCount:N0} promoted, {promoted.Value.RejectedRowCount:N0} rejected."
+            ? $"Batch {batchId}: {promoted.Value.PromotedRowCount:N0} promoted, {promoted.Value.RejectedRowCount:N0} rejected{SkippedNote(promoted.Value)}."
             : $"Batch {batchId} staged but promotion failed: {promoted.Error}");
     }
 
@@ -328,6 +328,10 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             ? marketplace
             : throw new InvalidOperationException($"{marketplace.Name} is not active, so its reports are not pulled.");
     }
+
+    // An orders report covers its whole region, so other marketplaces' rows are routine, not errors.
+    private static string SkippedNote(PromotionSummary summary) =>
+        summary.SkippedRowCount > 0 ? $", {summary.SkippedRowCount:N0} for other marketplaces" : "";
 
     private static ImportSource ToImportSource(AmazonReportType reportType) => reportType switch
     {
