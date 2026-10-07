@@ -28,9 +28,16 @@ public sealed class IngestionOptions
     [Range(typeof(TimeSpan), "00:01:00", "1.00:00:00")]
     public TimeSpan SchedulerMaxSleep { get; set; } = TimeSpan.FromHours(6);
 
-    /// <summary>Delay between report status checks while Amazon generates a report.</summary>
+    /// <summary>
+    /// Delay before the first report status check. Each check that finds the report still being
+    /// generated doubles the delay, up to <see cref="ReportPollMaxInterval"/>.
+    /// </summary>
     [Range(typeof(TimeSpan), "00:00:01", "00:05:00")]
     public TimeSpan ReportPollInterval { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Longest delay between report status checks once the backoff has grown.</summary>
+    [Range(typeof(TimeSpan), "00:00:01", "01:00:00")]
+    public TimeSpan ReportPollMaxInterval { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <summary>Give up waiting for a report after this long.</summary>
     [Range(typeof(TimeSpan), "00:01:00", "04:00:00")]

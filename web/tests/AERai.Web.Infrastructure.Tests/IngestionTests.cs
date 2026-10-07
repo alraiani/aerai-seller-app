@@ -142,6 +142,66 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     }
 
     [SqlFact]
+    public async Task PendingRun_IsFoundWhenDue_ClaimedOnce_AndClearedOnCompletion()
+    {
+        var id = await AddScheduleAsync(AmazonReportType.Orders, "pending-run");
+        await using var scope1 = fixture.Services.CreateAsyncScope();
+        await using var scope2 = fixture.Services.CreateAsyncScope();
+        var repo1 = scope1.ServiceProvider.GetRequiredService<ISyncRunRepository>();
+        var repo2 = scope2.ServiceProvider.GetRequiredService<ISyncRunRepository>();
+        var now = new DateTimeOffset(2026, 10, 7, 12, 0, 0, TimeSpan.Zero);
+
+        var run = new SyncRun { SyncScheduleId = id, MarketplaceId = MarketplaceIds.UnitedStates, TriggeredBy = "tests", StartedAt = now };
+        run.Id = await repo1.StartAsync(run, CancellationToken.None);
+        run.PendingReportId = "PENDING-1";
+        run.NextCheckAt = now.AddMinutes(1);
+        await repo1.SaveProgressAsync(run, CancellationToken.None);
+
+        Assert.True(await repo1.HasPendingAsync(id, CancellationToken.None));
+        Assert.DoesNotContain(await repo1.GetPendingDueAsync(now, CancellationToken.None), r => r.Id == run.Id);
+        Assert.Contains(await repo1.GetPendingDueAsync(now.AddMinutes(1), CancellationToken.None), r => r.Id == run.Id);
+        Assert.NotNull(await repo1.GetNextPendingCheckAtAsync(CancellationToken.None));
+
+        var claims = await Task.WhenAll(
+            repo1.TryClaimCheckAsync(run.Id, now.AddMinutes(1), now.AddMinutes(16), CancellationToken.None),
+            repo2.TryClaimCheckAsync(run.Id, now.AddMinutes(1), now.AddMinutes(16), CancellationToken.None));
+        Assert.Single(claims, won => won);
+
+        run.Status = SyncRunStatus.Succeeded;
+        run.CompletedAt = now.AddMinutes(2);
+        await repo1.CompleteAsync(run, CancellationToken.None);
+
+        var stored = await repo1.GetAsync(run.Id, CancellationToken.None);
+        Assert.Null(stored!.PendingReportId);
+        Assert.Null(stored.NextCheckAt);
+        Assert.False(await repo1.HasPendingAsync(id, CancellationToken.None));
+    }
+
+    [SqlFact]
+    public async Task FailAbandoned_FailsOnlyOldRunsThatAreNotWaitingOnAmazon()
+    {
+        var id = await AddScheduleAsync(AmazonReportType.Orders, "abandoned-runs");
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ISyncRunRepository>();
+        var now = new DateTimeOffset(2026, 10, 7, 12, 0, 0, TimeSpan.Zero);
+
+        SyncRun Run(DateTimeOffset startedAt) => new() { SyncScheduleId = id, MarketplaceId = MarketplaceIds.UnitedStates, TriggeredBy = "tests", StartedAt = startedAt };
+        var old = await repo.StartAsync(Run(now.AddHours(-2)), CancellationToken.None);
+        var recent = await repo.StartAsync(Run(now.AddMinutes(-5)), CancellationToken.None);
+        var waiting = Run(now.AddHours(-2));
+        waiting.Id = await repo.StartAsync(waiting, CancellationToken.None);
+        waiting.PendingReportId = "WAITING-1";
+        waiting.NextCheckAt = now;
+        await repo.SaveProgressAsync(waiting, CancellationToken.None);
+
+        await repo.FailAbandonedAsync(now.AddHours(-1), "Interrupted", now, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Failed, (await repo.GetAsync(old, CancellationToken.None))!.Status);
+        Assert.Equal(SyncRunStatus.Running, (await repo.GetAsync(recent, CancellationToken.None))!.Status);
+        Assert.Equal(SyncRunStatus.Running, (await repo.GetAsync(waiting.Id, CancellationToken.None))!.Status);
+    }
+
+    [SqlFact]
     public async Task RecordSuccess_OlderWindow_NeverMovesMarkerBackwards()
     {
         var id = await AddScheduleAsync(AmazonReportType.Orders, "marker-forward-only");
@@ -161,8 +221,12 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         var id = await AddScheduleAsync(AmazonReportType.Orders, "sim-orders");
 
         await using var scope = fixture.Services.CreateAsyncScope();
-        var summary = await scope.ServiceProvider.GetRequiredService<IReportIngestionService>()
-            .RunAsync(id, SyncTrigger.Manual, "tests@aeraigroup.com", backfill: null, CancellationToken.None);
+        var ingestion = scope.ServiceProvider.GetRequiredService<IReportIngestionService>();
+        var started = await ingestion.RunAsync(id, SyncTrigger.Manual, "tests@aeraigroup.com", backfill: null, CancellationToken.None);
+
+        // The run waits for Amazon's report instead of blocking; the simulator has it ready at the first check.
+        Assert.Equal(SyncRunStatus.Running, started.Status);
+        var summary = await ingestion.ContinueAsync(started.RunId, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
         var batchId = Assert.Single(summary.ImportBatchIds);

@@ -12,8 +12,10 @@ namespace AERai.Web.Application.Ingestion;
 /// <summary>
 /// Default <see cref="IReportIngestionService"/>. Two strategies, chosen by report type:
 /// <list type="bullet">
-///   <item><b>Requested</b> (Orders, FBA inventory): ask Amazon to generate a report, poll until it
-///   is ready, then download it.</item>
+///   <item><b>Requested</b> (Orders, FBA inventory, restock): ask Amazon to generate a report and
+///   record it on the run as pending; <see cref="ContinueAsync"/> later checks on it, with a growing
+///   delay between checks, and downloads it once ready. Nothing waits in memory, so the scheduler is
+///   free in the meantime and a restart resumes the run.</item>
 ///   <item><b>Listed</b> (Settlements): Amazon generates these itself, so list completed reports
 ///   and ingest each one not already in the <see cref="IngestedReport"/> ledger.</item>
 /// </list>
@@ -96,6 +98,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             Trigger = trigger,
             TriggeredBy = triggeredBy,
             StartedAt = _clock.GetUtcNow(),
+            BackfillStart = backfill?.Start,
+            BackfillEnd = backfill?.End,
         };
         run.Id = await _runs.StartAsync(run, cancellationToken).ConfigureAwait(false);
         LogRunStarted(run.Id, schedule.Name, trigger);
@@ -114,17 +118,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             }
             else
             {
-                await IngestRequestedReportAsync(context, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (run.Status == SyncRunStatus.Running)
-            {
-                run.Status = context.BatchIds.Count > 0 ? SyncRunStatus.Succeeded : SyncRunStatus.NoData;
-            }
-
-            if (run.Status is SyncRunStatus.Succeeded or SyncRunStatus.NoData && context.CoveredUntil is { } coveredUntil)
-            {
-                await _schedules.RecordSuccessAsync(schedule.Id, coveredUntil, cancellationToken).ConfigureAwait(false);
+                await RequestReportAsync(context, cancellationToken).ConfigureAwait(false);
+                return Summarize(context);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -139,8 +134,103 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             Fail(run, ex.Message);
         }
 
+        return await FinishAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task<SyncRunSummary> ContinueAsync(long runId, CancellationToken cancellationToken)
+    {
+        var run = await _runs.GetAsync(runId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"Sync run {runId} does not exist.");
+        if (run.Status != SyncRunStatus.Running || run.PendingReportId is not { } reportId)
+        {
+            return new SyncRunSummary(run.Id, run.Status, run.Message ?? string.Empty, []);
+        }
+
+        // A schedule deleted while Amazon was generating its report still finishes the run, so the
+        // report Amazon already made is not wasted.
+        var schedule = await _schedules.GetIncludingDeletedAsync(run.SyncScheduleId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"Sync schedule {run.SyncScheduleId} does not exist.");
+        var backfill = run.BackfillStart is { } start && run.BackfillEnd is { } end ? new BackfillWindow(start, end) : null;
+        var context = new RunContext(schedule, run, backfill);
+        context.ReportIds.Add(reportId);
+
+        try
+        {
+            context.Marketplace = await ResolveMarketplaceAsync(schedule, cancellationToken).ConfigureAwait(false);
+            var status = await _gateway.GetReportStatusAsync(context.Marketplace, reportId, cancellationToken).ConfigureAwait(false);
+            if (status.Status is AmazonProcessingStatus.InQueue or AmazonProcessingStatus.InProgress)
+            {
+                var now = _clock.GetUtcNow();
+                if (now >= run.StartedAt + _options.ReportMaxWait)
+                {
+                    throw new TimeoutException($"Report {reportId} was not ready after {_options.ReportMaxWait.TotalMinutes:0} minutes.");
+                }
+
+                run.PollAttempts++;
+                run.NextCheckAt = now + PollDelay(run.PollAttempts);
+                await _runs.SaveProgressAsync(run, cancellationToken).ConfigureAwait(false);
+                return Summarize(context);
+            }
+
+            await IngestFinishedReportAsync(context, reportId, status, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Shutting down mid-check: leave the run waiting and due now, so the next start resumes it
+            // straight away instead of after the claim lease.
+            run.NextCheckAt = _clock.GetUtcNow();
+            await _runs.SaveProgressAsync(run, CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+#pragma warning disable CA1031 // A background run must record any failure in its history instead of crashing the scheduler.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            LogRunFailed(ex, run.Id, schedule.Name);
+            Fail(run, ex.Message);
+        }
+
+        return await FinishAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Delay before the next status check: <see cref="IngestionOptions.ReportPollInterval"/> doubled
+    /// for every check that found the report still being generated, capped at
+    /// <see cref="IngestionOptions.ReportPollMaxInterval"/>. Most reports are ready within a few
+    /// minutes, so early checks are frequent and a slow report costs few calls.
+    /// </summary>
+    private TimeSpan PollDelay(int attempts)
+    {
+        var max = _options.ReportPollMaxInterval > _options.ReportPollInterval ? _options.ReportPollMaxInterval : _options.ReportPollInterval;
+        var delay = _options.ReportPollInterval;
+        for (var i = 0; i < attempts && delay < max; i++)
+        {
+            delay += delay;
+        }
+
+        return delay > max ? max : delay;
+    }
+
+    /// <summary>
+    /// Records the outcome of a run that is no longer waiting on Amazon and moves the schedule's
+    /// last-successful marker forward.
+    /// </summary>
+    private async Task<SyncRunSummary> FinishAsync(RunContext context, CancellationToken cancellationToken)
+    {
+        var run = context.Run;
+        if (run.Status == SyncRunStatus.Running)
+        {
+            run.Status = context.BatchIds.Count > 0 ? SyncRunStatus.Succeeded : SyncRunStatus.NoData;
+        }
+
+        if (run.Status is SyncRunStatus.Succeeded or SyncRunStatus.NoData && context.CoveredUntil is { } coveredUntil)
+        {
+            await _schedules.RecordSuccessAsync(context.Schedule.Id, coveredUntil, cancellationToken).ConfigureAwait(false);
+        }
+
         run.CompletedAt = _clock.GetUtcNow();
-        if (backfill is not null && run.Status != SyncRunStatus.Failed)
+        if (context.Backfill is { } backfill && run.Status != SyncRunStatus.Failed)
         {
             context.Notes.Insert(0, $"Backfill {backfill}.");
         }
@@ -148,16 +238,25 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         run.Message ??= string.Join(" ", context.Notes);
         run.AmazonReportIds = context.ReportIds.Count > 0 ? string.Join(",", context.ReportIds) : null;
         run.ImportBatchIds = context.BatchIds.Count > 0 ? string.Join(",", context.BatchIds) : null;
+        run.PendingReportId = null;
+        run.NextCheckAt = null;
 
         // Persist the outcome even when shutdown cancelled the run itself.
         await _runs.CompleteAsync(run, CancellationToken.None).ConfigureAwait(false);
         LogRunCompleted(run.Id, run.Status, run.Message);
 
-        return new SyncRunSummary(run.Id, run.Status, run.Message, context.BatchIds);
+        return Summarize(context);
     }
 
-    /// <summary>Request → poll → download one on-demand report.</summary>
-    private async Task IngestRequestedReportAsync(RunContext context, CancellationToken cancellationToken)
+    private static SyncRunSummary Summarize(RunContext context) =>
+        new(context.Run.Id, context.Run.Status, context.Run.Message ?? string.Join(" ", context.Notes), context.BatchIds);
+
+    /// <summary>
+    /// Asks Amazon to generate an on-demand report and records it on the run as pending. The run
+    /// stays <see cref="SyncRunStatus.Running"/>; the scheduler checks on it later through
+    /// <see cref="ContinueAsync"/> instead of waiting here.
+    /// </summary>
+    private async Task RequestReportAsync(RunContext context, CancellationToken cancellationToken)
     {
         var now = _clock.GetUtcNow();
         DateTimeOffset? start = null;
@@ -174,24 +273,46 @@ public sealed partial class ReportIngestionService : IReportIngestionService
                     : end.Value.AddDays(-context.Schedule.LookbackDays);
         }
 
-        context.Run.DataStart = start;
-        context.Run.DataEnd = end;
+        var run = context.Run;
+        run.DataStart = start;
+        run.DataEnd = end;
 
         var reportId = await _gateway.RequestReportAsync(context.Marketplace, context.Schedule.ReportType, start, end, cancellationToken).ConfigureAwait(false);
         context.ReportIds.Add(reportId);
 
-        var status = await WaitForReportAsync(context.Marketplace, reportId, cancellationToken).ConfigureAwait(false);
+        run.AmazonReportIds = reportId;
+        run.PendingReportId = reportId;
+        run.PollAttempts = 0;
+        run.NextCheckAt = now + PollDelay(0);
+        await _runs.SaveProgressAsync(run, cancellationToken).ConfigureAwait(false);
+        LogAwaitingReport(run.Id, reportId, run.NextCheckAt.Value);
+    }
+
+    /// <summary>Downloads (or records the absence of) an on-demand report Amazon has finished with.</summary>
+    private async Task IngestFinishedReportAsync(RunContext context, string reportId, AmazonReportStatus status, CancellationToken cancellationToken)
+    {
+        // Snapshot reports have no data window; they cover up to when they were requested.
+        var coveredUntil = context.Run.DataEnd ?? context.Run.StartedAt;
         switch (status.Status)
         {
             case AmazonProcessingStatus.Done when status.ReportDocumentId is not null:
-                await LandAndStageAsync(context, reportId, status.ReportDocumentId, cancellationToken).ConfigureAwait(false);
-                context.CoveredUntil = end ?? now;
+                // A restart between staging and completing the run must not stage the same report twice.
+                if (await _runs.IsReportIngestedAsync(reportId, cancellationToken).ConfigureAwait(false))
+                {
+                    context.Notes.Add($"Report {reportId} was already ingested.");
+                }
+                else
+                {
+                    await LandAndStageAsync(context, reportId, status.ReportDocumentId, cancellationToken).ConfigureAwait(false);
+                }
+
+                context.CoveredUntil = coveredUntil;
                 break;
 
             case AmazonProcessingStatus.Cancelled:
                 // For on-demand reports Amazon cancels rather than returning an empty file when there's no data.
                 context.Notes.Add("Amazon had no data for this window.");
-                context.CoveredUntil = end ?? now;
+                context.CoveredUntil = coveredUntil;
                 break;
 
             default:
@@ -234,27 +355,6 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         }
 
         context.CoveredUntil = until;
-    }
-
-    /// <summary>Polls a report's status until it leaves the queue or the wait limit is reached.</summary>
-    private async Task<AmazonReportStatus> WaitForReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
-    {
-        var deadline = _clock.GetUtcNow() + _options.ReportMaxWait;
-        while (true)
-        {
-            var status = await _gateway.GetReportStatusAsync(marketplace, reportId, cancellationToken).ConfigureAwait(false);
-            if (status.Status is not (AmazonProcessingStatus.InQueue or AmazonProcessingStatus.InProgress))
-            {
-                return status;
-            }
-
-            if (_clock.GetUtcNow() >= deadline)
-            {
-                throw new TimeoutException($"Report {reportId} was not ready after {_options.ReportMaxWait.TotalMinutes:0} minutes.");
-            }
-
-            await Task.Delay(_options.ReportPollInterval, _clock, cancellationToken).ConfigureAwait(false);
-        }
     }
 
     /// <summary>Downloads a document, lands it in raw storage, stages it, and optionally promotes it.</summary>
@@ -372,6 +472,9 @@ public sealed partial class ReportIngestionService : IReportIngestionService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} is a backfill from {BackfillStart} to {BackfillEnd}")]
     private partial void LogBackfill(long runId, DateTimeOffset backfillStart, DateTimeOffset backfillEnd);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} is waiting for Amazon report {ReportId}; next check at {NextCheckAt}")]
+    private partial void LogAwaitingReport(long runId, string reportId, DateTimeOffset nextCheckAt);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} finished: {Status} — {Message}")]
     private partial void LogRunCompleted(long runId, SyncRunStatus status, string? message);
