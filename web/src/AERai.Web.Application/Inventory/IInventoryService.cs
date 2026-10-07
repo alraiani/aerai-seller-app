@@ -19,4 +19,11 @@ public interface IInventoryService
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The overview.</returns>
     Task<InventoryOverview> GetOverviewAsync(Marketplace marketplace, PageRequest request, InventoryFilter filter, CancellationToken cancellationToken);
+
+    /// <summary>A family's SKUs grouped by color, for the inventory worksheet.</summary>
+    /// <param name="marketplace">Marketplace to report on.</param>
+    /// <param name="familyId">The family.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The worksheet (empty when the family has no SKUs here).</returns>
+    Task<InventoryWorksheet> GetWorksheetAsync(Marketplace marketplace, int familyId, CancellationToken cancellationToken);
 }

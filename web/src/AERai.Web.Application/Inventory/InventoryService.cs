@@ -109,6 +109,29 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
     }
 
     /// <summary>The SKU's stock state; the order of the checks is the order of urgency.</summary>
+    /// <inheritdoc/>
+    public async Task<InventoryWorksheet> GetWorksheetAsync(Marketplace marketplace, int familyId, CancellationToken cancellationToken)
+    {
+        var items = (await GetItemsAsync(marketplace, cancellationToken).ConfigureAwait(false))
+            .Where(i => i.Position.FamilyId == familyId)
+            .ToList();
+        var soon = options.Value.AlertLeadDays;
+
+        // Palette order, like the printed sheet; SKUs without a color come last so they stand out.
+        var groups = items
+            .GroupBy(i => i.Position.Color)
+            .OrderBy(g => g.Key is null)
+            .ThenBy(g => g.Key)
+            .Select(g =>
+            {
+                var skus = g.OrderBy(i => i.Sku, StringComparer.Ordinal).ToList();
+                return new WorksheetGroup(g.Key, skus, WorksheetTotals.Of(skus, soon));
+            })
+            .ToList();
+
+        return new InventoryWorksheet(familyId, groups, WorksheetTotals.Of(items, soon));
+    }
+
     private static StockStatus StatusOf(InventoryPosition position, int unitsSold30d, decimal? velocity, RestockPlan? plan, int soonDays) =>
         position.SnapshotDate is null ? StockStatus.NotAtAmazon
         : position.Available == 0 && unitsSold30d > 0 ? StockStatus.OutOfStock

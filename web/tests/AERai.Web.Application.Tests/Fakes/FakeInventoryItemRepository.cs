@@ -19,12 +19,19 @@ internal sealed class FakeInventoryItemRepository : IInventoryItemRepository
 
     public int SaveCalls { get; private set; }
 
+    public Task<int> SetColorAsync(IReadOnlyCollection<string> skus, ProductColor? color, CancellationToken cancellationToken)
+    {
+        var known = skus.Where(Products.ContainsKey).Distinct(StringComparer.Ordinal).ToList();
+        known.ForEach(sku => Products[sku].Color = color);
+        return Task.FromResult(known.Count);
+    }
+
     public void AddProduct(string sku) => Products[sku] = new Product { Sku = sku };
 
     public Task<InventoryItemDetails?> GetAsync(string sku, string marketplaceId, CancellationToken cancellationToken) =>
         Task.FromResult(Products.TryGetValue(sku, out var p)
             ? new InventoryItemDetails(p.Sku, p.Asin, p.Title, Families.FirstOrDefault(f => f.Id == p.FamilyId)?.Name, p.ImagePath,
-                HomeStock.GetValueOrDefault((marketplaceId, sku)), LeadTimes.GetValueOrDefault((marketplaceId, sku)) ?? LeadTimeSettings.None)
+                HomeStock.GetValueOrDefault((marketplaceId, sku)), LeadTimes.GetValueOrDefault((marketplaceId, sku)) ?? LeadTimeSettings.None, p.Color)
             : null);
 
     public Task<IReadOnlyList<ProductFamily>> ListFamiliesAsync(CancellationToken cancellationToken) =>

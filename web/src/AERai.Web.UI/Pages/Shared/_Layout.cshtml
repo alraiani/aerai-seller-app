@@ -5,8 +5,10 @@
     var currentPath = Context.Request.Path.Value ?? "/";
 
     // Highlights the sidebar entry for the current section.
-    string Active(string prefix) =>
-        (prefix == "/" ? currentPath == "/" : currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ? "active" : string.Empty;
+    // A section link stays highlighted on its sub-pages, except one that has its own link (except:).
+    string Active(string prefix, string? except = null) =>
+        (prefix == "/" ? currentPath == "/" : currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            && (except is null || !currentPath.StartsWith(except, StringComparison.OrdinalIgnoreCase)) ? "active" : string.Empty;
 }
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="light">
@@ -36,7 +38,8 @@
             <a class="nav-link @Active("/")" asp-page="/Index">Dashboard</a>
             <a class="nav-link @Active("/Notifications")" asp-page="/Notifications/Index">Notifications</a>
             <div class="nav-section">Operations</div>
-            <a class="nav-link @Active("/Inventory")" asp-page="/Inventory/Index">Inventory</a>
+            <a class="nav-link @Active("/Inventory", except: "/Inventory/Worksheet")" asp-page="/Inventory/Index">Inventory</a>
+            <a class="nav-link nav-sub @Active("/Inventory/Worksheet")" asp-page="/Inventory/Worksheet">Worksheet</a>
             <a class="nav-link @Active("/Orders")" asp-page="/Orders/Index">Orders</a>
             <a class="nav-link @Active("/Products")" asp-page="/Products/Index">Products &amp; COGS</a>
             <div class="nav-section">Bookkeeping</div>

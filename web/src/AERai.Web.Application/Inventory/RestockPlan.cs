@@ -22,6 +22,7 @@ namespace AERai.Web.Application.Inventory;
 /// Amazon and at home — runs out, keeping the safety buffer.
 /// </param>
 /// <param name="DaysUntilReorder">Days from today to <paramref name="ReorderBy"/> (negative = overdue).</param>
+/// <param name="DaysUntilSend">Days from today to <paramref name="SendBy"/> (negative = overdue), when there is something to send.</param>
 /// <param name="DaysUntilAction">
 /// Days from today to the earliest of the send and reorder deadlines (negative = overdue).
 /// </param>
@@ -35,4 +36,5 @@ public sealed record RestockPlan(
     int ReorderQuantity,
     DateOnly ReorderBy,
     int DaysUntilReorder,
+    int? DaysUntilSend,
     int DaysUntilAction);

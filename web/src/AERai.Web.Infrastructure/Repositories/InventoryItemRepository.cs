@@ -32,7 +32,8 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
              h == null ? 0 : h.Quantity,
              l == null
                  ? LeadTimeSettings.None
-                 : new LeadTimeSettings(l.SupplierLeadTimeDays, l.PrepTimeDays, l.TransitDays, l.SafetyStockDays, l.TargetStockDays)))
+                 : new LeadTimeSettings(l.SupplierLeadTimeDays, l.PrepTimeDays, l.TransitDays, l.SafetyStockDays, l.TargetStockDays),
+             p.Color))
         .SingleOrDefaultAsync(cancellationToken);
 
     /// <inheritdoc/>
@@ -120,6 +121,22 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
                     .SetProperty(p => p.ImageContentType, contentType),
                 cancellationToken)
             .ConfigureAwait(false) > 0;
+
+    /// <inheritdoc/>
+    public async Task<int> SetColorAsync(IReadOnlyCollection<string> skus, ProductColor? color, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(skus);
+
+        var updated = 0;
+        foreach (var chunk in skus.Distinct(StringComparer.Ordinal).Chunk(1000))
+        {
+            updated += await dbContext.Products.Where(p => chunk.Contains(p.Sku))
+                .ExecuteUpdateAsync(setters => setters.SetProperty(p => p.Color, color), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return updated;
+    }
 
     /// <inheritdoc/>
     public async Task<IReadOnlySet<string>> GetExistingSkusAsync(IReadOnlyCollection<string> skus, CancellationToken cancellationToken)

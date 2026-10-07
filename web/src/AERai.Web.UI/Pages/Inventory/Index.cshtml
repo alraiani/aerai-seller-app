@@ -133,6 +133,8 @@
             <div class="card-toolbar-group">
                 <a asp-page="Families" asp-route-back="@Model.Back" class="btn btn-sm btn-soft" data-bs-toggle="modal" data-bs-target="#families-dialog"
                    title="Create, rename, or delete families"><partial name="_Icon" model='"tag"' /> Families</a>
+                <a asp-page="Worksheet" class="btn btn-sm btn-soft"><partial name="_Icon" model='"grid"' /> Worksheet</a>
+                <a asp-page="HomeStock/Ledger" class="btn btn-sm btn-soft"><partial name="_Icon" model='"list"' /> Ledger</a>
                 <a asp-page="HomeStock/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"edit"' /> Edit home stock</a>
                 <a asp-page="HomeStock/Upload" class="btn btn-sm btn-soft btn-icon" aria-label="Upload home stock"
                    data-bs-toggle="tooltip" data-bs-title="Upload home stock from a spreadsheet (.xlsx or .csv)."><partial name="_Icon" model='"upload"' /></a>
@@ -145,7 +147,7 @@
            then type or pick a family. A new name creates the family. *@
         <form method="post" asp-page="Families" asp-page-handler="Assign" asp-route-back="@Model.Back" id="family-bulk-form"
               class="bulk-bar bulk-bar-row" data-bulk-bar data-bulk-noun="SKU">
-            <span class="bulk-count" data-bulk-count>Tick SKUs to put them in a family.</span>
+            <span class="bulk-count" data-bulk-count>Tick SKUs to set their family or color.</span>
             <input type="text" name="family" list="family-names" class="form-control form-control-sm bulk-input" placeholder="Family name…"
                    maxlength="@FamilyNames.MaxLength" autocomplete="off" aria-label="Family for the selected SKUs" data-bulk-button />
             <datalist id="family-names">
@@ -158,6 +160,16 @@
                     data-bs-toggle="tooltip" data-bs-title="Put the ticked SKUs in this family. A new name creates it."><partial name="_Icon" model='"tag"' /> Set family</button>
             <button type="submit" name="clear" value="true" class="btn btn-sm btn-soft btn-icon" data-bulk-button aria-label="Remove the ticked SKUs from their family"
                     data-bs-toggle="tooltip" data-bs-title="Take the ticked SKUs out of their family."><partial name="_Icon" model='"x"' /></button>
+            <span class="bulk-divider" aria-hidden="true"></span>
+            <select name="color" class="form-select form-select-sm bulk-input" aria-label="Color for the selected SKUs" data-bulk-button>
+                <option value="">No color</option>
+                @foreach (var c in ColorFormat.All)
+                {
+                    <option value="@c">@ColorFormat.Label(c)</option>
+                }
+            </select>
+            <button type="submit" asp-page="Colors" asp-page-handler="Assign" asp-route-back="@Model.Back" class="btn btn-sm btn-soft" data-bulk-button
+                    data-bs-toggle="tooltip" data-bs-title="Give the ticked SKUs this color (groups them on the Worksheet). No color clears it.">Set color</button>
         </form>
     }
 
