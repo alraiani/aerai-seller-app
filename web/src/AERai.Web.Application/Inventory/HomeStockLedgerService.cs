@@ -113,6 +113,49 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
     }
 
     /// <inheritdoc/>
+    public async Task<Result<HomeStockCountResult>> ShipToAmazonAsync(string marketplaceId, IReadOnlyList<HomeStockShipment> shipments, string? reference, string user, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(shipments);
+        ArgumentException.ThrowIfNullOrWhiteSpace(user);
+
+        var now = clock.GetUtcNow();
+        var tidyReference = Tidy(reference);
+        string? error =
+            shipments.Count == 0 ? "Enter how many units to send."
+            : shipments.Count > InventoryItemService.MaxHomeStockRows ? $"Send at most {InventoryItemService.MaxHomeStockRows:N0} SKUs at a time."
+            : shipments.FirstOrDefault(s => s.Units <= 0) is { } none ? $"Enter how many units of {none.Sku} to send, from 1 up."
+            : shipments.FirstOrDefault(s => s.Units > s.Current) is { } over ? $"Can't send more {over.Sku} than the {over.Current:N0} at home."
+            : tidyReference?.Length > MaxReferenceLength ? $"The shipment id can be at most {MaxReferenceLength} characters."
+            : null;
+        if (error is not null)
+        {
+            return Result.Failure<HomeStockCountResult>(error);
+        }
+
+        // A send is the count going down by the units shipped, logged as Shipped to Amazon. Going through the
+        // count-apply path keeps it in one serializable transaction and skips SKUs whose balance moved since
+        // the amounts were entered, instead of subtracting from a number the user never saw.
+        var changes = shipments
+            .GroupBy(s => s.Sku, StringComparer.Ordinal)
+            .Select(g => g.Last())
+            .Select(s => new HomeStockCountChange(s.Sku, s.Current, s.Current - s.Units))
+            .ToList();
+        var template = new HomeStockLedgerWrite(marketplaceId, string.Empty, HomeStockMovementType.ShippedToAmazon, 0, now, tidyReference, null, null, now, user);
+        var (applied, stale) = await repository.ApplyCountsAsync(
+            marketplaceId, changes, HomeStockMovementType.ShippedToAmazon, HomeStockMovementType.ShippedToAmazon, template, cancellationToken).ConfigureAwait(false);
+
+        var unitsOut = -applied.Sum(c => c.Difference);
+        LogShipped(applied.Count, unitsOut, stale.Count, marketplaceId);
+        if (applied.Count > 0)
+        {
+            alerts.Request();
+        }
+
+        return Result.Success(new HomeStockCountResult(applied.Count, 0, unitsOut, stale));
+    }
+
+    /// <inheritdoc/>
     public async Task<Result> ReverseAsync(string marketplaceId, long id, string user, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
@@ -207,6 +250,9 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Applied a count sheet in {MarketplaceId}: {Applied} entries, +{UnitsIn}/-{UnitsOut} units, {Stale} stale")]
     private partial void LogCountsApplied(int applied, int unitsIn, int unitsOut, int stale, string marketplaceId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Logged shipments to Amazon in {MarketplaceId}: {Applied} entries, -{UnitsOut} units, {Stale} stale")]
+    private partial void LogShipped(int applied, int unitsOut, int stale, string marketplaceId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Reversed home-stock entry {Id} with {ReversalId} in {MarketplaceId}")]
     private partial void LogReversed(long id, long? reversalId, string marketplaceId);

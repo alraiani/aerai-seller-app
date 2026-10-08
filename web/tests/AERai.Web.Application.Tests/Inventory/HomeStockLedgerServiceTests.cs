@@ -176,6 +176,52 @@ public sealed class HomeStockLedgerServiceTests
         Assert.True((await service.ApplyCountsAsync(Us, [], Options(), User, CancellationToken.None)).IsFailure);
     }
 
+    private Task<Result<HomeStockCountResult>> ShipAsync(params HomeStockShipment[] shipments) =>
+        CreateService().ShipToAmazonAsync(Us, shipments, " FBA15ABC ", User, CancellationToken.None);
+
+    [Fact]
+    public async Task ShipToAmazonAsync_SubtractsAndLogsShippedToAmazonWithTheShipmentId()
+    {
+        await RecordAsync(HomeStockMovementType.ReceivedFromSupplier, 100);
+
+        var result = await ShipAsync(new HomeStockShipment("FOB00BL", 100, 40));
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal((1, 40), (result.Value.Applied, result.Value.UnitsOut));
+        Assert.Equal((HomeStockMovementType.ShippedToAmazon, -40, "FBA15ABC"), (_repository.Entries[^1].Type, _repository.Entries[^1].Units, _repository.Entries[^1].Reference));
+        Assert.Equal(60, _repository.Balance(Us, "FOB00BL"));
+        Assert.Equal(2, _alerts.Requests); // The receipt and the shipment.
+    }
+
+    [Fact]
+    public async Task ShipToAmazonAsync_MoreThanAtHomeOrNothing_FailsAndWritesNothing()
+    {
+        await RecordAsync(HomeStockMovementType.ReceivedFromSupplier, 10);
+
+        var over = await ShipAsync(new HomeStockShipment("FOB00BL", 10, 11));
+        var zero = await ShipAsync(new HomeStockShipment("FOB00BL", 10, 0));
+        var none = await ShipAsync();
+
+        Assert.Contains("than the 10 at home", over.Error, StringComparison.Ordinal);
+        Assert.True(zero.IsFailure);
+        Assert.True(none.IsFailure);
+        Assert.Single(_repository.Entries);
+    }
+
+    [Fact]
+    public async Task ShipToAmazonAsync_BalanceChangedSinceEntered_SkipsItAsStale()
+    {
+        await RecordAsync(HomeStockMovementType.ReceivedFromSupplier, 30);
+
+        // The amount was entered when the page showed 20; it is 30 now.
+        var result = await ShipAsync(new HomeStockShipment("FOB00BL", 20, 5));
+
+        Assert.Equal(0, result.Value.Applied);
+        Assert.Equal(["FOB00BL"], result.Value.Stale);
+        Assert.Equal(30, _repository.Balance(Us, "FOB00BL"));
+        Assert.Equal(1, _alerts.Requests); // Only the receipt; nothing was shipped.
+    }
+
     [Fact]
     public void Payload_RoundTripsAndRejectsBadLines()
     {
