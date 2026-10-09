@@ -518,7 +518,13 @@ th .tip { text-transform: none; }
 .inventory-table td, .inventory-table th { white-space: nowrap; }
 /* The product column stays put while the numbers scroll sideways on narrow screens. */
 .inventory-table .product-col { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 15rem; max-width: 22rem; white-space: normal; }
-.inventory-table thead .product-col { background: var(--surface-2); z-index: 2; }
+.inventory-table thead .product-col { background: var(--surface-2); z-index: 3; }
+/* The header row stays in view while the list scrolls. A sticky header only sticks inside its nearest
+   scroll container, and .table-responsive already is one (for sideways scrolling), so the table scrolls
+   down inside it too, capped at about a screen. Borders don't travel with sticky cells under
+   border-collapse, so the header's bottom rule is drawn as a shadow. */
+.table-scroll { max-height: calc(100dvh - 6rem); overflow: auto; }
+.inventory-table thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--border); }
 .inventory-table tbody tr:hover .product-col { background: var(--surface-2); }
 .inventory-table .col-group { border-left: 1px solid var(--border); }
 .inventory-table .th-group { display: block; font-size: 0.65rem; letter-spacing: 0.06em; opacity: 0.75; }
