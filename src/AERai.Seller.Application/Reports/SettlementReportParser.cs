@@ -4,19 +4,35 @@ using AERai.Seller.Domain.Staging;
 namespace AERai.Seller.Application.Reports;
 
 /// <summary>
-/// Maps parsed GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE rows into a SettlementReport header (one per
+/// Maps parsed GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2 ("long" layout) rows into a SettlementReport header (one per
 /// distinct settlement-id — the settlement-level columns are repeated on every data row) plus that
 /// settlement's SettlementLineItems (one per detail row; summary rows with no amount-type are
-/// skipped). Column names below are Amazon's documented flat-file header names — unlike
-/// InventoryPlanningReportParser's, they have NOT yet been confirmed against a real report pull.
-/// Verify them against an actual settlement export during the first real sync and adjust here if
-/// Amazon's live output differs.
+/// skipped). Column names below match the _V2 header confirmed by a live SP-API pull on 2026-10-05.
+///
+/// The non-_V2 GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE is a different, "wide" layout with no
+/// amount-type/amount columns; feeding it here would skip every detail row and silently import zero
+/// line items, so Parse throws instead when those columns are absent from a non-empty report.
 /// </summary>
 public static class SettlementReportParser
 {
+    private static readonly string[] RequiredDetailColumns = ["amount-type", "amount"];
+
     public static (IReadOnlyList<SettlementReport> Settlements, IReadOnlyList<SettlementLineItem> LineItems) Parse(
         IReadOnlyList<IReadOnlyDictionary<string, string>> rows, DateTimeOffset syncedAt)
     {
+        // TsvReportParser drops trailing columns a short row doesn't reach, so a column missing from
+        // one row isn't proof it's missing from the header — only missing from every row is.
+        var missingColumns = RequiredDetailColumns
+            .Where(column => rows.Count > 0 && !rows.Any(row => row.ContainsKey(column)))
+            .ToList();
+        if (missingColumns.Count > 0)
+        {
+            throw new FormatException(
+                $"Settlement report is missing required column(s) {string.Join(", ", missingColumns)}. " +
+                "Expected the GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2 (long) layout; the non-_V2 " +
+                "GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE (wide) layout is not supported.");
+        }
+
         var settlementsById = new Dictionary<string, SettlementReport>(StringComparer.Ordinal);
         var lineItems = new List<SettlementLineItem>();
 
