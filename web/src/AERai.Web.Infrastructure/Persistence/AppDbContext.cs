@@ -76,6 +76,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Curated inventory snapshots.</summary>
     public DbSet<InventorySnapshot> InventorySnapshots => Set<InventorySnapshot>();
 
+    /// <summary>Curated AWD inventory snapshots.</summary>
+    public DbSet<AwdInventorySnapshot> AwdInventorySnapshots => Set<AwdInventorySnapshot>();
+
     /// <summary>Curated settlements.</summary>
     public DbSet<Settlement> Settlements => Set<Settlement>();
 

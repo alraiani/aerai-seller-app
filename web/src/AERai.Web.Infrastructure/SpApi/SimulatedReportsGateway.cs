@@ -21,7 +21,8 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
 
     private static readonly DateTimeOffset SettlementAnchor = new(2026, 1, 1, 7, 0, 0, TimeSpan.Zero);
 
-    private static readonly (string Sku, string Asin, string Title, decimal Price)[] Catalog =
+    /// <summary>The simulated product range, shared with <see cref="SimulatedAwdGateway"/> so AWD stock is for the same SKUs.</summary>
+    internal static readonly (string Sku, string Asin, string Title, decimal Price)[] Catalog =
     [
         ("AER-MAT-BLK", "B0C1MAT001", "AERai Yoga Mat - Black", 29.99m),
         ("AER-MAT-BLU", "B0C1MAT002", "AERai Yoga Mat - Blue", 29.99m),

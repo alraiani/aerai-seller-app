@@ -269,6 +269,7 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
         AmazonReportType.FbaInventory => "FBA inventory",
         AmazonReportType.FbaReservedInventory => "FBA reserved inventory",
         AmazonReportType.RestockRecommendations => "Restock recommendations",
+        AmazonReportType.AwdInventory => "AWD inventory",
         _ => type.ToString(),
     };
 

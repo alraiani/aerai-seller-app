@@ -1,7 +1,8 @@
 namespace AERai.Web.Domain.Ingestion;
 
 /// <summary>
-/// The SP-API reports the app ingests automatically, and how each is obtained.
+/// The SP-API data the app ingests automatically, and how each is obtained. Every value but
+/// <see cref="AwdInventory"/> is a Reports API report.
 /// </summary>
 public enum AmazonReportType
 {
@@ -31,4 +32,10 @@ public enum AmazonReportType
     /// of how many units Amazon recommends sending in and by when.
     /// </summary>
     RestockRecommendations = 5,
+
+    /// <summary>
+    /// AWD inventory (<c>GET /awd/2024-05-09/inventory</c>): not a report but a paginated listing of
+    /// what Amazon Warehousing and Distribution holds now; a point-in-time snapshot.
+    /// </summary>
+    AwdInventory = 6,
 }

@@ -12,7 +12,7 @@
 
 @* ---------- Summary tiles (counts ignore the status filter, so they stay put when one is clicked) ---------- *@
 <div class="row g-3 mb-3">
-    <div class="col-6 col-xl-3">
+    <div class="col-6 col-xl">
         <a class="card tile h-100 @(t.RestockOverdue > 0 ? "tile-bad" : "")" href="@Model.StatusLink(StockStatusFilter.NeedsAction)">
             <div class="kpi">
                 <div class="kpi-label">Needs restock <partial name="_Tip" model='"SKUs whose send or order deadline has passed or is within a week, worked back from when stock runs out and each SKU’s lead times. Click to list them."' /></div>
@@ -31,7 +31,7 @@
             </div>
         </a>
     </div>
-    <div class="col-6 col-xl-3">
+    <div class="col-6 col-xl">
         <a class="card tile h-100 @(t.OutOfStock > 0 ? "tile-bad" : "")" href="@Model.StatusLink(StockStatusFilter.OutOfStock)">
             <div class="kpi">
                 <div class="kpi-label">Out of stock <partial name="_Tip" model='"SKUs with nothing available at Amazon that sold in the last 30 days. Click to list them."' /></div>
@@ -40,16 +40,28 @@
             </div>
         </a>
     </div>
-    <div class="col-6 col-xl-3">
+    <div class="col-6 col-xl">
         <div class="card tile h-100">
             <div class="kpi">
-                <div class="kpi-label">Sellable units <partial name="_Tip" model='"Units customers can buy right now. Total at Amazon also counts inbound, reserved, and unfulfillable units."' /></div>
+                <div class="kpi-label">Sellable units <partial name="_Tip" model='"Units customers can buy right now. Total in FBA also counts inbound, reserved, and unfulfillable units."' /></div>
                 <div class="kpi-value">@t.Available.ToString("N0", en)</div>
-                <div class="kpi-foot">@t.AmazonTotal.ToString("N0", en) at Amazon · @t.Inbound.ToString("N0", en) inbound</div>
+                <div class="kpi-foot">@t.AmazonTotal.ToString("N0", en) in FBA · @t.Inbound.ToString("N0", en) inbound</div>
             </div>
         </div>
     </div>
-    <div class="col-6 col-xl-3">
+    @if (t.AwdTotal > 0)
+    {
+        <div class="col-6 col-xl">
+            <a class="card tile h-100" href="@Model.Link(("view", "breakdown"))">
+                <div class="kpi">
+                    <div class="kpi-label">In AWD <partial name="_Tip" model='"Units in Amazon Warehousing & Distribution, waiting to be replenished into FBA. Click for the per-SKU breakdown."' /></div>
+                    <div class="kpi-value">@t.AwdOnHand.ToString("N0", en)</div>
+                    <div class="kpi-foot">@t.AwdInbound.ToString("N0", en) on the way to AWD</div>
+                </div>
+            </a>
+        </div>
+    }
+    <div class="col-6 col-xl">
         @if (Model.CanEdit)
         {
             <a class="card tile h-100" asp-page="HomeStock/Index">
@@ -117,7 +129,7 @@
         <a href="@Model.Link(("view", null))" class="@(!Model.IsBreakdown ? "active" : "")"
            data-bs-toggle="tooltip" data-bs-title="Status, stock, cover, sales, and the next restock step.">Overview</a>
         <a href="@Model.Link(("view", "breakdown"))" class="@(Model.IsBreakdown ? "active" : "")"
-           data-bs-toggle="tooltip" data-bs-title="Every Amazon stock state (inbound stages, reserved reasons) plus home stock.">Stock breakdown</a>
+           data-bs-toggle="tooltip" data-bs-title="Stock in FBA (every state: inbound stages, reserved reasons), in AWD, and at home.">Stock breakdown</a>
     </nav>
 </div>
 
@@ -194,7 +206,7 @@
     }
     else if (!Model.IsBreakdown)
     {
-        <div class="table-responsive">
+        <div class="table-responsive table-scroll">
             <table class="table data-table inventory-table align-middle mb-0 @(Model.CanEdit ? "has-select" : "")">
                 <thead>
                     <tr>
@@ -332,21 +344,25 @@
     }
     else
     {
-        <div class="table-responsive">
+        <div class="table-responsive table-scroll">
             <table class="table data-table inventory-table align-middle mb-0">
                 <thead>
                     <tr>
                         <th class="product-col"><a href="@Model.SortLink(InventorySort.Sku)" class="sort-link">Product @Model.SortArrow(InventorySort.Sku)</a></th>
-                        <th class="text-end"><a href="@Model.SortLink(InventorySort.Available)" class="sort-link">Available @Model.SortArrow(InventorySort.Available)</a></th>
-                        <th class="text-end col-group" title="On a shipment plan, not shipped yet"><span class="th-group">Inbound</span>Working</th>
-                        <th class="text-end" title="In transit to Amazon"><span class="th-group">Inbound</span>Shipped</th>
-                        <th class="text-end" title="Arrived and being checked in"><span class="th-group">Inbound</span>Receiving</th>
-                        <th class="text-end col-group" title="Sold, waiting to ship"><span class="th-group">Reserved</span>Orders</th>
-                        <th class="text-end" title="Moving between fulfillment centers"><span class="th-group">Reserved</span>Transfer</th>
-                        <th class="text-end" title="Held for measuring or investigation"><span class="th-group">Reserved</span>Processing</th>
-                        <th class="text-end col-group">Unfulfillable</th>
-                        <th class="text-end">Home</th>
-                        <th class="text-end col-group">Total</th>
+                        <th class="text-end"><span class="th-group">FBA</span><a href="@Model.SortLink(InventorySort.Available)" class="sort-link">Available @Model.SortArrow(InventorySort.Available)</a></th>
+                        <th class="text-end col-group" title="On a shipment plan, not shipped yet"><span class="th-group">FBA inbound</span>Working</th>
+                        <th class="text-end" title="In transit to Amazon"><span class="th-group">FBA inbound</span>Shipped</th>
+                        <th class="text-end" title="Arrived and being checked in"><span class="th-group">FBA inbound</span>Receiving</th>
+                        <th class="text-end col-group" title="Sold, waiting to ship"><span class="th-group">FBA reserved</span>Orders</th>
+                        <th class="text-end" title="Moving between fulfillment centers"><span class="th-group">FBA reserved</span>Transfer</th>
+                        <th class="text-end" title="Held for measuring or investigation"><span class="th-group">FBA reserved</span>Processing</th>
+                        <th class="text-end col-group"><span class="th-group">FBA</span>Unfulfillable</th>
+                        <th class="text-end" title="Every unit in the FBA network, in any state"><span class="th-group">FBA</span>Total</th>
+                        <th class="text-end col-group" title="On its way from you to Amazon Warehousing &amp; Distribution"><span class="th-group">AWD</span>Inbound</th>
+                        <th class="text-end" title="In Amazon Warehousing &amp; Distribution"><span class="th-group">AWD</span>On hand</th>
+                        <th class="text-end" title="Moving from AWD into FBA. Not added to the totals: once the transfer shipment exists, these units are likely counted in FBA inbound too."><span class="th-group">AWD</span>To FBA</th>
+                        <th class="text-end col-group">Home</th>
+                        <th class="text-end col-group" title="FBA total + AWD (inbound and on hand) + home">Total</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -377,7 +393,11 @@
                             <td colspan="3" class="text-end col-group" title="No reserved-inventory report for this date, so only the total is known">@p.Reserved.ToString("N0", en) <span class="cell-sub">total</span></td>
                         }
                         <td class="text-end col-group">@Units(p.Unfulfillable)</td>
-                        <td class="text-end">@Units(p.HomeStock)</td>
+                        <td class="text-end fw-semibold">@Units(p.AmazonTotal)</td>
+                        <td class="text-end col-group">@Units(p.AwdInbound)</td>
+                        <td class="text-end">@Units(p.AwdOnHand)</td>
+                        <td class="text-end text-muted-token">@Units(p.AwdReplenishment)</td>
+                        <td class="text-end col-group">@Units(p.HomeStock)</td>
                         <td class="text-end col-group fw-semibold">@p.OverallTotal.ToString("N0", en)</td>
                     </tr>
                 }

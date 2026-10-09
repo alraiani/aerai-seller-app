@@ -225,6 +225,8 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
         Reserved: items.Sum(i => i.Position.Reserved),
         Unfulfillable: items.Sum(i => i.Position.Unfulfillable),
         HomeStock: items.Sum(i => i.Position.HomeStock),
+        AwdOnHand: items.Sum(i => i.Position.AwdOnHand),
+        AwdInbound: items.Sum(i => i.Position.AwdInbound),
         OutOfStock: items.Count(i => i.Status == StockStatus.OutOfStock),
         RestockOverdue: items.Count(i => i.Status == StockStatus.RestockOverdue),
         RestockSoon: items.Count(i => i.Status == StockStatus.RestockSoon),

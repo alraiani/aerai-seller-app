@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Imports;
 using AERai.Web.Domain.Core;
@@ -10,7 +11,7 @@ using Microsoft.Extensions.Options;
 namespace AERai.Web.Application.Ingestion;
 
 /// <summary>
-/// Default <see cref="IReportIngestionService"/>. Two strategies, chosen by report type:
+/// Default <see cref="IReportIngestionService"/>. Three strategies, chosen by report type:
 /// <list type="bullet">
 ///   <item><b>Requested</b> (Orders, FBA inventory, restock): ask Amazon to generate a report and
 ///   record it on the run as pending; <see cref="ContinueAsync"/> later checks on it, with a growing
@@ -18,8 +19,10 @@ namespace AERai.Web.Application.Ingestion;
 ///   free in the meantime and a restart resumes the run.</item>
 ///   <item><b>Listed</b> (Settlements): Amazon generates these itself, so list completed reports
 ///   and ingest each one not already in the <see cref="IngestedReport"/> ledger.</item>
+///   <item><b>Listed by API</b> (AWD inventory): page through Amazon's JSON listing inside
+///   <see cref="RunAsync"/>, land each page in raw storage, and replace the day's AWD snapshot.</item>
 /// </list>
-/// Either way every document is landed in raw blob storage and staged through
+/// Report documents are landed in raw blob storage and staged through
 /// <see cref="IStagingImportService.StageRawFileAsync"/> — the same path as a manual upload.
 /// </summary>
 public sealed partial class ReportIngestionService : IReportIngestionService
@@ -36,7 +39,18 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// <summary>Settlement listing re-checks a day of overlap; the ledger prevents duplicates.</summary>
     private static readonly TimeSpan SettlementListOverlap = TimeSpan.FromDays(1);
 
+    /// <summary>Raw landing-zone folder for AWD inventory pages.</summary>
+    public const string AwdRawFolder = "awdinventory";
+
+    /// <summary>
+    /// Stops a run whose next-page tokens never end (an Amazon fault) instead of looping forever.
+    /// At 200 SKUs a page this allows 100,000 SKUs.
+    /// </summary>
+    private const int MaxAwdPages = 500;
+
     private readonly IAmazonReportsGateway _gateway;
+    private readonly IAmazonAwdGateway _awdGateway;
+    private readonly IAwdInventoryRepository _awdInventory;
     private readonly IRawFileStore _rawFiles;
     private readonly IStagingImportService _staging;
     private readonly IPromotionService _promotion;
@@ -49,6 +63,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
 
     /// <summary>Creates the service.</summary>
     /// <param name="gateway">SP-API Reports gateway.</param>
+    /// <param name="awdGateway">SP-API AWD inventory gateway.</param>
+    /// <param name="awdInventory">AWD snapshot persistence.</param>
     /// <param name="rawFiles">Raw landing zone.</param>
     /// <param name="staging">Staging use cases.</param>
     /// <param name="promotion">Promotion into core.</param>
@@ -60,6 +76,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// <param name="logger">Logger.</param>
     public ReportIngestionService(
         IAmazonReportsGateway gateway,
+        IAmazonAwdGateway awdGateway,
+        IAwdInventoryRepository awdInventory,
         IRawFileStore rawFiles,
         IStagingImportService staging,
         IPromotionService promotion,
@@ -73,6 +91,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         ArgumentNullException.ThrowIfNull(options);
 
         _gateway = gateway;
+        _awdGateway = awdGateway;
+        _awdInventory = awdInventory;
         _rawFiles = rawFiles;
         _staging = staging;
         _promotion = promotion;
@@ -112,7 +132,11 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         try
         {
             context.Marketplace = await ResolveMarketplaceAsync(schedule, cancellationToken).ConfigureAwait(false);
-            if (schedule.ReportType == AmazonReportType.Settlements)
+            if (schedule.ReportType == AmazonReportType.AwdInventory)
+            {
+                await IngestAwdInventoryAsync(context, cancellationToken).ConfigureAwait(false);
+            }
+            else if (schedule.ReportType == AmazonReportType.Settlements)
             {
                 await IngestListedReportsAsync(context, cancellationToken).ConfigureAwait(false);
             }
@@ -221,7 +245,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         var run = context.Run;
         if (run.Status == SyncRunStatus.Running)
         {
-            run.Status = context.BatchIds.Count > 0 ? SyncRunStatus.Succeeded : SyncRunStatus.NoData;
+            run.Status = context.BatchIds.Count > 0 || context.RowsWritten > 0 ? SyncRunStatus.Succeeded : SyncRunStatus.NoData;
         }
 
         if (run.Status is SyncRunStatus.Succeeded or SyncRunStatus.NoData && context.CoveredUntil is { } coveredUntil)
@@ -357,6 +381,70 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         context.CoveredUntil = until;
     }
 
+    /// <summary>
+    /// Pages through Amazon's AWD inventory, lands every page in raw storage, then replaces the day's
+    /// AWD snapshot in one go.
+    /// </summary>
+    /// <remarks>
+    /// All pages are read before anything is written, so a run that fails part-way leaves the
+    /// previous snapshot whole instead of a partial one; a seller's AWD listing is small enough to
+    /// hold in memory. SKUs whose quantities are all zero are not stored: Amazon keeps listing SKUs
+    /// that have left AWD.
+    /// </remarks>
+    private async Task IngestAwdInventoryAsync(RunContext context, CancellationToken cancellationToken)
+    {
+        var startedAt = context.Run.StartedAt;
+        var items = new Dictionary<string, AwdInventoryItem>(StringComparer.OrdinalIgnoreCase);
+        string? nextToken = null;
+        var pages = 0;
+        do
+        {
+            if (++pages > MaxAwdPages)
+            {
+                throw new InvalidOperationException($"AWD inventory listing did not end after {MaxAwdPages} pages.");
+            }
+
+            var page = await _awdGateway.ListInventoryPageAsync(context.Marketplace, nextToken, cancellationToken).ConfigureAwait(false);
+            await LandAwdPageAsync(context, page, pages, cancellationToken).ConfigureAwait(false);
+            foreach (var item in page.Items.Where(i => !i.IsEmpty))
+            {
+                items[item.Sku] = item;
+            }
+
+            nextToken = string.IsNullOrEmpty(page.NextToken) ? null : page.NextToken;
+        }
+        while (nextToken is not null);
+
+        // Dated by the run's UTC start, like the FBA snapshots are dated by their batch's UTC receive date.
+        var snapshotDate = DateOnly.FromDateTime(startedAt.UtcDateTime);
+        context.RowsWritten = await _awdInventory.ReplaceSnapshotAsync(
+            context.Schedule.MarketplaceId, snapshotDate, items.Values, _clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        context.Notes.Add(context.RowsWritten > 0
+            ? $"AWD snapshot for {snapshotDate:yyyy-MM-dd}: {context.RowsWritten:N0} SKUs ({pages:N0} page{(pages == 1 ? "" : "s")})."
+            : "Amazon lists no AWD stock.");
+        context.CoveredUntil = startedAt;
+    }
+
+    /// <summary>Keeps one AWD response page in the raw landing zone, byte-for-byte as Amazon sent it.</summary>
+    private async Task LandAwdPageAsync(RunContext context, AwdInventoryPage page, int pageNumber, CancellationToken cancellationToken)
+    {
+        var fileName = string.Create(CultureInfo.InvariantCulture, $"awd-inventory-run{context.Run.Id}-page{pageNumber}.json");
+        var path = RawFilePaths.BuildInFolder(AwdRawFolder, _clock.GetUtcNow(), Guid.NewGuid(), fileName);
+        var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["source"] = AwdRawFolder,
+            ["marketplaceid"] = context.Schedule.MarketplaceId,
+            ["syncrunid"] = context.Run.Id.ToString(CultureInfo.InvariantCulture),
+            ["uploadedby"] = context.Run.TriggeredBy,
+        };
+
+        var content = new MemoryStream(Encoding.UTF8.GetBytes(page.RawJson), writable: false);
+        await using (content.ConfigureAwait(false))
+        {
+            await _rawFiles.SaveAsync(path, content, metadata, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Downloads a document, lands it in raw storage, stages it, and optionally promotes it.</summary>
     private async Task LandAndStageAsync(RunContext context, string reportId, string documentId, CancellationToken cancellationToken)
     {
@@ -469,6 +557,9 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         public List<string> Notes { get; } = [];
 
         public DateTimeOffset? CoveredUntil { get; set; }
+
+        /// <summary>Rows written straight to <c>core</c> by runs that are not staged (AWD).</summary>
+        public int RowsWritten { get; set; }
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} started for schedule '{ScheduleName}' ({Trigger})")]

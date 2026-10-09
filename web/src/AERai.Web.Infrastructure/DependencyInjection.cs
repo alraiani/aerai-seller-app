@@ -97,6 +97,7 @@ public static class DependencyInjection
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<ISyncScheduleRepository, SyncScheduleRepository>();
         services.AddScoped<ISyncRunRepository, SyncRunRepository>();
+        services.AddScoped<IAwdInventoryRepository, AwdInventoryRepository>();
         services.AddScoped<ISyncSettingsRepository, SyncSettingsRepository>();
 
         AddSpApi(services, configuration);
@@ -113,7 +114,7 @@ public static class DependencyInjection
     /// <summary>
     /// Registers the Amazon gateway for the configured <see cref="SpApiMode"/>. Live mode wires the
     /// SP-API pipeline: LWA token cache, per-operation rate limiter, and the pipeline handler on the
-    /// typed Reports and Catalog Items clients. All SP-API traffic goes through that one handler.
+    /// typed Reports, Catalog Items, and AWD clients. All SP-API traffic goes through that one handler.
     /// </summary>
     private static void AddSpApi(IServiceCollection services, IConfiguration configuration)
     {
@@ -143,17 +144,23 @@ public static class DependencyInjection
                     .AddHttpMessageHandler<SpApiPipelineHandler>();
                 services.AddHttpClient(SpApiCatalogGateway.ImageHttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));
                 services.AddScoped<IAmazonCatalogGateway, SpApiCatalogGateway>();
+                services.AddHttpClient<AwdApiClient>((provider, client) =>
+                        client.BaseAddress = provider.GetRequiredService<IOptions<SpApiOptions>>().Value.Endpoint)
+                    .AddHttpMessageHandler<SpApiPipelineHandler>();
+                services.AddScoped<IAmazonAwdGateway, SpApiAwdGateway>();
                 break;
 
             case SpApiMode.Simulated:
                 // Singleton: the simulator keeps generated documents in memory between request and download.
                 services.AddSingleton<IAmazonReportsGateway, SimulatedReportsGateway>();
                 services.AddSingleton<IAmazonCatalogGateway, SimulatedCatalogGateway>();
+                services.AddSingleton<IAmazonAwdGateway, SimulatedAwdGateway>();
                 break;
 
             default:
                 services.AddSingleton<IAmazonReportsGateway, UnavailableReportsGateway>();
                 services.AddSingleton<IAmazonCatalogGateway, UnavailableCatalogGateway>();
+                services.AddSingleton<IAmazonAwdGateway, UnavailableAwdGateway>();
                 break;
         }
     }
