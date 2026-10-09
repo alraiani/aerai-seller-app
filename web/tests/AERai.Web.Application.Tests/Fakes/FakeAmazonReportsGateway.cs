@@ -35,8 +35,11 @@ internal sealed class FakeAmazonReportsGateway : IAmazonReportsGateway
         return Task.FromResult($"R{Requests.Count}");
     }
 
-    public Task<AmazonReportStatus> GetReportStatusAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken) =>
-        Task.FromResult(Statuses.Count > 1 ? Statuses.Dequeue() : Statuses.Peek());
+    public Task<AmazonReportStatus> GetReportStatusAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Statuses.Count > 1 ? Statuses.Dequeue() : Statuses.Peek());
+    }
 
     public Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)
     {

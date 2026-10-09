@@ -35,9 +35,13 @@ public sealed class InventoryOptions
     [Range(0, 90)]
     public int AlertLeadDays { get; set; } = 7;
 
-    /// <summary>Minutes between background re-evaluations of stock alerts.</summary>
+    /// <summary>
+    /// Longest gap between background re-evaluations of stock alerts. Alerts already refresh whenever
+    /// their data changes; this only catches statuses that change with the passing of time, so a day
+    /// is enough and lets the serverless database pause in between.
+    /// </summary>
     [Range(1, 1440)]
-    public int AlertRefreshMinutes { get; set; } = 15;
+    public int AlertRefreshMinutes { get; set; } = 1440;
 
     /// <summary>The defaults as <see cref="LeadTimes"/>.</summary>
     /// <returns>The default timings.</returns>

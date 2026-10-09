@@ -47,7 +47,8 @@ public sealed class DetailsModel(IImportBatchQueries batches, IPromotionService 
         if (result.IsSuccess)
         {
             TempData[StatusMessage.Success] =
-                $"Promoted {result.Value.PromotedRowCount:N0} row(s); {result.Value.RejectedRowCount:N0} rejected.";
+                $"Promoted {result.Value.PromotedRowCount:N0} row(s); {result.Value.RejectedRowCount:N0} rejected" +
+                (result.Value.SkippedRowCount > 0 ? $"; {result.Value.SkippedRowCount:N0} for other marketplaces." : ".");
         }
         else
         {

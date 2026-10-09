@@ -9,4 +9,5 @@ namespace AERai.Web.Application.Imports;
 /// <param name="Status">The batch's status after promotion.</param>
 /// <param name="PromotedRowCount">Rows written to <c>core</c>.</param>
 /// <param name="RejectedRowCount">Rows rejected with an error message.</param>
-public sealed record PromotionSummary(long BatchId, ImportBatchStatus Status, int PromotedRowCount, int RejectedRowCount);
+/// <param name="SkippedRowCount">Rows left out because they belong to another marketplace.</param>
+public sealed record PromotionSummary(long BatchId, ImportBatchStatus Status, int PromotedRowCount, int RejectedRowCount, int SkippedRowCount = 0);

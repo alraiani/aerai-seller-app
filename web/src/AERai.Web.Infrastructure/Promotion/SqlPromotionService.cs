@@ -17,8 +17,9 @@ namespace AERai.Web.Infrastructure.Promotion;
 /// </remarks>
 /// <param name="dbContext">Scoped database context.</param>
 /// <param name="batches">Used to confirm the batch exists and to read the outcome.</param>
+/// <param name="alerts">Asks for a stock-alert refresh once new data is in core.</param>
 /// <param name="logger">Logger.</param>
-internal sealed partial class SqlPromotionService(AppDbContext dbContext, IImportBatchQueries batches, ILogger<SqlPromotionService> logger)
+internal sealed partial class SqlPromotionService(AppDbContext dbContext, IImportBatchQueries batches, IStockAlertRefreshSignal alerts, ILogger<SqlPromotionService> logger)
     : IPromotionService
 {
     /// <summary>Large batches can take a while to MERGE; the default 30s command timeout is too tight.</summary>
@@ -50,12 +51,13 @@ internal sealed partial class SqlPromotionService(AppDbContext dbContext, IImpor
         var batch = await batches.GetAsync(batchId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"Import batch {batchId} disappeared during promotion.");
 
-        LogPromoted(batchId, batch.PromotedRowCount, batch.RejectedRowCount);
-        return Result.Success(new PromotionSummary(batch.Id, batch.Status, batch.PromotedRowCount, batch.RejectedRowCount));
+        LogPromoted(batchId, batch.PromotedRowCount, batch.RejectedRowCount, batch.SkippedRowCount);
+        alerts.Request();
+        return Result.Success(new PromotionSummary(batch.Id, batch.Status, batch.PromotedRowCount, batch.RejectedRowCount, batch.SkippedRowCount));
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Promoted batch {BatchId}: {PromotedRowCount} promoted, {RejectedRowCount} rejected")]
-    private partial void LogPromoted(long batchId, int promotedRowCount, int rejectedRowCount);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Promoted batch {BatchId}: {PromotedRowCount} promoted, {RejectedRowCount} rejected, {SkippedRowCount} for other marketplaces")]
+    private partial void LogPromoted(long batchId, int promotedRowCount, int rejectedRowCount, int skippedRowCount);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Promotion of batch {BatchId} failed")]
     private partial void LogPromotionFailed(Exception exception, long batchId);

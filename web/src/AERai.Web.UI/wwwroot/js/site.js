@@ -94,6 +94,27 @@
         update();
     }
 
+    // ---------- Worksheet send amounts ----------
+    // Typing units to send into a [data-send-input] shows what home stock will be after the save
+    // ("→ 70 at home after sending") under the same row's home count. The server does the real subtraction.
+    document.addEventListener("input", function (event) {
+        var input = event.target;
+        if (!input.matches || !input.matches("[data-send-input]")) { return; }
+        var row = input.closest("tr");
+        var hint = row && row.querySelector("[data-after-send]");
+        var home = row && row.querySelector(".home-input");
+        if (!hint || !home) { return; }
+
+        var send = parseInt(input.value, 10);
+        var original = parseInt(home.getAttribute("data-original"), 10);
+        if (!(send > 0) || isNaN(original)) { hint.hidden = true; return; }
+
+        var after = original - send;
+        hint.textContent = after < 0 ? "only " + original.toLocaleString("en-US") + " at home" : "→ " + after.toLocaleString("en-US") + " at home after sending";
+        hint.classList.toggle("text-warn", after < 0);
+        hint.hidden = false;
+    });
+
     // ---------- Print buttons ----------
     document.addEventListener("click", function (event) {
         var button = event.target.closest && event.target.closest("[data-print]");

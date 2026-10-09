@@ -1,7 +1,7 @@
 namespace AERai.Seller.Domain.Staging;
 
 /// <summary>
-/// One row from Amazon's settlement flat file (GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE), scoped to
+/// One row from Amazon's settlement flat file (GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2), scoped to
 /// a single SettlementReport via SettlementId. AmountType/AmountDescription are Amazon's own raw
 /// "amount-type"/"amount-description" column values (e.g. "ItemFees"/"Commission") rather than a
 /// curated enum, so bookkeeping account mapping (see BookkeepingAccountMapping) can key off exactly

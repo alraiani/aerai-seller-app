@@ -19,8 +19,7 @@ public static class ScheduleCalculator
 
         return schedule.Frequency switch
         {
-            ScheduleFrequency.Interval => after.ToUniversalTime().AddMinutes(
-                schedule.IntervalMinutes ?? throw new InvalidOperationException("Interval schedules need IntervalMinutes.")),
+            ScheduleFrequency.Interval => NextInterval(schedule, after),
             ScheduleFrequency.Daily => NextDaily(
                 schedule.DailyTime ?? throw new InvalidOperationException("Daily schedules need DailyTime."),
                 TimeZoneInfo.FindSystemTimeZoneById(schedule.TimeZoneId),
@@ -28,6 +27,37 @@ public static class ScheduleCalculator
             _ => throw new InvalidOperationException($"Unknown frequency '{schedule.Frequency}'."),
         };
     }
+
+    /// <summary>
+    /// One interval after <paramref name="after"/>; if that falls outside the schedule's active
+    /// window, the start of the next window instead (so the first run of the day is at its start).
+    /// </summary>
+    private static DateTimeOffset NextInterval(SyncSchedule schedule, DateTimeOffset after)
+    {
+        var candidate = after.ToUniversalTime().AddMinutes(
+            schedule.IntervalMinutes ?? throw new InvalidOperationException("Interval schedules need IntervalMinutes."));
+        if (schedule.ActiveFrom is not { } from || schedule.ActiveUntil is not { } until)
+        {
+            return candidate;
+        }
+
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(schedule.TimeZoneId);
+        if (IsActive(TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(candidate, zone).DateTime), from, until))
+        {
+            return candidate;
+        }
+
+        // The window opens at most a day away; NextDaily never returns a time before the candidate.
+        return NextDaily(from, zone, candidate.AddTicks(-1));
+    }
+
+    /// <summary>Whether a local time is inside a window; an end before the start wraps past midnight.</summary>
+    /// <param name="time">Local time of day.</param>
+    /// <param name="from">Window start (inclusive).</param>
+    /// <param name="until">Window end (exclusive).</param>
+    /// <returns><see langword="true"/> when inside.</returns>
+    public static bool IsActive(TimeOnly time, TimeOnly from, TimeOnly until) =>
+        from < until ? time >= from && time < until : time >= from || time < until;
 
     /// <summary>Next occurrence of a local wall-clock time in a time zone.</summary>
     private static DateTimeOffset NextDaily(TimeOnly time, TimeZoneInfo zone, DateTimeOffset after)

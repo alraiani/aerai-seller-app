@@ -79,5 +79,6 @@ internal sealed class ImportBatchQueries(AppDbContext dbContext) : IImportBatchQ
     /// <summary>Projection shared by every batch query so the DTO shape is defined once.</summary>
     private static readonly System.Linq.Expressions.Expression<Func<ImportBatch, ImportBatchSummary>> ToSummary = b =>
         new ImportBatchSummary(b.Id, b.Source, b.MarketplaceId, b.FileName, b.UploadedBy, b.UploadedAt, b.Status,
-            b.RowCount, b.PromotedRowCount, b.RejectedRowCount, b.PromotedAt, b.ErrorMessage, b.RawFilePath, b.RawFileSha256);
+            b.RowCount, b.PromotedRowCount, b.RejectedRowCount, b.PromotedAt, b.ErrorMessage, b.RawFilePath, b.RawFileSha256,
+            b.SkippedRowCount);
 }

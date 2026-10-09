@@ -26,8 +26,10 @@ public sealed class InventoryItemServiceTests
         _repository.AddProduct("MAT-BLU");
     }
 
+    private readonly FakeStockAlertRefreshSignal _alerts = new();
+
     private InventoryItemService CreateService() =>
-        new(_repository, _images, _spreadsheets, new FakeTimeProvider(DateTimeOffset.UnixEpoch), NullLogger<InventoryItemService>.Instance);
+        new(_repository, _images, _spreadsheets, _alerts, new FakeTimeProvider(DateTimeOffset.UnixEpoch), NullLogger<InventoryItemService>.Instance);
 
     private static MemoryStream Text(string text) => new(Encoding.UTF8.GetBytes(text));
 
@@ -143,6 +145,18 @@ public sealed class InventoryItemServiceTests
     }
 
     [Fact]
+    public async Task SetImageAsync_StreamLongerThanItsDeclaredLength_IsRejected()
+    {
+        var huge = new byte[InventoryItemService.MaxImageBytes + 1];
+        Png.CopyTo(huge, 0);
+
+        var result = await CreateService().SetImageAsync("MAT-BLK", new MemoryStream(huge), Png.Length, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(_images.Blobs);
+    }
+
+    [Fact]
     public async Task RemoveImageAsync_DeletesBlobAndClearsProduct()
     {
         var service = CreateService();
@@ -161,6 +175,7 @@ public sealed class InventoryItemServiceTests
 
         Assert.Equal("Product 'GHOST' was not found.", result.Error);
         Assert.Empty(_repository.HomeStock);
+        Assert.Equal(0, _alerts.Requests);
     }
 
     [Fact]
@@ -175,6 +190,7 @@ public sealed class InventoryItemServiceTests
         Assert.False(_repository.HomeStock.ContainsKey((Us, "MAT-BLK")));
         Assert.Equal(3, _repository.HomeStock[(MarketplaceIds.Canada, "MAT-BLK")]);
         Assert.Equal(12, _repository.HomeStock[(Us, "MAT-BLU")]);
+        Assert.Equal(1, _alerts.Requests); // Home stock drives reorder timing, so alerts must be re-evaluated.
     }
 
     [Fact]

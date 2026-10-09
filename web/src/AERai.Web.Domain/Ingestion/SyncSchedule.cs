@@ -30,7 +30,24 @@ public sealed class SyncSchedule
     /// <summary>Local time of day when <see cref="Frequency"/> is <see cref="ScheduleFrequency.Daily"/>.</summary>
     public TimeOnly? DailyTime { get; set; }
 
-    /// <summary>IANA time zone for <see cref="DailyTime"/>, e.g. <c>America/New_York</c>.</summary>
+    /// <summary>
+    /// Start of the local time window an <see cref="ScheduleFrequency.Interval"/> schedule runs in
+    /// (in <see cref="TimeZoneId"/>). <see langword="null"/> together with <see cref="ActiveUntil"/>
+    /// means around the clock.
+    /// </summary>
+    /// <remarks>
+    /// Limiting pulls to working hours lets the serverless database pause overnight; anything
+    /// needed sooner can be pulled with "Run now".
+    /// </remarks>
+    public TimeOnly? ActiveFrom { get; set; }
+
+    /// <summary>
+    /// End of the active window (exclusive). Earlier than <see cref="ActiveFrom"/> means the window
+    /// runs past midnight, e.g. 22:00–06:00.
+    /// </summary>
+    public TimeOnly? ActiveUntil { get; set; }
+
+    /// <summary>IANA time zone for <see cref="DailyTime"/> and the active window, e.g. <c>America/New_York</c>.</summary>
     public required string TimeZoneId { get; set; }
 
     /// <summary>

@@ -178,6 +178,16 @@ public sealed class EditModel(
         [DataType(DataType.Time)]
         public TimeOnly? DailyTime { get; set; } = new(6, 0);
 
+        /// <summary>Start of the active hours (interval schedules; empty = around the clock).</summary>
+        [Display(Name = "Only from")]
+        [DataType(DataType.Time)]
+        public TimeOnly? ActiveFrom { get; set; }
+
+        /// <summary>End of the active hours.</summary>
+        [Display(Name = "Until")]
+        [DataType(DataType.Time)]
+        public TimeOnly? ActiveUntil { get; set; }
+
         /// <summary>IANA time zone.</summary>
         [Display(Name = "Time zone")]
         public string TimeZoneId { get; set; } = "America/New_York";
@@ -217,6 +227,8 @@ public sealed class EditModel(
                 Frequency = s.Frequency,
                 IntervalMinutes = s.IntervalMinutes ?? 60,
                 DailyTime = s.DailyTime ?? new TimeOnly(6, 0),
+                ActiveFrom = s.ActiveFrom,
+                ActiveUntil = s.ActiveUntil,
                 TimeZoneId = s.TimeZoneId,
                 LookbackDays = s.LookbackDays,
                 AutoPromote = s.AutoPromote,
@@ -229,6 +241,6 @@ public sealed class EditModel(
         /// <summary>Converts the form to the Application input.</summary>
         /// <returns>The schedule input.</returns>
         public SyncScheduleInput ToInput() =>
-            new(Name, ReportType, MarketplaceId, IsEnabled, Frequency, IntervalMinutes, DailyTime, TimeZoneId, LookbackDays, AutoPromote, Notes, OwnerEmail);
+            new(Name, ReportType, MarketplaceId, IsEnabled, Frequency, IntervalMinutes, DailyTime, TimeZoneId, LookbackDays, AutoPromote, Notes, OwnerEmail, ActiveFrom, ActiveUntil);
     }
 }

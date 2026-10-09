@@ -9,9 +9,11 @@ using Microsoft.Extensions.Options;
 namespace AERai.Web.Infrastructure.Alerts;
 
 /// <summary>
-/// Background service that re-evaluates stock alerts for every active marketplace on a fixed
-/// interval (<see cref="InventoryOptions.AlertRefreshMinutes"/>), so new inventory and sales data
-/// (from scheduled syncs or manual imports) turn into alerts without anyone opening a page.
+/// Background service that re-evaluates stock alerts for every active marketplace when their inputs
+/// change (an <see cref="IStockAlertRefreshSignal"/> request after promotion or a home-stock /
+/// lead-time edit), so new data turns into alerts without anyone opening a page. A slow safety-net
+/// interval (<see cref="InventoryOptions.AlertRefreshMinutes"/>, daily by default) also catches
+/// statuses that change only because time passes (days of cover running down).
 /// </summary>
 /// <remarks>
 /// Unlike <see cref="Ingestion.SyncSchedulerWorker"/>, there is no claim between instances: every
@@ -21,17 +23,25 @@ namespace AERai.Web.Infrastructure.Alerts;
 /// and a failure mode for no real saving.
 /// </remarks>
 /// <param name="scopes">Creates a DI scope per refresh (services are scoped to the DbContext).</param>
+/// <param name="signal">Refresh requests.</param>
 /// <param name="options">Refresh interval.</param>
 /// <param name="clock">Clock.</param>
 /// <param name="logger">Logger.</param>
 internal sealed partial class StockAlertWorker(
     IServiceScopeFactory scopes,
+    StockAlertRefreshSignal signal,
     IOptions<InventoryOptions> options,
     TimeProvider clock,
     ILogger<StockAlertWorker> logger) : BackgroundService
 {
     /// <summary>Pause after startup so migrations and seeding finish before the first refresh.</summary>
     private static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Wait after a request before refreshing, so a burst of changes (a run promoting several batches,
+    /// a bulk home-stock edit) becomes one refresh.
+    /// </summary>
+    private static readonly TimeSpan Debounce = TimeSpan.FromSeconds(10);
 
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -40,12 +50,16 @@ internal sealed partial class StockAlertWorker(
         try
         {
             await Task.Delay(StartupDelay, clock, stoppingToken).ConfigureAwait(false);
-            using var timer = new PeriodicTimer(interval, clock);
-            do
+            while (true)
             {
+                // Clear requests made before this refresh starts: it already sees their changes.
+                signal.Clear();
                 await RefreshAllAsync(stoppingToken).ConfigureAwait(false);
+                if (await signal.WaitAsync(interval, stoppingToken).ConfigureAwait(false))
+                {
+                    await Task.Delay(Debounce, clock, stoppingToken).ConfigureAwait(false);
+                }
             }
-            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

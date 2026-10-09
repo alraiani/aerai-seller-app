@@ -62,7 +62,10 @@ resource database 'Microsoft.Sql/servers/databases@2023-08-01' = {
     capacity: 2
   }
   properties: {
-    autoPauseDelay: 60
+    // Minutes without any query before compute pauses (15 is the minimum). Background work only
+    // queries when something is due, so the database can sleep between scheduled pulls; the first
+    // request after a pause waits while it resumes (EF retries cover the failed connect).
+    autoPauseDelay: 15
     minCapacity: json('0.5')
     requestedBackupStorageRedundancy: 'Local'
   }

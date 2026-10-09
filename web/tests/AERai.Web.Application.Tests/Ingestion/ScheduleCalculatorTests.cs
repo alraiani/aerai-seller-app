@@ -64,4 +64,56 @@ public sealed class ScheduleCalculatorTests
         var at = Utc(2026, 10, 2, 10, 0); // exactly 06:00 local
         Assert.True(ScheduleCalculator.NextRunAfter(Daily(6, 0), at) > at);
     }
+
+    private static SyncSchedule Interval(int minutes, TimeOnly from, TimeOnly until, string zone = "America/New_York") => new()
+    {
+        Name = "t", MarketplaceId = "ATVPDKIKX0DER", Frequency = ScheduleFrequency.Interval, IntervalMinutes = minutes,
+        ActiveFrom = from, ActiveUntil = until, TimeZoneId = zone, UpdatedBy = "t",
+    };
+
+    [Fact]
+    public void NextRunAfter_IntervalInsideActiveHours_AddsMinutes()
+    {
+        // 11:00 EDT = 15:00Z; four hours later is 15:00 EDT, still inside 7 AM–9 PM.
+        Assert.Equal(Utc(2026, 10, 2, 19, 0), ScheduleCalculator.NextRunAfter(Interval(240, new(7, 0), new(21, 0)), Utc(2026, 10, 2, 15, 0)));
+    }
+
+    [Fact]
+    public void NextRunAfter_IntervalPastActiveHours_WaitsForTomorrowsStart()
+    {
+        // 19:00 EDT + 4 h = 23:00, after 9 PM, so the next run is 7:00 EDT next day (11:00Z).
+        Assert.Equal(Utc(2026, 10, 3, 11, 0), ScheduleCalculator.NextRunAfter(Interval(240, new(7, 0), new(21, 0)), Utc(2026, 10, 2, 23, 0)));
+    }
+
+    [Fact]
+    public void NextRunAfter_EnabledBeforeActiveHours_RunsAtTodaysStart()
+    {
+        // 03:00 EDT + 4 h = 07:00 exactly, the (inclusive) start; 02:00 EDT + 4 h = 06:00, before it.
+        Assert.Equal(Utc(2026, 10, 2, 11, 0), ScheduleCalculator.NextRunAfter(Interval(240, new(7, 0), new(21, 0)), Utc(2026, 10, 2, 7, 0)));
+        Assert.Equal(Utc(2026, 10, 2, 11, 0), ScheduleCalculator.NextRunAfter(Interval(240, new(7, 0), new(21, 0)), Utc(2026, 10, 2, 6, 0)));
+    }
+
+    [Fact]
+    public void NextRunAfter_ActiveHoursPastMidnight_WrapAround()
+    {
+        var overnight = Interval(60, new(22, 0), new(2, 0), "UTC");
+
+        Assert.Equal(Utc(2026, 10, 3, 1, 0), ScheduleCalculator.NextRunAfter(overnight, Utc(2026, 10, 3, 0, 0)));
+        Assert.Equal(Utc(2026, 10, 3, 22, 0), ScheduleCalculator.NextRunAfter(overnight, Utc(2026, 10, 3, 1, 30)));
+    }
+
+    [Fact]
+    public void NextRunAfter_ActiveHoursAcrossSpringForward_StartsAtLocalStart()
+    {
+        // US DST starts 2027-03-14: 7:00 is EDT (UTC-4) that morning, though the evening before was EST (UTC-5).
+        Assert.Equal(Utc(2027, 3, 14, 11, 0), ScheduleCalculator.NextRunAfter(Interval(240, new(7, 0), new(21, 0)), Utc(2027, 3, 14, 1, 0)));
+    }
+
+    [Theory]
+    [InlineData(7, 0, true)]
+    [InlineData(20, 59, true)]
+    [InlineData(21, 0, false)]
+    [InlineData(6, 59, false)]
+    public void IsActive_DaytimeWindow_IncludesStartExcludesEnd(int hour, int minute, bool expected) =>
+        Assert.Equal(expected, ScheduleCalculator.IsActive(new TimeOnly(hour, minute), new TimeOnly(7, 0), new TimeOnly(21, 0)));
 }

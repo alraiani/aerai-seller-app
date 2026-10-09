@@ -46,4 +46,26 @@ public sealed class SyncRun
 
     /// <summary>Human-readable summary or error.</summary>
     public string? Message { get; set; }
+
+    /// <summary>
+    /// The Amazon report this run is waiting for, while Amazon generates it; <see langword="null"/>
+    /// when the run is not waiting (settlement listings, or once finished).
+    /// </summary>
+    /// <remarks>
+    /// Persisting the wait (instead of holding it in memory) lets the scheduler do other work in the
+    /// meantime and lets a restart pick the run up where it left off.
+    /// </remarks>
+    public string? PendingReportId { get; set; }
+
+    /// <summary>When to next ask Amazon about <see cref="PendingReportId"/>.</summary>
+    public DateTimeOffset? NextCheckAt { get; set; }
+
+    /// <summary>Status checks so far that found the report still being generated (drives the backoff).</summary>
+    public int PollAttempts { get; set; }
+
+    /// <summary>Start of the backfill window, when this run is a backfill.</summary>
+    public DateTimeOffset? BackfillStart { get; set; }
+
+    /// <summary>End of the backfill window, when this run is a backfill.</summary>
+    public DateTimeOffset? BackfillEnd { get; set; }
 }

@@ -12,7 +12,7 @@ namespace AERai.Web.Infrastructure.Tests;
 
 /// <summary>
 /// Marketplace scoping across the stg → core → rpt flow: promotion stamps the batch's marketplace,
-/// rejects other channels' order lines, keeps each marketplace's inventory separate, and the views
+/// skips other channels' order lines without rejecting them, keeps each marketplace's inventory separate, and the views
 /// and queries return one marketplace at a time.
 /// </summary>
 public sealed class MarketplacePromotionTests(SqlDatabaseFixture fixture) : IClassFixture<SqlDatabaseFixture>
@@ -34,7 +34,7 @@ public sealed class MarketplacePromotionTests(SqlDatabaseFixture fixture) : ICla
     }
 
     [SqlFact]
-    public async Task Orders_AreStampedWithTheBatchMarketplace_AndOtherChannelsAreRejected()
+    public async Task Orders_AreStampedWithTheBatchMarketplace_AndOtherChannelsAreSkipped()
     {
         const string tsv =
             "amazon-order-id\tpurchase-date\torder-status\tsku\tquantity\titem-price\tcurrency\tsales-channel\n" +
@@ -44,7 +44,9 @@ public sealed class MarketplacePromotionTests(SqlDatabaseFixture fixture) : ICla
 
         var result = await StageAndPromoteAsync(ImportSource.Orders, Ca, tsv);
 
-        Assert.Equal((2, 1), (result.PromotedRowCount, result.RejectedRowCount));
+        // Amazon's orders report covers the whole region, so a US line in a CA batch is routine, not an error.
+        Assert.Equal((2, 0, 1), (result.PromotedRowCount, result.RejectedRowCount, result.SkippedRowCount));
+        Assert.Equal(ImportBatchStatus.Promoted, result.Status);
         await using var scope = fixture.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         Assert.Equal([Ca, Ca], await db.Orders.Where(o => o.AmazonOrderId.StartsWith("M-")).Select(o => o.MarketplaceId).ToListAsync());

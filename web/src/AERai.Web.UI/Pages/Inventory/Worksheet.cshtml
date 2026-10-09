@@ -100,7 +100,7 @@
                             <th class="text-end">90 day</th>
                             <th class="text-end">Amazon <partial name="_Tip" model='"Units sellable at Amazon now, plus units already on their way in."' /></th>
                             <th class="text-end">Days of inv. <partial name="_Tip" model='"How long Amazon stock (sellable, inbound, and FC transfers) lasts at the current sales rate. Home stock isn’t counted."' /></th>
-                            <th class="col-send">Send to Amazon <partial name="_Tip" model='"Home-stock units to ship in and the last day to ship them: enough for the target cover, or Amazon’s recommendation if it asks for more or sooner (shown underneath)."' /></th>
+                            <th class="col-send">Send to Amazon <partial name="_Tip" model='Model.CanEdit ? "Type the units you’re sending and save: it’s logged as Shipped to Amazon and taken off home stock. Underneath: the suggested amount and last day to ship — enough for the target cover, or Amazon’s recommendation if it asks for more or sooner." : "Home-stock units to ship in and the last day to ship them: enough for the target cover, or Amazon’s recommendation if it asks for more or sooner (shown underneath)."' /></th>
                             <th class="text-end">Home inv. <partial name="_Tip" model='"Units at home for this marketplace. Edit a count and save; every change is logged in the home-stock ledger."' /></th>
                             <th>Order next <partial name="_Tip" model='"The next supplier order from the sales rate: how many and the last day to place it so it arrives (through prep and transit) before all stock — Amazon and home — runs out."' /></th>
                         </tr>
@@ -162,6 +162,13 @@
                                         }
                                     </td>
                                     <td class="col-send" title="@InventoryFormat.StepsTip(item)">
+                                        @* Nothing at home means nothing to send, so no box. data-original is empty: any amount is unsaved. *@
+                                        @if (Model.CanEdit && p.HomeStock > 0)
+                                        {
+                                            <input type="number" name="Rows[@row].Send" value="@Model.SendValueFor(item)" data-original="" data-send-input min="0" max="@p.HomeStock" step="1"
+                                                   placeholder="@(plan?.SendToAmazon > 0 ? plan.SendToAmazon.ToString(CultureInfo.InvariantCulture) : "0")"
+                                                   class="form-control form-control-sm send-input no-print" aria-label="Units of @p.Sku to send to Amazon" />
+                                        }
                                         @if (plan is not null && InventoryFormat.Send(plan) is { } send)
                                         {
                                             <div><strong>@send.Action</strong> <span class="@InventoryFormat.DueClass(plan.DaysUntilSend, Model.SoonDays)">@send.When</span></div>
@@ -190,6 +197,7 @@
                                             <input type="hidden" name="Rows[@row].Original" value="@p.HomeStock" />
                                             <input type="number" name="Rows[@row].Quantity" value="@Model.ValueFor(item)" data-original="@p.HomeStock" min="0" step="1"
                                                    class="form-control form-control-sm home-input" aria-label="Home stock for @p.Sku" />
+                                            <div class="cell-sub after-send no-print" data-after-send hidden></div>
                                             row++;
                                         }
                                         else
@@ -233,10 +241,11 @@
     @if (Model.CanEdit && Model.Sheet is { IsEmpty: false })
     {
         <div class="save-bar" data-save-bar>
-            <span class="text-muted-token" data-save-count>Change any home counts, then save.</span>
-            <div class="d-flex gap-2">
+            <span class="text-muted-token" data-save-count>Enter send amounts or change home counts, then save.</span>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <input asp-for="ShipmentReference" class="form-control form-control-sm shipment-ref" placeholder="FBA shipment id (optional)" aria-label="FBA shipment id for the units sent" maxlength="100" />
                 <a asp-route-family="@Model.FamilyId" class="btn btn-sm btn-link">Discard</a>
-                <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"check"' /> Save home stock</button>
+                <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"check"' /> Save</button>
             </div>
         </div>
     }

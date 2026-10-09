@@ -96,6 +96,10 @@ internal sealed class FakeInventoryItemRepository : IInventoryItemRepository
         return Task.FromResult(true);
     }
 
+    public Task<IReadOnlyList<PictureTarget>> ListPictureTargetsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<PictureTarget>>(
+            Products.Values.OrderBy(p => p.Sku, StringComparer.Ordinal).Select(p => new PictureTarget(p.Sku, p.Asin, p.ImagePath is not null)).ToList());
+
     public Task<IReadOnlySet<string>> GetExistingSkusAsync(IReadOnlyCollection<string> skus, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlySet<string>>(skus.Where(Products.ContainsKey).ToHashSet(StringComparer.Ordinal));
 

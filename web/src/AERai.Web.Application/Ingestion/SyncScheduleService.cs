@@ -10,7 +10,7 @@ namespace AERai.Web.Application.Ingestion;
 /// </summary>
 /// <param name="repository">Schedule persistence.</param>
 /// <param name="settings">App-wide sync settings (pause).</param>
-/// <param name="queue">Manual-run queue.</param>
+/// <param name="queue">Scheduler inbox: manual runs, and a wake after every change to when schedules run.</param>
 /// <param name="connection">Amazon connection state.</param>
 /// <param name="identity">User lookups for the schedule owner.</param>
 /// <param name="marketplaces">Marketplace lookups for the schedule's marketplace.</param>
@@ -64,6 +64,7 @@ public sealed partial class SyncScheduleService(
         schedule.NextRunAt = schedule.IsEnabled ? ScheduleCalculator.NextRunAfter(schedule, now) : null;
 
         var id = await repository.AddAsync(schedule, cancellationToken).ConfigureAwait(false);
+        queue.Wake();
         LogChanged(id, user);
         return Result.Success(id);
     }
@@ -99,6 +100,7 @@ public sealed partial class SyncScheduleService(
         updated.NextRunAt = updated.IsEnabled ? ScheduleCalculator.NextRunAfter(updated, updated.UpdatedAt) : null;
 
         await repository.UpdateSettingsAsync(updated, cancellationToken).ConfigureAwait(false);
+        queue.Wake();
         LogChanged(id, user);
         return Result.Success();
     }
@@ -118,6 +120,7 @@ public sealed partial class SyncScheduleService(
         schedule.NextRunAt = enabled ? ScheduleCalculator.NextRunAfter(schedule, schedule.UpdatedAt) : null;
 
         await repository.UpdateSettingsAsync(schedule, cancellationToken).ConfigureAwait(false);
+        queue.Wake();
         LogChanged(id, user);
         return Result.Success();
     }
@@ -190,6 +193,7 @@ public sealed partial class SyncScheduleService(
             return Result.Failure("Schedule not found.");
         }
 
+        queue.Wake();
         LogDeleted(id, user);
         return Result.Success();
     }
@@ -209,6 +213,7 @@ public sealed partial class SyncScheduleService(
         }
 
         await repository.RestoreAsync(id, user, clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        queue.Wake();
         LogRestored(id, user);
         return Result.Success();
     }
@@ -217,6 +222,7 @@ public sealed partial class SyncScheduleService(
     public async Task<Result> SetPausedAsync(bool paused, string user, CancellationToken cancellationToken)
     {
         await settings.SetPausedAsync(paused, user, clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        queue.Wake();
         LogPaused(paused, user);
         return Result.Success();
     }
@@ -284,6 +290,16 @@ public sealed partial class SyncScheduleService(
                 $"Interval must be between {MinIntervalMinutes} minutes and {MaxIntervalMinutes / (24 * 60)} days.");
         }
 
+        if (input.Frequency == ScheduleFrequency.Interval && (input.ActiveFrom is null) != (input.ActiveUntil is null))
+        {
+            return Result.Failure<SyncSchedule>("Set both the start and end of the active hours, or leave both empty to run around the clock.");
+        }
+
+        if (input.Frequency == ScheduleFrequency.Interval && input.ActiveFrom is { } from && from == input.ActiveUntil)
+        {
+            return Result.Failure<SyncSchedule>("Active hours must start and end at different times. Leave both empty to run around the clock.");
+        }
+
         if (input.Frequency == ScheduleFrequency.Daily && input.DailyTime is null)
         {
             return Result.Failure<SyncSchedule>("Choose a time of day for a daily schedule.");
@@ -320,6 +336,8 @@ public sealed partial class SyncScheduleService(
             // Keep only the field that applies, so the stored schedule is unambiguous.
             IntervalMinutes = input.Frequency == ScheduleFrequency.Interval ? input.IntervalMinutes : null,
             DailyTime = input.Frequency == ScheduleFrequency.Daily ? input.DailyTime : null,
+            ActiveFrom = input.Frequency == ScheduleFrequency.Interval ? input.ActiveFrom : null,
+            ActiveUntil = input.Frequency == ScheduleFrequency.Interval ? input.ActiveUntil : null,
             TimeZoneId = input.TimeZoneId,
             LookbackDays = input.LookbackDays,
             AutoPromote = input.AutoPromote,

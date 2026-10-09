@@ -10,7 +10,7 @@
     {
         ("Every 15 min", "Interval", 15, null),
         ("Hourly", "Interval", 60, null),
-        ("Every 6 h", "Interval", 360, null),
+        ("Every 4 h", "Interval", 240, null),
         ("Daily 6 AM", "Daily", null, "06:00"),
     };
 }
@@ -68,7 +68,7 @@
                     <span class="step">2</span>
                     <div>
                         <h2>When to run</h2>
-                        <p>Repeat on an interval, or once a day at a set local time.</p>
+                        <p>Repeat on an interval (optionally only during set hours), or once a day at a set local time.</p>
                     </div>
                 </div>
                 <div class="form-section-body">
@@ -101,7 +101,16 @@
                             <label asp-for="Input.DailyTime" class="form-label"></label>
                             <input asp-for="Input.DailyTime" type="time" class="form-control" />
                         </div>
-                        <div class="col-sm-6" data-frequency-field="Daily">
+                        <div class="col-sm-6" data-frequency-field="Interval">
+                            <div class="form-label">Active hours <span class="text-muted">(optional)</span></div>
+                            <div class="d-flex gap-2 align-items-center">
+                                <input asp-for="Input.ActiveFrom" type="time" class="form-control" aria-label="Only from" />
+                                <span aria-hidden="true">to</span>
+                                <input asp-for="Input.ActiveUntil" type="time" class="form-control" aria-label="Until" />
+                            </div>
+                            <div class="form-text">Only run between these local times, e.g. 7:00 AM to 9:00 PM. The first run of the day is at the start time. Leave both empty to run around the clock. Use "Run now" for fresher data in between.</div>
+                        </div>
+                        <div class="col-sm-6">
                             <label asp-for="Input.TimeZoneId" class="form-label"></label>
                             <select asp-for="Input.TimeZoneId" class="form-select">
                                 @foreach (var (id, label) in ScheduleDisplay.TimeZones)
@@ -179,7 +188,7 @@
                         @ScheduleDisplay.ReportLabel(Model.Input.ReportType) ·
                         @(Model.Input.Frequency == ScheduleFrequency.Daily && Model.Input.DailyTime is { } t
                             ? $"daily at {t:h:mm tt} {ScheduleDisplay.ShortZone(Model.Input.TimeZoneId)}"
-                            : ScheduleDisplay.Interval(Model.Input.IntervalMinutes ?? 60).ToLowerInvariant())
+                            : ScheduleDisplay.Interval(Model.Input.IntervalMinutes ?? 60, Model.Input.ActiveFrom, Model.Input.ActiveUntil, Model.Input.TimeZoneId).ToLowerInvariant())
                     </p>
                     <ul class="summary-facts">
                         <li data-summary-enabled>@(Model.Input.IsEnabled ? "Runs automatically" : "Manual only")</li>

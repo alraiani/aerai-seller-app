@@ -82,6 +82,51 @@ public sealed class SyncScheduleServiceTests
     }
 
     [Fact]
+    public void Validate_OnlyOneActiveHourSet_Fails() =>
+        Assert.True(CreateService().Validate(Input() with { ActiveFrom = new TimeOnly(7, 0) }).IsFailure);
+
+    [Fact]
+    public void Validate_ActiveHoursStartEqualsEnd_Fails() =>
+        Assert.True(CreateService().Validate(Input() with { ActiveFrom = new TimeOnly(7, 0), ActiveUntil = new TimeOnly(7, 0) }).IsFailure);
+
+    [Fact]
+    public async Task CreateAsync_IntervalWithActiveHours_StoresThemAndSchedulesInsideTheWindow()
+    {
+        // The clock is 12:00Z = 08:00 EDT; hourly within 7 AM–9 PM New York.
+        var id = (await CreateService().CreateAsync(Input() with { ActiveFrom = new TimeOnly(7, 0), ActiveUntil = new TimeOnly(21, 0) }, "ops", CancellationToken.None)).Value;
+
+        var stored = _repository.Schedules[id];
+        Assert.Equal(new TimeOnly(7, 0), stored.ActiveFrom);
+        Assert.Equal(new TimeOnly(21, 0), stored.ActiveUntil);
+        Assert.Equal(_clock.GetUtcNow().AddHours(1), stored.NextRunAt);
+    }
+
+    [Fact]
+    public async Task CreateAsync_DailyScheduleWithActiveHours_DropsThem()
+    {
+        var id = (await CreateService().CreateAsync(
+            Input(frequency: ScheduleFrequency.Daily) with { ActiveFrom = new TimeOnly(7, 0), ActiveUntil = new TimeOnly(21, 0) }, "ops", CancellationToken.None)).Value;
+
+        Assert.Null(_repository.Schedules[id].ActiveFrom);
+        Assert.Null(_repository.Schedules[id].ActiveUntil);
+    }
+
+    [Fact]
+    public async Task ScheduleChanges_WakeTheScheduler()
+    {
+        var service = CreateService();
+        var id = (await service.CreateAsync(Input(), "ops", CancellationToken.None)).Value;
+        await service.UpdateAsync(id, Input() with { Notes = "edited" }, "ops", CancellationToken.None);
+        await service.SetEnabledAsync(id, enabled: false, "ops", CancellationToken.None);
+        await service.SetPausedAsync(paused: true, "ops", CancellationToken.None);
+        await service.DeleteAsync(id, "ops", CancellationToken.None);
+        await service.RestoreAsync(id, "ops", CancellationToken.None);
+
+        // The scheduler sleeps until the next due slot, so every change to when schedules run must wake it.
+        Assert.Equal(6, _channel.Wakes);
+    }
+
+    [Fact]
     public async Task RunNowAsync_Connected_QueuesRequest()
     {
         var id = (await CreateService().CreateAsync(Input(), "ops", CancellationToken.None)).Value;

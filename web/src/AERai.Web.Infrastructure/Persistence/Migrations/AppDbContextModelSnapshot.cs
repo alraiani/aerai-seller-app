@@ -708,6 +708,12 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<DateTimeOffset?>("BackfillEnd")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("BackfillStart")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -729,6 +735,16 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<string>("Message")
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
+
+                    b.Property<DateTimeOffset?>("NextCheckAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PendingReportId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("PollAttempts")
+                        .HasColumnType("int");
 
                     b.Property<string>("ReportType")
                         .IsRequired()
@@ -760,6 +776,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("MarketplaceId");
 
+                    b.HasIndex("NextCheckAt")
+                        .HasFilter("[PendingReportId] IS NOT NULL");
+
                     b.HasIndex("SyncScheduleId", "StartedAt");
 
                     b.ToTable("SyncRun", "ops");
@@ -772,6 +791,12 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<TimeOnly?>("ActiveFrom")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly?>("ActiveUntil")
+                        .HasColumnType("time");
 
                     b.Property<bool>("AutoPromote")
                         .HasColumnType("bit");
@@ -1162,6 +1187,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("RowCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SkippedRowCount")
                         .HasColumnType("int");
 
                     b.Property<string>("Source")

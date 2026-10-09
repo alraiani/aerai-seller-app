@@ -103,6 +103,8 @@ public static class DependencyInjection
 
         services.AddSingleton<IManualRunChannel, ManualRunChannel>();
         services.AddHostedService<SyncSchedulerWorker>();
+        services.AddSingleton<StockAlertRefreshSignal>();
+        services.AddSingleton<IStockAlertRefreshSignal>(sp => sp.GetRequiredService<StockAlertRefreshSignal>());
         services.AddHostedService<StockAlertWorker>();
 
         return services;
@@ -111,7 +113,7 @@ public static class DependencyInjection
     /// <summary>
     /// Registers the Amazon gateway for the configured <see cref="SpApiMode"/>. Live mode wires the
     /// SP-API pipeline: LWA token cache, per-operation rate limiter, and the pipeline handler on the
-    /// typed Reports client. All SP-API traffic goes through that one handler.
+    /// typed Reports and Catalog Items clients. All SP-API traffic goes through that one handler.
     /// </summary>
     private static void AddSpApi(IServiceCollection services, IConfiguration configuration)
     {
@@ -136,15 +138,22 @@ public static class DependencyInjection
                         client.BaseAddress = provider.GetRequiredService<IOptions<SpApiOptions>>().Value.Endpoint)
                     .AddHttpMessageHandler<SpApiPipelineHandler>();
                 services.AddScoped<IAmazonReportsGateway, SpApiReportsGateway>();
+                services.AddHttpClient<CatalogItemsApiClient>((provider, client) =>
+                        client.BaseAddress = provider.GetRequiredService<IOptions<SpApiOptions>>().Value.Endpoint)
+                    .AddHttpMessageHandler<SpApiPipelineHandler>();
+                services.AddHttpClient(SpApiCatalogGateway.ImageHttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));
+                services.AddScoped<IAmazonCatalogGateway, SpApiCatalogGateway>();
                 break;
 
             case SpApiMode.Simulated:
                 // Singleton: the simulator keeps generated documents in memory between request and download.
                 services.AddSingleton<IAmazonReportsGateway, SimulatedReportsGateway>();
+                services.AddSingleton<IAmazonCatalogGateway, SimulatedCatalogGateway>();
                 break;
 
             default:
                 services.AddSingleton<IAmazonReportsGateway, UnavailableReportsGateway>();
+                services.AddSingleton<IAmazonCatalogGateway, UnavailableCatalogGateway>();
                 break;
         }
     }

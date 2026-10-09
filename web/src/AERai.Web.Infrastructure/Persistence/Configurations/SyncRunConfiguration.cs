@@ -23,6 +23,10 @@ internal sealed class SyncRunConfiguration : IEntityTypeConfiguration<SyncRun>
         builder.Property(r => r.ImportBatchIds).HasMaxLength(1000);
         builder.Property(r => r.Message).HasMaxLength(4000);
         builder.HasIndex(r => new { r.SyncScheduleId, r.StartedAt });
+        builder.Property(r => r.PendingReportId).HasMaxLength(64);
+
+        // The scheduler looks up waiting runs on every wake; only a handful ever match.
+        builder.HasIndex(r => r.NextCheckAt).HasFilter("[PendingReportId] IS NOT NULL");
         builder.HasOne<SyncSchedule>().WithMany().HasForeignKey(r => r.SyncScheduleId).OnDelete(DeleteBehavior.Cascade);
     }
 }

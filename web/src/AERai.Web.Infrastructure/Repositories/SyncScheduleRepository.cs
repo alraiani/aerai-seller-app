@@ -89,6 +89,8 @@ internal sealed class SyncScheduleRepository(AppDbContext dbContext) : ISyncSche
                 .SetProperty(s => s.Frequency, schedule.Frequency)
                 .SetProperty(s => s.IntervalMinutes, schedule.IntervalMinutes)
                 .SetProperty(s => s.DailyTime, schedule.DailyTime)
+                .SetProperty(s => s.ActiveFrom, schedule.ActiveFrom)
+                .SetProperty(s => s.ActiveUntil, schedule.ActiveUntil)
                 .SetProperty(s => s.TimeZoneId, schedule.TimeZoneId)
                 .SetProperty(s => s.LookbackDays, schedule.LookbackDays)
                 .SetProperty(s => s.AutoPromote, schedule.AutoPromote)
@@ -112,6 +114,12 @@ internal sealed class SyncScheduleRepository(AppDbContext dbContext) : ISyncSche
             .OrderBy(s => s.NextRunAt)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public Task<DateTimeOffset?> GetNextRunAtAsync(CancellationToken cancellationToken) =>
+        dbContext.SyncSchedules
+            .Where(s => s.IsEnabled && s.NextRunAt != null)
+            .MinAsync(s => s.NextRunAt, cancellationToken);
 
     /// <inheritdoc/>
     public async Task<bool> TryClaimAsync(int id, DateTimeOffset expectedNextRunAt, DateTimeOffset newNextRunAt, DateTimeOffset startedAt, CancellationToken cancellationToken)

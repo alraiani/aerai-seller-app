@@ -28,6 +28,18 @@ public interface IHomeStockLedgerService
     /// <returns>What was applied and skipped, or why nothing was.</returns>
     Task<Result<HomeStockCountResult>> ApplyCountsAsync(string marketplaceId, IReadOnlyList<HomeStockCountChange> changes, HomeStockCountOptions options, string user, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Logs units sent from home stock into Amazon: one <see cref="Domain.Core.HomeStockMovementType.ShippedToAmazon"/>
+    /// entry per SKU, all in one transaction. SKUs whose home stock changed since the amounts were entered are skipped.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace the stock is held for.</param>
+    /// <param name="shipments">What was sent, with the home stock each amount was entered against.</param>
+    /// <param name="reference">FBA shipment id applied to every entry, if any.</param>
+    /// <param name="user">Email of the user logging it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>What was logged (<see cref="HomeStockCountResult.UnitsOut"/>) and skipped, or why nothing was.</returns>
+    Task<Result<HomeStockCountResult>> ShipToAmazonAsync(string marketplaceId, IReadOnlyList<HomeStockShipment> shipments, string? reference, string user, CancellationToken cancellationToken);
+
     /// <summary>Reverses an entry.</summary>
     /// <param name="marketplaceId">Marketplace of the entry.</param>
     /// <param name="id">The entry.</param>

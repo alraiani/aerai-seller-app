@@ -166,6 +166,14 @@ internal sealed class InventoryItemRepository(AppDbContext dbContext) : IInvento
     }
 
     /// <inheritdoc/>
+    public async Task<IReadOnlyList<PictureTarget>> ListPictureTargetsAsync(CancellationToken cancellationToken) =>
+        await dbContext.Products.AsNoTracking()
+            .OrderBy(p => p.Sku)
+            .Select(p => new PictureTarget(p.Sku, p.Asin, p.ImagePath != null))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async Task<IReadOnlySet<string>> GetExistingSkusAsync(IReadOnlyCollection<string> skus, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(skus);
