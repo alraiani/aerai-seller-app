@@ -29,7 +29,7 @@ public sealed class ProductPictureServiceTests
 
     private ProductPictureService CreateService(bool connected = true)
     {
-        var items = new InventoryItemService(_repository, _images, new FakeSpreadsheetReader(), new FakeTimeProvider(DateTimeOffset.UnixEpoch), NullLogger<InventoryItemService>.Instance);
+        var items = new InventoryItemService(_repository, _images, new FakeSpreadsheetReader(), new FakeStockAlertRefreshSignal(), new FakeTimeProvider(DateTimeOffset.UnixEpoch), NullLogger<InventoryItemService>.Instance);
         return new ProductPictureService(_repository, items, _catalog, new FakeConnection(connected), NullLogger<ProductPictureService>.Instance);
     }
 

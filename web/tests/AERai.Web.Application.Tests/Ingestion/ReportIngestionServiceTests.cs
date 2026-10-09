@@ -137,7 +137,7 @@ public sealed class ReportIngestionServiceTests
         ScriptDoneReport(OrdersTsv);
         _promotion.SkippedRowCount = 2644;
 
-        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfill: null, CancellationToken.None);
+        var summary = await RunToEndAsync(SyncTrigger.Scheduled, "scheduler", backfill: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
         Assert.Contains("1 promoted, 0 rejected, 2,644 for other marketplaces.", summary.Message, StringComparison.Ordinal);
@@ -149,7 +149,7 @@ public sealed class ReportIngestionServiceTests
         AddSchedule(AmazonReportType.Orders);
         ScriptDoneReport(OrdersTsv);
 
-        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfill: null, CancellationToken.None);
+        var summary = await RunToEndAsync(SyncTrigger.Scheduled, "scheduler", backfill: null, CancellationToken.None);
 
         Assert.Contains("1 promoted, 0 rejected.", summary.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("other marketplaces", summary.Message, StringComparison.Ordinal);
