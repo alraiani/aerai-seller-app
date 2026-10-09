@@ -13,7 +13,7 @@ Requires `gh` with the `project` scope (`gh auth status` lists it; if missing, a
 
 | What | Value |
 |---|---|
-| Repo | `alraiani/aeria-seller-app` |
+| Repo | `alraiani/aerai-seller-app` |
 | Project | owner `alraiani`, number `3`, id `PVT_kwHOALvtt84Bleat` |
 | Status field | `PVTSSF_lAHOALvtt84BleatzhkLK1Q` |
 | Status options | Todo `f75ad846` · In Progress `47fc9ee4` · Waiting on Review `7a563279` · Done `98236657` |
@@ -34,7 +34,7 @@ Comment on the item's **issue** at each of these moments — not on every commit
 4. **PR opened**: link and a one-line summary.
 5. **Done**: summary, PR link, how it was verified, follow-ups (and new issues created for them, if any).
 
-Read existing comments first (`gh issue view <n> --repo alraiani/aeria-seller-app --comments`) so you add to the log instead of repeating it.
+Read existing comments first (`gh issue view <n> --repo alraiani/aerai-seller-app --comments`) so you add to the log instead of repeating it.
 
 ## Comment format
 
@@ -54,12 +54,12 @@ Short, linked, skimmable. Never paste large code; never include secrets, tokens,
 Post it from stdin so formatting survives:
 
 ```bash
-gh issue comment <n> --repo alraiani/aeria-seller-app --body-file - <<'EOF'
+gh issue comment <n> --repo alraiani/aerai-seller-app --body-file - <<'EOF'
 ...
 EOF
 ```
 
-To fix your own last comment rather than adding noise: `gh issue comment <n> --repo alraiani/aeria-seller-app --edit-last --body-file -`.
+To fix your own last comment rather than adding noise: `gh issue comment <n> --repo alraiani/aerai-seller-app --edit-last --body-file -`.
 
 ## Moving an item
 
