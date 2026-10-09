@@ -148,6 +148,24 @@ public sealed class InventoryServiceTests
     }
 
     [Fact]
+    public async Task GetOverviewAsync_AwdStock_AddsToOverallTotalButNotToFbaOrCover()
+    {
+        Stock("A", available: 30, p => { p.HomeStock = 5; p.AwdOnHand = 100; p.AwdInbound = 20; p.AwdReplenishment = 12; });
+        Sold("A", Eastern(9, 16, 10), 20); // 1 per day over 20 local days
+
+        var overview = await CreateService().GetOverviewAsync(Us, new PageRequest(1, 25, null), InventoryFilter.Default, CancellationToken.None);
+
+        var t = overview.Totals;
+        Assert.Equal((30, 100, 20, 120), (t.AmazonTotal, t.AwdOnHand, t.AwdInbound, t.AwdTotal));
+
+        // To-FBA units are left out: they are likely already in FBA inbound.
+        Assert.Equal(155, t.OverallTotal);
+        var item = Assert.Single(overview.Items.Items);
+        Assert.Equal(155, item.Position.OverallTotal);
+        Assert.Equal(30.0m, item.DaysOfInventory); // AWD stock does not count as sell-through cover
+    }
+
+    [Fact]
     public async Task GetItemsAsync_AssignsOneStatusPerSku()
     {
         // 1 per day; default lead times: order 61 days ahead, send 24; alert window 7 days.

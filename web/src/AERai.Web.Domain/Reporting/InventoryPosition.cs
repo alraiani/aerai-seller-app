@@ -42,8 +42,8 @@ public sealed class InventoryPosition
     public DateOnly? AmazonRecommendedShipDate { get; set; }
 
     /// <summary>
-    /// Date of the most recent Amazon snapshot for the SKU, or <see langword="null"/> when the SKU is
-    /// only held at home.
+    /// Date of the most recent FBA snapshot for the SKU, or <see langword="null"/> when the SKU is
+    /// only held at home or in AWD.
     /// </summary>
     public DateOnly? SnapshotDate { get; set; }
 
@@ -80,6 +80,18 @@ public sealed class InventoryPosition
     /// <summary>Units held outside Amazon for this marketplace (entered by users).</summary>
     public int HomeStock { get; set; }
 
+    /// <summary>Units physically in Amazon Warehousing and Distribution (AWD).</summary>
+    public int AwdOnHand { get; set; }
+
+    /// <summary>Units on their way from the seller to AWD.</summary>
+    public int AwdInbound { get; set; }
+
+    /// <summary>
+    /// Units in transit from AWD to FBA. Shown for information only: once Amazon creates the
+    /// transfer shipment these units are likely counted in FBA inbound too, so totals leave them out.
+    /// </summary>
+    public int AwdReplenishment { get; set; }
+
     /// <summary>All inbound units, whatever their stage.</summary>
     public int Inbound => InboundWorking + InboundShipped + InboundReceiving + InboundUnsplit;
 
@@ -92,11 +104,14 @@ public sealed class InventoryPosition
     /// <summary>Whether <see cref="Reserved"/> is fully broken down by reason.</summary>
     public bool HasReservedBreakdown => ReservedUnsplit == 0;
 
-    /// <summary>Every unit Amazon reports for the SKU, in any state.</summary>
+    /// <summary>Every unit Amazon reports in the FBA network for the SKU, in any state.</summary>
     public int AmazonTotal => Available + Inbound + Reserved + Unfulfillable;
 
-    /// <summary>Every unit the seller owns: everything at Amazon plus home stock.</summary>
-    public int OverallTotal => AmazonTotal + HomeStock;
+    /// <summary>Units in AWD or on their way into it (excludes <see cref="AwdReplenishment"/>).</summary>
+    public int AwdTotal => AwdOnHand + AwdInbound;
+
+    /// <summary>Every unit the seller owns: FBA, AWD, and home stock.</summary>
+    public int OverallTotal => AmazonTotal + AwdTotal + HomeStock;
 
     /// <summary>
     /// Units that will become (or already are) sellable without action: available, inbound, and

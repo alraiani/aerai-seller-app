@@ -23,6 +23,8 @@ public sealed class ReportIngestionServiceTests
     private static readonly DateTimeOffset Now = new(2026, 10, 2, 12, 0, 0, TimeSpan.Zero);
 
     private readonly FakeAmazonReportsGateway _gateway = new();
+    private readonly FakeAmazonAwdGateway _awd = new();
+    private readonly FakeAwdInventoryRepository _awdInventory = new();
     private readonly FakeRawFileStore _rawFiles = new();
     private readonly FakeStagingRepository _staged = new();
     private readonly FakePromotionService _promotion = new();
@@ -41,7 +43,7 @@ public sealed class ReportIngestionServiceTests
         // Zero poll interval by default: every check is due immediately, so RunToEndAsync needs no clock moves.
         var options = Options.Create(ingestion ?? new IngestionOptions { ReportPollInterval = TimeSpan.Zero, ReportMaxWait = TimeSpan.FromMinutes(5) });
 
-        return new ReportIngestionService(_gateway, _rawFiles, staging, _promotion, _schedules, _runs, _marketplaces, options, _clock,
+        return new ReportIngestionService(_gateway, _awd, _awdInventory, _rawFiles, staging, _promotion, _schedules, _runs, _marketplaces, options, _clock,
             NullLogger<ReportIngestionService>.Instance);
     }
 
@@ -78,6 +80,68 @@ public sealed class ReportIngestionServiceTests
         _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
         _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.Done, "D1"));
         _gateway.Documents["D1"] = document;
+    }
+
+    [Fact]
+    public async Task RunAsync_AwdInventory_PagesThroughLandsEachPageAndReplacesTheDaysSnapshot()
+    {
+        AddSchedule(AmazonReportType.AwdInventory);
+        _awd.Pages.Add([new AwdInventoryItem("A-1", 100, 20, 90, 10, 5), new AwdInventoryItem("A-2", 0, 0, 0, 0, 0)]);
+        _awd.Pages.Add([new AwdInventoryItem("A-3", 40, 0, 40, 0, 0)]);
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
+        Assert.Equal([null, "1"], _awd.TokensSeen);
+        Assert.Equal(2, _rawFiles.Files.Keys.Count(k => k.StartsWith("awdinventory/2026/10/02/", StringComparison.Ordinal)));
+        var snapshot = Assert.Single(_awdInventory.Snapshots);
+        Assert.Equal((MarketplaceIds.UnitedStates, new DateOnly(2026, 10, 2)), (snapshot.MarketplaceId, snapshot.SnapshotDate));
+
+        // A SKU listed with nothing in AWD is not stored.
+        Assert.Equal(["A-1", "A-3"], snapshot.Items.Select(i => i.Sku).Order(StringComparer.Ordinal));
+        Assert.Empty(_staged.Saved);
+        Assert.Empty(_promotion.Promoted);
+        Assert.Empty(_gateway.Requests);
+        Assert.Contains("2 SKUs", summary.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_AwdInventoryEmpty_RecordsNoDataAndClearsTheDaysSnapshot()
+    {
+        AddSchedule(AmazonReportType.AwdInventory);
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.NoData, summary.Status);
+        Assert.Empty(Assert.Single(_awdInventory.Snapshots).Items);
+        Assert.NotNull(_schedules.Schedules[1].LastSuccessfulDataEnd);
+    }
+
+    [Fact]
+    public async Task RunAsync_AwdListingNeverEnds_FailsWithoutWriting()
+    {
+        AddSchedule(AmazonReportType.AwdInventory);
+        _awd.Pages.Add([new AwdInventoryItem("A-1", 1, 0, 1, 0, 0)]);
+        _awd.NeverEnds = true;
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Failed, summary.Status);
+        Assert.Contains("did not end", summary.Message, StringComparison.Ordinal);
+        Assert.Empty(_awdInventory.Snapshots);
+    }
+
+    [Fact]
+    public async Task RunAsync_AwdGatewayFails_FailsWithoutWriting()
+    {
+        AddSchedule(AmazonReportType.AwdInventory);
+        _awd.Failure = new HttpRequestException("SP-API awd.listInventory failed with HTTP 403");
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Failed, summary.Status);
+        Assert.Contains("403", summary.Message, StringComparison.Ordinal);
+        Assert.Empty(_awdInventory.Snapshots);
     }
 
     [Fact]

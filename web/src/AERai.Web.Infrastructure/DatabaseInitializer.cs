@@ -112,6 +112,10 @@ public static partial class DatabaseInitializer
                 DefaultSchedule(m, "FBA reserved inventory — daily 6:15 AM", AmazonReportType.FbaReservedInventory, ScheduleFrequency.Daily, null, new TimeOnly(6, 15), 1, now),
                 DefaultSchedule(m, "Restock recommendations — daily 6:30 AM", AmazonReportType.RestockRecommendations, ScheduleFrequency.Daily, null, new TimeOnly(6, 30), 1, now),
                 DefaultSchedule(m, "Settlements — daily 7:00 AM", AmazonReportType.Settlements, ScheduleFrequency.Daily, null, new TimeOnly(7, 0), 30, now),
+                // AWD only operates in the US; other marketplaces get no default.
+                .. m.Code == "US"
+                    ? [DefaultSchedule(m, "AWD inventory — daily 6:05 AM", AmazonReportType.AwdInventory, ScheduleFrequency.Daily, null, new TimeOnly(6, 5), 1, now)]
+                    : Array.Empty<SyncSchedule>(),
             ];
             db.SyncSchedules.AddRange(defaults.Where(d => !seeded.Contains((d.MarketplaceId, d.ReportType))));
         }

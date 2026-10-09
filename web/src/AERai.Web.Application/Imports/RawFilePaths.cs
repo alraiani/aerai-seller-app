@@ -24,10 +24,20 @@ public static class RawFilePaths
     /// <param name="id">Unique id for this file.</param>
     /// <param name="fileName">Original file name; reduced to a URL- and filesystem-safe form.</param>
     /// <returns>The relative blob path.</returns>
-    public static string Build(ImportSource source, DateTimeOffset receivedAt, Guid id, string fileName)
+    public static string Build(ImportSource source, DateTimeOffset receivedAt, Guid id, string fileName) =>
+        BuildInFolder(source.ToString().ToLowerInvariant(), receivedAt, id, fileName);
+
+    /// <summary>Builds the path for a newly received file that is not staged (e.g. AWD JSON pages).</summary>
+    /// <param name="folder">Top-level folder: a lower-case source name.</param>
+    /// <param name="receivedAt">When the file was received (converted to UTC for partitioning).</param>
+    /// <param name="id">Unique id for this file.</param>
+    /// <param name="fileName">Original file name; reduced to a URL- and filesystem-safe form.</param>
+    /// <returns>The relative blob path.</returns>
+    public static string BuildInFolder(string folder, DateTimeOffset receivedAt, Guid id, string fileName)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(folder);
         var utc = receivedAt.UtcDateTime;
-        return $"{source.ToString().ToLowerInvariant()}/{utc:yyyy}/{utc:MM}/{utc:dd}/{id:N}-{SanitizeFileName(fileName)}";
+        return $"{folder}/{utc:yyyy}/{utc:MM}/{utc:dd}/{id:N}-{SanitizeFileName(fileName)}";
     }
 
     /// <summary>
