@@ -19,10 +19,11 @@ internal static class SpApiOperation
     public const string GetReport = "reports.getReport";
     public const string GetReports = "reports.getReports";
     public const string GetReportDocument = "reports.getReportDocument";
+    public const string SearchCatalogItems = "catalog.searchCatalogItems";
 
     /// <summary>
-    /// (requests per second, burst) from the Reports API v2021-06-30 usage plans. Unknown operations
-    /// fall back to a conservative default.
+    /// (requests per second, burst) from the Reports API v2021-06-30 and Catalog Items API v2022-04-01
+    /// usage plans. Unknown operations fall back to a conservative default.
     /// </summary>
     public static readonly FrozenDictionary<string, (double RatePerSecond, int Burst)> Limits =
         new Dictionary<string, (double, int)>(StringComparer.Ordinal)
@@ -31,6 +32,7 @@ internal static class SpApiOperation
             [GetReport] = (2.0, 15),
             [GetReports] = (0.0222, 10),
             [GetReportDocument] = (0.0167, 15),
+            [SearchCatalogItems] = (2.0, 2),
         }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Limit applied to operations missing from <see cref="Limits"/>.</summary>

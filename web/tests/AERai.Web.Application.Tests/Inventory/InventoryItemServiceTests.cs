@@ -145,6 +145,18 @@ public sealed class InventoryItemServiceTests
     }
 
     [Fact]
+    public async Task SetImageAsync_StreamLongerThanItsDeclaredLength_IsRejected()
+    {
+        var huge = new byte[InventoryItemService.MaxImageBytes + 1];
+        Png.CopyTo(huge, 0);
+
+        var result = await CreateService().SetImageAsync("MAT-BLK", new MemoryStream(huge), Png.Length, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(_images.Blobs);
+    }
+
+    [Fact]
     public async Task RemoveImageAsync_DeletesBlobAndClearsProduct()
     {
         var service = CreateService();

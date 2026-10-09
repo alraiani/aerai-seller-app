@@ -1,0 +1,174 @@
+@page
+@using AERai.Web.Application.Inventory
+@model AERai.Web.UI.Pages.Inventory.PicturesModel
+@{
+    ViewData["Title"] = "Product pictures";
+    var en = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+    var c = Model.Coverage;
+}
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">Inventory</a>
+    <span aria-hidden="true">/</span>
+    <span>Pictures</span>
+</nav>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-xl-3">
+        <div class="card tile h-100"><div class="kpi">
+            <div class="kpi-label">With a picture</div>
+            <div class="kpi-value">@c.WithPicture.ToString("N0", en)</div>
+            <div class="kpi-foot">of @c.Total.ToString("N0", en) SKU@(c.Total == 1 ? "" : "s")</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card tile h-100"><div class="kpi">
+            <div class="kpi-label">Missing, has ASIN</div>
+            <div class="kpi-value">@c.MissingWithAsin.ToString("N0", en)</div>
+            <div class="kpi-foot">An Amazon pull can fill these</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card tile h-100 @(c.MissingWithoutAsin > 0 ? "tile-bad" : "")"><div class="kpi">
+            <div class="kpi-label">Missing, no ASIN</div>
+            <div class="kpi-value">@c.MissingWithoutAsin.ToString("N0", en)</div>
+            <div class="kpi-foot">Upload these by SKU</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card tile h-100"><div class="kpi">
+            <div class="kpi-label">Coverage</div>
+            <div class="kpi-value">@(c.Total == 0 ? "—" : (c.WithPicture / (double)c.Total).ToString("P0", en))</div>
+            <div class="kpi-foot">Of every SKU in the catalog</div>
+        </div></div>
+    </div>
+</div>
+
+<div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+
+@if (Model.Result is { } result)
+{
+    <div class="card mb-3">
+        <div class="card-toolbar">
+            <span class="card-toolbar-title">
+                @(Model.ResultIsFromAmazon ? "Amazon pull" : "Upload"): @result.StoredSkus.ToString("N0", en) SKU@(result.StoredSkus == 1 ? "" : "s") got a picture
+            </span>
+            <span class="text-muted-token small">
+                @if (Model.ResultIsFromAmazon)
+                {
+                    @(result.Remaining > 0 ? $"{result.Remaining:N0} more waiting — pull again to continue" : "Nothing left to pull")
+                }
+                else
+                {
+                    @($"{result.Outcomes.Count:N0} file{(result.Outcomes.Count == 1 ? "" : "s")} checked")
+                }
+            </span>
+        </div>
+        @if (result.Outcomes.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-title">Nothing to pull</div>
+                <div class="empty-detail">
+                    Every SKU with an ASIN already has a picture.@(result.WithoutAsin > 0 ? $" {result.WithoutAsin:N0} SKU{(result.WithoutAsin == 1 ? "" : "s")} without an ASIN need an upload." : "")
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table data-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>@(Model.ResultIsFromAmazon ? "ASIN" : "File")</th>
+                            <th>SKUs</th>
+                            <th>Result</th>
+                            <th>Detail</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var o in result.Outcomes)
+                    {
+                        <tr>
+                            <td class="cell-truncate" title="@o.Source">@o.Source</td>
+                            <td>
+                                @foreach (var sku in o.Skus)
+                                {
+                                    <a asp-page="Edit" asp-route-sku="@sku" class="me-2">@sku</a>
+                                }
+                            </td>
+                            <td><span class="@PicturesModel.PillClass(o.Status)">@PicturesModel.Label(o.Status)</span></td>
+                            <td class="text-muted-token">@o.Detail</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-xl-8">
+        <section class="card form-section mb-3">
+            <div class="form-section-head">
+                <span class="step"><partial name="_Icon" model='"download"' /></span>
+                <div>
+                    <h2>Pull from Amazon</h2>
+                    <p>Downloads the main listing picture from Amazon's @Model.Marketplace.Name catalog for every SKU that has an ASIN and no picture yet. SKUs that already have a picture are never changed, so your own uploads always win.</p>
+                </div>
+            </div>
+            <div class="form-section-body">
+                @if (Model.Connection.CanRun)
+                {
+                    <form method="post" asp-page-handler="Amazon">
+                        <button type="submit" class="btn btn-primary" disabled="@(c.MissingWithAsin == 0)">
+                            <partial name="_Icon" model='"download"' /> Pull @c.MissingWithAsin.ToString("N0", en) picture@(c.MissingWithAsin == 1 ? "" : "s")
+                        </button>
+                    </form>
+                    <div class="form-text mt-2">Up to @ProductPictureService.MaxAmazonDownloadsPerPull.ToString("N0", en) pictures per pull; pull again to continue.</div>
+                }
+                else
+                {
+                    <div class="alert alert-warning py-2 mb-0">Amazon isn't connected: @Model.Connection.Problem</div>
+                }
+            </div>
+        </section>
+
+        <section class="card form-section mb-3">
+            <div class="form-section-head">
+                <span class="step"><partial name="_Icon" model='"upload"' /></span>
+                <div>
+                    <h2>Upload pictures</h2>
+                    <p>Name each file after its SKU (<code>MAT-BLK.jpg</code>) or its ASIN (<code>B0ABC12345.png</code>, which sets the picture for every SKU listed under it). Pick many files at once, or a <code>.zip</code> of them. Uploaded pictures replace existing ones.</p>
+                </div>
+            </div>
+            <div class="form-section-body">
+                <form method="post" asp-page-handler="Upload" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label asp-for="Files" class="form-label">Pictures or .zip files</label>
+                        <input asp-for="Files" type="file" multiple class="form-control" accept=".jpg,.jpeg,.png,.webp,.zip,image/jpeg,image/png,image/webp,application/zip" />
+                        <span asp-validation-for="Files" class="text-danger small"></span>
+                        <div class="form-text">
+                            JPEG, PNG, or WebP, up to @(InventoryItemService.MaxImageBytes / (1024 * 1024)) MB each; at most @ProductPictureService.MaxFilesPerUpload.ToString("N0", en) pictures and @(PicturesModel.MaxUploadBytes / (1024 * 1024)) MB per upload.
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><partial name="_Icon" model='"upload"' /> Upload</button>
+                </form>
+            </div>
+        </section>
+    </div>
+    <div class="col-xl-4">
+        <div class="card summary-card">
+            <div class="card-body">
+                <div class="kpi-label mb-2">How files are matched</div>
+                <ul class="summary-facts">
+                    <li>The file name without its extension is compared with SKUs exactly, then ignoring upper/lower case</li>
+                    <li>No SKU by that name? It's tried as an ASIN, which covers every SKU with that ASIN</li>
+                    <li>Folders inside a .zip don't matter; only the file name counts</li>
+                    <li>If two files match the same SKU, the first one wins</li>
+                    <li>Unmatched and invalid files are listed and skipped</li>
+                    <li>One picture per SKU; change or remove it on the SKU's <a asp-page="Index">Edit</a> page</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>

@@ -101,23 +101,21 @@ public sealed partial class InventoryItemService(
             return Result.Failure($"Pictures must be between 1 byte and {MaxImageBytes / (1024 * 1024)} MB.");
         }
 
-        // Buffer (at most 2 MB) so the type can be checked from the bytes themselves; the declared
-        // content type and file name are client-controlled and not trusted.
-        using var buffer = new MemoryStream();
-        await content.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
-        if (buffer.Length > MaxImageBytes)
+        // Read (at most 2 MB, whatever the declared length) so the type can be checked from the bytes
+        // themselves; the declared content type and file name are client-controlled and not trusted.
+        if (await ImageFiles.ReadAtMostAsync(content, MaxImageBytes, cancellationToken).ConfigureAwait(false) is not { } bytes)
         {
             return Result.Failure($"Pictures can be at most {MaxImageBytes / (1024 * 1024)} MB.");
         }
 
-        if (DetectImageType(buffer.GetBuffer().AsSpan(0, (int)buffer.Length)) is not { } type)
+        if (ImageFiles.DetectType(bytes) is not { } type)
         {
             return Result.Failure("Only JPEG, PNG, or WebP pictures are accepted.");
         }
 
         var previous = await repository.GetImageAsync(sku, cancellationToken).ConfigureAwait(false);
         var path = $"{Guid.NewGuid():N}{type.Extension}";
-        buffer.Position = 0;
+        using var buffer = new MemoryStream(bytes, writable: false);
         await images.SaveAsync(path, buffer, type.ContentType, cancellationToken).ConfigureAwait(false);
 
         bool pointed;
@@ -317,28 +315,6 @@ public sealed partial class InventoryItemService(
     {
         using var reader = new StreamReader(content, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
         return await DelimitedTextParser.ParseAsync(reader, MaxHomeStockRows, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>Identifies JPEG, PNG, or WebP from the file's leading bytes (its signature).</summary>
-    private static (string ContentType, string Extension)? DetectImageType(ReadOnlySpan<byte> bytes)
-    {
-        if (bytes.StartsWith((ReadOnlySpan<byte>)[0xFF, 0xD8, 0xFF]))
-        {
-            return ("image/jpeg", ".jpg");
-        }
-
-        if (bytes.StartsWith((ReadOnlySpan<byte>)[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
-        {
-            return ("image/png", ".png");
-        }
-
-        // RIFF container whose form type (bytes 8-11) is WEBP.
-        if (bytes.Length >= 12 && bytes[..4].SequenceEqual("RIFF"u8) && bytes[8..12].SequenceEqual("WEBP"u8))
-        {
-            return ("image/webp", ".webp");
-        }
-
-        return null;
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Updated {Sku} in {MarketplaceId}: family {Family}, home stock {HomeStock}")]
