@@ -4,6 +4,7 @@ using AERai.Web.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AERai.Web.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261007152653_SkipOtherMarketplaceOrderLines")]
+    partial class SkipOtherMarketplaceOrderLines
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -708,12 +711,6 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
-                    b.Property<DateTimeOffset?>("BackfillEnd")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<DateTimeOffset?>("BackfillStart")
-                        .HasColumnType("datetimeoffset");
-
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -735,16 +732,6 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<string>("Message")
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
-
-                    b.Property<DateTimeOffset?>("NextCheckAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("PendingReportId")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<int>("PollAttempts")
-                        .HasColumnType("int");
 
                     b.Property<string>("ReportType")
                         .IsRequired()
@@ -776,9 +763,6 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("MarketplaceId");
 
-                    b.HasIndex("NextCheckAt")
-                        .HasFilter("[PendingReportId] IS NOT NULL");
-
                     b.HasIndex("SyncScheduleId", "StartedAt");
 
                     b.ToTable("SyncRun", "ops");
@@ -791,12 +775,6 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<TimeOnly?>("ActiveFrom")
-                        .HasColumnType("time");
-
-                    b.Property<TimeOnly?>("ActiveUntil")
-                        .HasColumnType("time");
 
                     b.Property<bool>("AutoPromote")
                         .HasColumnType("bit");

@@ -44,6 +44,12 @@ public sealed class ImportBatch
     /// <summary>Rows rejected on the most recent promotion.</summary>
     public int RejectedRowCount { get; set; }
 
+    /// <summary>
+    /// Rows left out on the most recent promotion because they belong to another marketplace (an
+    /// Amazon orders report covers every marketplace in its region). Not errors, so not rejected.
+    /// </summary>
+    public int SkippedRowCount { get; set; }
+
     /// <summary>When the batch was last promoted; <see langword="null"/> if never.</summary>
     public DateTimeOffset? PromotedAt { get; set; }
 

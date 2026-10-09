@@ -51,13 +51,13 @@ internal sealed partial class SqlPromotionService(AppDbContext dbContext, IImpor
         var batch = await batches.GetAsync(batchId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"Import batch {batchId} disappeared during promotion.");
 
-        LogPromoted(batchId, batch.PromotedRowCount, batch.RejectedRowCount);
+        LogPromoted(batchId, batch.PromotedRowCount, batch.RejectedRowCount, batch.SkippedRowCount);
         alerts.Request();
-        return Result.Success(new PromotionSummary(batch.Id, batch.Status, batch.PromotedRowCount, batch.RejectedRowCount));
+        return Result.Success(new PromotionSummary(batch.Id, batch.Status, batch.PromotedRowCount, batch.RejectedRowCount, batch.SkippedRowCount));
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Promoted batch {BatchId}: {PromotedRowCount} promoted, {RejectedRowCount} rejected")]
-    private partial void LogPromoted(long batchId, int promotedRowCount, int rejectedRowCount);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Promoted batch {BatchId}: {PromotedRowCount} promoted, {RejectedRowCount} rejected, {SkippedRowCount} for other marketplaces")]
+    private partial void LogPromoted(long batchId, int promotedRowCount, int rejectedRowCount, int skippedRowCount);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Promotion of batch {BatchId} failed")]
     private partial void LogPromotionFailed(Exception exception, long batchId);
