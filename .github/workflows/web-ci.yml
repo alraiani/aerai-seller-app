@@ -95,9 +95,38 @@ jobs:
           path: artifacts/
           retention-days: 7
 
+  deploy-infra:
+    name: Deploy Azure infrastructure
+    needs: build-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sign in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Idempotent: re-applies the Bicep so infrastructure drift or changes ship with the code that needs them.
+      - name: Deploy Bicep
+        working-directory: .
+        run: >
+          az deployment group create
+          --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
+          --template-file web/infra/main.bicep
+          --parameters web/infra/main.bicepparam
+
   deploy:
     name: Deploy to production
-    needs: build-test
+    needs: [build-test, deploy-infra]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:

@@ -75,3 +75,18 @@ Required GitHub configuration (no secrets — these are identifiers):
 
 The CI identity needs *Website Contributor* on the web app, *SQL Server Contributor* on the server
 (to open a temporary firewall rule for the runner), and membership in the SQL admin group.
+
+## Region and schema grants
+
+The subscription cannot create new SQL servers in eastus or eastus2, so the resource group lives in `southcentralus` (where SQL Multicast runs); all resources inherit it. The `core`/`stg` schema EXECUTE grants in `sql/grant-app-identity.sql` can only succeed after the first migration run creates those schemas, so run them once after the first deploy.
+
+## Pipeline order
+
+On every push to `main` that touches `web/**`, `web-ci.yml` runs: build/test → **deploy-infra** (applies
+`main.bicep` + `main.bicepparam` to `AZURE_RESOURCE_GROUP`) → **deploy** (EF migrations bundle, then App
+Service). Because the Bicep is re-applied each time, `main.bicepparam` is the source of truth: after DNS
+exists, commit `bindCustomDomain = true` rather than deploying by hand. The CI identity therefore needs
+*Contributor* on the resource group (and rights to create role assignments, e.g. *Role Based Access
+Control Administrator*, because the template assigns roles to the web app).
+
+DNS records for the web app (`seller`, `asuid.seller`) are described in the first-time setup above.
