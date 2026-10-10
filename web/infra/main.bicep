@@ -29,12 +29,6 @@ param customHostname string = 'seller.aeraigroup.com'
 @description('Bind the custom hostname and certificate. Set true only after the DNS records in README.md exist.')
 param bindCustomDomain bool = false
 
-@description('Hostname of the static marketing site.')
-param wwwHostname string = 'www.aeraigroup.com'
-
-@description('Bind the www hostname. Set true only after the www CNAME record exists.')
-param bindWwwDomain bool = false
-
 @description('Display name of the Entra ID user or group that administers Azure SQL (e.g. an "AERai SQL Admins" group).')
 param sqlAdminLogin string
 
@@ -138,24 +132,6 @@ module customDomain 'modules/customDomain.bicep' = if (bindCustomDomain) {
     hostname: customHostname
   }
 }
-
-module staticSite 'modules/staticSite.bicep' = {
-  name: 'staticSite'
-  params: {
-    name: 'stapp-${resourceSuffix}-www'
-    // Static Web Apps are only available in a handful of regions.
-    location: 'eastus2'
-    tags: tags
-    hostname: wwwHostname
-    bindCustomDomain: bindWwwDomain
-  }
-}
-
-@description('Static site default hostname (target of the www CNAME).')
-output wwwDefaultHostname string = staticSite.outputs.defaultHostname
-
-@description('Static site resource name (for fetching its deployment token).')
-output wwwStaticSiteName string = staticSite.outputs.name
 
 @description('Default *.azurewebsites.net hostname (target of the DNS CNAME).')
 output defaultHostname string = web.outputs.defaultHostname

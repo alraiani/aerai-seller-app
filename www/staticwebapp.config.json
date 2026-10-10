@@ -1,8 +1,0 @@
-{
-  "globalHeaders": {
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer",
-    "Content-Security-Policy": "default-src 'self'"
-  },
-  "navigationFallback": { "rewrite": "/index.html", "exclude": ["/*.css"] }
-}
