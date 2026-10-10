@@ -13,4 +13,4 @@ param bindWwwDomain = false
 
 // Replace with the Entra ID group that administers the database.
 param sqlAdminLogin = 'AERai SQL Admins'
-param sqlAdminObjectId = '00000000-0000-0000-0000-000000000000'
+param sqlAdminObjectId = 'd2c78b79-23ba-42e0-9717-97ce33b0b276'

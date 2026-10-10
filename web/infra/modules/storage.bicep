@@ -31,7 +31,8 @@ resource account 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   location: location
   tags: tags
   kind: 'StorageV2'
-  sku: { name: 'Standard_ZRS' }
+  // LRS, not ZRS: the lifecycle rule below archives old blobs, and archive tier is unsupported on ZRS accounts.
+  sku: { name: 'Standard_LRS' }
   properties: {
     accessTier: 'Hot'
     minimumTlsVersion: 'TLS1_2'

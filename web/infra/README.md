@@ -76,6 +76,10 @@ Required GitHub configuration (no secrets — these are identifiers):
 The CI identity needs *Website Contributor* on the web app, *SQL Server Contributor* on the server
 (to open a temporary firewall rule for the runner), and membership in the SQL admin group.
 
+## Region and schema grants
+
+The subscription cannot create new SQL servers in eastus or eastus2, so the resource group lives in `southcentralus` (where SQL Multicast runs); all resources inherit it. The `core`/`stg` schema EXECUTE grants in `sql/grant-app-identity.sql` can only succeed after the first migration run creates those schemas, so run them once after the first deploy.
+
 ## Pipeline order and the static www site
 
 On every push to `main` that touches `web/**`, `web-ci.yml` runs: build/test → **deploy-infra** (applies
