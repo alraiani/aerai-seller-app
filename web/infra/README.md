@@ -75,3 +75,22 @@ Required GitHub configuration (no secrets — these are identifiers):
 
 The CI identity needs *Website Contributor* on the web app, *SQL Server Contributor* on the server
 (to open a temporary firewall rule for the runner), and membership in the SQL admin group.
+
+## Pipeline order and the static www site
+
+On every push to `main` that touches `web/**`, `web-ci.yml` runs: build/test → **deploy-infra** (applies
+`main.bicep` + `main.bicepparam` to `AZURE_RESOURCE_GROUP`) → **deploy** (EF migrations bundle, then App
+Service). Because the Bicep is re-applied each time, `main.bicepparam` is the source of truth: after DNS
+exists, commit `bindCustomDomain = true` / `bindWwwDomain = true` rather than deploying by hand. The CI
+identity therefore needs *Contributor* on the resource group (and rights to create role assignments,
+e.g. *Role Based Access Control Administrator*, because the template assigns roles to the web app).
+
+The public site in `/www` is a Free Azure Static Web App (`stapp-aerai-seller-prod-www`), published by
+`.github/workflows/www-deploy.yml` on merge to `main`. One-time setup after the first infra deploy:
+
+1. `az staticwebapp secrets list -n stapp-aerai-seller-prod-www --query properties.apiKey -o tsv`
+   and store it as the GitHub repository secret `AZURE_STATIC_WEB_APPS_API_TOKEN`.
+2. At the DNS host (name.com): `CNAME www -> <wwwDefaultHostname output>`.
+3. Set `bindWwwDomain = true` in `main.bicepparam` and merge; Azure issues the certificate.
+
+DNS records for the web app (`seller`, `asuid.seller`) are described in the first-time setup above.
