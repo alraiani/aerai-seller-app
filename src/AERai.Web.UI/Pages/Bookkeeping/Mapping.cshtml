@@ -1,0 +1,58 @@
+@page
+@model AERai.Web.UI.Pages.Bookkeeping.MappingModel
+@{
+    ViewData["Title"] = "Account mapping";
+}
+<partial name="_StatusMessage" />
+<form method="post">
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+
+    <div class="card col-lg-6 mb-4">
+        <div class="card-body">
+            <label asp-for="Input.DepositAccountName" class="form-label"></label>
+            <input asp-for="Input.DepositAccountName" class="form-control" autocomplete="off" />
+            <span asp-validation-for="Input.DepositAccountName" class="text-danger small"></span>
+            <div class="form-text">The QuickBooks account the @Model.Marketplace.Name (@Model.Marketplace.Currency) payouts land in, spelled exactly as in the company file. Each marketplace has its own.</div>
+        </div>
+    </div>
+
+    <p class="text-body-secondary">
+        Type the QuickBooks account each kind of amount posts to, spelled exactly as in the company file. Kinds that share an account are added together in the export.
+        These accounts are shared by all marketplaces. Amounts appear here once a settlement containing them has been imported; clear a box to remove a mapping.
+    </p>
+
+    <div class="card mb-3">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead>
+                    <tr><th>Amount type</th><th>Description</th><th class="text-end">Lines</th><th>QuickBooks account</th></tr>
+                </thead>
+                <tbody>
+                @for (var i = 0; i < Model.Input.Rows.Count; i++)
+                {
+                    <tr>
+                        <td>@Model.Input.Rows[i].AmountType<input type="hidden" asp-for="Input.Rows[i].AmountType" /></td>
+                        <td>@Model.Input.Rows[i].AmountDescription<input type="hidden" asp-for="Input.Rows[i].AmountDescription" /></td>
+                        <td class="text-end">@Model.Input.Rows[i].LineCount.ToString("N0")<input type="hidden" asp-for="Input.Rows[i].LineCount" /></td>
+                        <td>
+                            <input asp-for="Input.Rows[i].QuickBooksAccountName" class="form-control form-control-sm" autocomplete="off" aria-label="QuickBooks account for @Model.Input.Rows[i].AmountType @Model.Input.Rows[i].AmountDescription" />
+                            <span asp-validation-for="Input.Rows[i].QuickBooksAccountName" class="text-danger small"></span>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Input.Rows.Count == 0)
+                {
+                    <tr><td colspan="4" class="text-body-secondary p-3">No settlements imported yet, so there is nothing to map.</td></tr>
+                }
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Save</button>
+    <a asp-page="Index" class="btn btn-link">Back to export</a>
+</form>
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

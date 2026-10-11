@@ -7,7 +7,7 @@
       "runtimeArgs": [
         "run",
         "--project",
-        "web/src/AERai.Web.UI",
+        "src/AERai.Web.UI",
         "--launch-profile",
         "http"
       ],
@@ -19,7 +19,7 @@
       "runtimeArgs": [
         "run",
         "--project",
-        "web/src/AERai.Web.UI",
+        "src/AERai.Web.UI",
         "--launch-profile",
         "http",
         "--no-build",
@@ -34,7 +34,7 @@
       "runtimeArgs": [
         "run",
         "--project",
-        "web/src/AERai.Web.UI",
+        "src/AERai.Web.UI",
         "--launch-profile",
         "http",
         "--no-build",
