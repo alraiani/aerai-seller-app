@@ -9,6 +9,9 @@
         (prefix == "/" ? currentPath == "/" : currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             && (except is null || !currentPath.StartsWith(except, StringComparison.OrdinalIgnoreCase));
 
+    var operationsCurrent = IsActive("/Inventory") || IsActive("/Orders") || IsActive("/Products");
+    var bookkeepingCurrent = IsActive("/Settlements") || IsActive("/Bookkeeping");
+
     // The label stays in the markup in rail mode (only visually hidden) so screen readers still read it;
     // data-bs-title gives sighted rail users the same label as a tooltip.
     async Task NavLink(string pagePath, string icon, string label, bool active, string? extraClass = null)
@@ -19,8 +22,9 @@
         </a>
     }
 
-    // One collapsible category. Rendered open so the whole menu works without script; site.js
-    // closes the ones this browser collapsed last time, except the one holding the current page.
+    // One collapsible category. By default only Overview and the category holding the current page are
+    // rendered open (native <details>, so the rest still open without script); site.js then applies what
+    // this browser opened or collapsed since sign-in, but never closes the current page's category.
     async Task GroupHead(string icon, string label)
     {
         <summary class="nav-section" data-bs-title="@label">
@@ -57,7 +61,7 @@
             </div>
         </details>
 
-        <details class="nav-group nav-group-operations" data-nav-group="operations" open>
+        <details class="nav-group nav-group-operations" data-nav-group="operations" open="@(operationsCurrent)">
             @{ await GroupHead("truck", "Operations"); }
             <div class="nav-group-items">
                 @* Inventory keeps its own link; the chevron beside it folds its sub-pages away. *@
@@ -76,7 +80,7 @@
             </div>
         </details>
 
-        <details class="nav-group nav-group-bookkeeping" data-nav-group="bookkeeping" open>
+        <details class="nav-group nav-group-bookkeeping" data-nav-group="bookkeeping" open="@(bookkeepingCurrent)">
             @{ await GroupHead("receipt", "Bookkeeping"); }
             <div class="nav-group-items">
                 @{ await NavLink("/Settlements/Index", "wallet", "Settlements", IsActive("/Settlements")); }
@@ -89,7 +93,7 @@
 
         @if (isOperator)
         {
-            <details class="nav-group nav-group-tools" data-nav-group="tools" open>
+            <details class="nav-group nav-group-tools" data-nav-group="tools" open="@(IsActive("/Tools"))">
                 @{ await GroupHead("wrench", "Tools"); }
                 <div class="nav-group-items">
                     @{ await NavLink("/Tools/Import", "upload", "Import data", IsActive("/Tools/Import")); }
@@ -102,7 +106,7 @@
 
         @if (isAdmin)
         {
-            <details class="nav-group nav-group-admin" data-nav-group="admin" open>
+            <details class="nav-group nav-group-admin" data-nav-group="admin" open="@(IsActive("/Admin"))">
                 @{ await GroupHead("shield", "Admin"); }
                 <div class="nav-group-items">
                     @{ await NavLink("/Admin/Users/Index", "users", "Users", IsActive("/Admin/Users")); }

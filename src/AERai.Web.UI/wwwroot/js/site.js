@@ -14,23 +14,24 @@
     }
 
     // ---------- Sidebar ----------
-    // Categories are <details> groups rendered open. This browser's collapsed ones are kept in
-    // localStorage and closed again on load, except a group holding the current page, which always
-    // shows. The rail toggle shrinks the sidebar to icons on desktop (theme.js applies the saved choice
-    // early); the rail opens every group, because its icons are the only way to reach those pages, and
-    // turns each label into a tooltip. Storage failures just mean nothing is remembered.
-    var navGroupsKey = "aerai-nav-groups";
+    // Categories are <details> groups. The server opens Overview and the current page's category; what
+    // this browser opened or collapsed since sign-in is kept in localStorage (the login page forgets it,
+    // so every sign-in starts from that default), but the current page's category always shows.
+    // The rail toggle shrinks the sidebar to icons on desktop (theme.js applies the saved choice early).
+    // The rail shows only the current page's category; another category's icon opens that category's
+    // first page, and each label becomes a tooltip. Storage failures just mean nothing is remembered.
+    var navStateKey = "aerai-nav-state";
     var navRailKey = "aerai-nav";
     var navTips = [];
     // Must match the rail's media query in site.css: phones always get the full drawer.
     var navDesktop = window.matchMedia ? window.matchMedia("(min-width: 769px)") : null;
 
-    function readClosedGroups() {
+    function readNavState() {
         try {
-            var value = JSON.parse(localStorage.getItem(navGroupsKey) || "[]");
-            return Array.isArray(value) ? value : [];
+            var value = JSON.parse(localStorage.getItem(navStateKey) || "{}");
+            return value && typeof value === "object" && !Array.isArray(value) ? value : {};
         } catch (e) {
-            return [];
+            return {};
         }
     }
 
@@ -38,52 +39,77 @@
         return document.querySelectorAll(".app-sidebar details[data-nav-group]");
     }
 
+    function holdsCurrentPage(group) {
+        return !!group.querySelector("[aria-current='page']");
+    }
+
     function railShown() {
         return document.documentElement.getAttribute("data-nav") === "rail" && (!navDesktop || navDesktop.matches);
     }
 
     function setupNavGroups() {
+        try {
+            // Replaced by aerai-nav-state; drop the old list so it doesn't linger.
+            localStorage.removeItem("aerai-nav-groups");
+            if (document.querySelector("[data-nav-reset]")) { localStorage.removeItem(navStateKey); }
+        } catch (e) { /* nothing stored */ }
+
         var groups = navGroups();
         if (groups.length === 0) { return; }
 
-        var closed = readClosedGroups();
+        var state = readNavState();
         for (var i = 0; i < groups.length; i++) {
             var key = groups[i].getAttribute("data-nav-group");
-            if (closed.indexOf(key) >= 0 && !groups[i].querySelector("[aria-current='page']")) {
-                groups[i].open = false;
+            if (typeof state[key] === "boolean" && !holdsCurrentPage(groups[i])) {
+                groups[i].open = state[key];
             }
         }
 
-        // Only the toggled group's key changes, so a group held open for the current page keeps its saved
-        // "closed" preference (the restore above also fires toggle events, which then change nothing).
+        // Only the toggled group's key is written, so a group held open for the current page keeps its
+        // saved choice (the restore above fires toggle events too, which write what was just read).
         // Opening and closing in the rail is temporary and never saved.
         for (var j = 0; j < groups.length; j++) {
             groups[j].addEventListener("toggle", function (event) {
-                if (railShown()) { return; }
                 var group = event.currentTarget;
-                var keys = readClosedGroups();
-                var key = group.getAttribute("data-nav-group");
-                var at = keys.indexOf(key);
-                if (group.open && at >= 0) { keys.splice(at, 1); }
-                if (!group.open && at < 0) { keys.push(key); }
-                try { localStorage.setItem(navGroupsKey, JSON.stringify(keys)); } catch (e) { /* not remembered */ }
+                if (group.hasAttribute("data-rail-restoring")) { group.removeAttribute("data-rail-restoring"); return; }
+                if (railShown()) { return; }
+                if (holdsCurrentPage(group) && group.open) { return; }
+                var saved = readNavState();
+                saved[group.getAttribute("data-nav-group")] = group.open;
+                try { localStorage.setItem(navStateKey, JSON.stringify(saved)); } catch (e) { /* not remembered */ }
             });
         }
     }
 
-    // Opens collapsed groups while the rail shows, and closes exactly those again when it goes away.
+    // While the rail shows, only the current page's groups are open; the others are put back exactly as
+    // they were when the full sidebar returns.
     function syncRailGroups() {
         var rail = railShown();
         var groups = navGroups();
         for (var i = 0; i < groups.length; i++) {
-            if (rail && !groups[i].open) {
-                groups[i].setAttribute("data-rail-opened", "");
-                groups[i].open = true;
-            } else if (!rail && groups[i].hasAttribute("data-rail-opened")) {
-                groups[i].removeAttribute("data-rail-opened");
-                groups[i].open = false;
+            var group = groups[i];
+            if (rail) {
+                // A sub-page group (Inventory → Worksheet) also counts as current on its parent's own page.
+                var scope = group.parentElement.classList.contains("nav-subgroup") ? group.parentElement : group;
+                var want = holdsCurrentPage(scope);
+                if (group.open !== want) {
+                    if (!group.hasAttribute("data-rail-was")) { group.setAttribute("data-rail-was", group.open ? "open" : "closed"); }
+                    group.open = want;
+                }
+            } else if (group.hasAttribute("data-rail-was")) {
+                var was = group.getAttribute("data-rail-was") === "open";
+                group.removeAttribute("data-rail-was");
+                if (group.open !== was) {
+                    // Putting a group back is not a choice of the user's; the toggle handler skips saving it.
+                    group.setAttribute("data-rail-restoring", "");
+                    group.open = was;
+                }
             }
         }
+    }
+
+    function firstLink(group) {
+        return group.querySelector(".nav-group-items a.nav-link");
     }
 
     function updateNavRail() {
@@ -104,12 +130,34 @@
         // Labels are visible in the full sidebar, so only the rail needs tooltips (the toggle always has one).
         var targets = document.querySelectorAll(rail ? ".app-sidebar [data-bs-title]" : "[data-nav-rail-toggle]");
         for (var j = 0; j < targets.length; j++) {
-            navTips.push(new window.bootstrap.Tooltip(targets[j], { placement: "right", container: "body", delay: { show: 200, hide: 0 } }));
+            var options = { placement: "right", container: "body", delay: { show: 200, hide: 0 } };
+            var group = targets[j].matches("summary.nav-section") ? targets[j].parentElement : null;
+            var link = group && !holdsCurrentPage(group) ? firstLink(group) : null;
+            // A category icon in the rail navigates, so its tooltip says where to.
+            if (link) { options.title = targets[j].getAttribute("data-bs-title") + " · opens " + link.querySelector(".nav-label").textContent; }
+            navTips.push(new window.bootstrap.Tooltip(targets[j], options));
         }
     }
 
     document.addEventListener("click", function (event) {
-        var toggle = event.target.closest && event.target.closest("[data-nav-rail-toggle]");
+        var target = event.target.closest ? event.target : null;
+        if (!target) { return; }
+
+        // In the rail a category icon opens that category's first page (its group then opens as the current
+        // one). The current category's icon does nothing. Enter/Space on a focused summary also land here.
+        var summary = target.closest(".app-sidebar summary.nav-section");
+        if (summary && railShown()) {
+            event.preventDefault();
+            var group = summary.parentElement;
+            var link = holdsCurrentPage(group) ? null : firstLink(group);
+            if (link) {
+                group.open = true;
+                window.location.assign(link.href);
+            }
+            return;
+        }
+
+        var toggle = target.closest("[data-nav-rail-toggle]");
         if (!toggle) { return; }
         var rail = document.documentElement.getAttribute("data-nav") !== "rail";
         if (rail) {
