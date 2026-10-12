@@ -35,7 +35,11 @@ param sqlAdminLogin string
 @description('Object ID of that Entra ID user or group.')
 param sqlAdminObjectId string
 
-@description('SMTP host for password-reset email, e.g. smtp.azurecomm.net (Azure Communication Services). Empty disables email.')
+@description('Email provider: Resend (HTTP API; key in Key Vault as Email--ResendApiKey) or Smtp (emailHost/emailUserName, password Email--Password).')
+@allowed(['Resend', 'Smtp'])
+param emailProvider string = 'Resend'
+
+@description('SMTP host when emailProvider is Smtp, e.g. smtp.azurecomm.net. Empty disables SMTP email.')
 param emailHost string = ''
 
 @description('SMTP user name. The password goes in Key Vault as the secret Email--Password.')
@@ -95,6 +99,7 @@ module web 'modules/appService.bicep' = {
     keyVaultUri: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/'
     rawStorageServiceUri: 'https://${storageAccountName}.blob.${environment().suffixes.storage}/'
     publicBaseUrl: bindCustomDomain ? 'https://${customHostname}' : 'https://app-${resourceSuffix}.azurewebsites.net'
+    emailProvider: emailProvider
     emailHost: emailHost
     emailUserName: emailUserName
     emailFromAddress: emailFromAddress
