@@ -70,7 +70,7 @@ Amazon SP-API reports ─┐  (upload today; automated download later)
 |---|---|
 | `stg` | Raw imports. `stg.ImportBatch` + one table per source (`OrderLine`, `InventoryRow`, `FbaInventoryRow`, `FbaReservedRow`, `FbaRestockRow`, `SettlementLine`). All business columns are `nvarchar`; every row is kept with its `RawLine` and an `ErrorMessage` after promotion. |
 | `core` | Curated, typed, constrained tables (`Marketplace`, `Product`, `ProductCost`, `ProductFamily`, `HomeStock`, `HomeStockMovement`, `LeadTimeProfile`, `RestockRecommendation`, `Order`, `OrderItem`, `InventorySnapshot`, `AwdInventorySnapshot`, `Settlement`, `SettlementLine`, `BookkeepingAccountMapping`, `BookkeepingSettings`, `BookkeepingExport`). Written **only** by `core.usp_PromoteImportBatch`, the AWD and Orders API syncs (`AwdInventorySnapshot`; `Order`/`OrderItem`), and the user tools (Products/COGS; Inventory edit, home stock, lead times; the three Bookkeeping tables) — `Marketplace` is seeded reference data. |
-| `rpt` | SQL views over `core` (`vw_SalesLine`, `vw_DailySalesBySku`, `vw_OrderSummary`, `vw_InventoryPosition`, `vw_SettlementSummary`) mapped as EF keyless entities. Pages read these. |
+| `rpt` | SQL views over `core` (`vw_SalesLine`, `vw_DailySalesBySku`, `vw_OrderSummary`, `vw_InventoryPosition`, `vw_SettlementSummary`, `vw_SettlementSkuSummary`, `vw_SettlementLine`) mapped as EF keyless entities. Pages read these. |
 | `ops` | Ingestion schedules, run history, the ingested-report ledger, the loaded-raw-file ledger (`AppliedBlob`), and stock alerts (`StockAlert`, `StockAlertRead`). |
 | `auth` | ASP.NET Core Identity tables. |
 
@@ -91,6 +91,12 @@ ASP.NET Core Identity (email = username), cookie auth, no self-registration. Rol
 - **Channel guard**: promotion rejects order lines whose `sales-channel` belongs to another marketplace (blank = the batch's own), so a mixed file can never leak orders into the wrong marketplace.
 - **Inventory is never pooled**: each marketplace has its own fulfillment network, so snapshots and `rpt.vw_InventoryPosition` are keyed by (marketplace, SKU).
 - **The switcher**: `_MarketplaceSwitch` in the top bar posts to `/Marketplace/Switch`, which remembers the choice per user/browser in the `AERai.Marketplace` cookie (`IMarketplacePreference`). Pages get their marketplace from `ICurrentMarketplace` (Application), which falls back to the first active marketplace if the cookie is missing, unknown, or inactive. Every marketplace-scoped query takes a `marketplaceId`; never add a page query that reads across marketplaces.
+
+## Settlement drill-down (Settlements pages)
+
+- Three levels: **Settlements** list (`/Settlements`) → **Summary** (`/Settlements/Summary/{id}`: one row per settlement, SKU, sale price, currency, with Sales / Fees / Refunds / Other / Net and the product's ASIN) → **Lines** (`/Settlements/Lines/{id}?sku=&price=`: every ungrouped line of one summary row, each amount in its bucket column, footer equal to the summary row). Blank `sku`/`price` select the row of amounts with no SKU (service fees).
+- `rpt.vw_SettlementLine` is the **only** place the bucket rule lives; `vw_SettlementSummary` and `vw_SettlementSkuSummary` are built on it so all three pages add up to the same payout. Change the rule there, in a new migration.
+- **Sale price** = the absolute Principal item price of the line's (settlement, order, SKU, transaction type). Settlement files carry no per-unit price or ASIN (and quantity is not staged), so this is the order line's price; two units of one order line show their combined principal. ASIN/title come from `core.Product` by SKU (empty when the SKU isn't in the catalog). Orders and refunds are summed apart so a refund doesn't cancel the sale in the price.
 
 ## Dashboard & UI conventions
 

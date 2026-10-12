@@ -135,6 +135,48 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     }
 
     [SqlFact]
+    public async Task Settlements_SkuSummaryGroupsBySkuAndSalePrice_AndLinesExplainEachGroup()
+    {
+        const string tsv =
+            "settlement-id\tsettlement-start-date\tsettlement-end-date\ttransaction-type\torder-id\tsku\tamount-type\tamount-description\tamount\tcurrency\n" +
+            "T-SET-2\t2026-09-04 07:00:00 UTC\t2026-09-18 07:00:00 UTC\t\t\t\t\t\t\tUSD\n" +
+            "T-SET-2\t\t\tOrder\tT-O-1\tT-SKU-A\tItemPrice\tPrincipal\t10.00\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-1\tT-SKU-A\tItemFees\tCommission\t-1.50\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-2\tT-SKU-A\tItemPrice\tPrincipal\t10.00\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-2\tT-SKU-A\tItemFees\tCommission\t-1.50\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-3\tT-SKU-A\tItemPrice\tPrincipal\t12.00\t\n" +
+            "T-SET-2\t\t\tRefund\tT-O-4\tT-SKU-A\tItemPrice\tPrincipal\t-10.00\t\n" +
+            "T-SET-2\t\t\tServiceFee\t\t\tother-transaction\tSubscription\t-39.99\t\n";
+
+        var batchId = await StageAsync(ImportSource.Settlements, "settlement-sku.tsv", tsv);
+        await PromoteAsync(batchId);
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var reporting = scope.ServiceProvider.GetRequiredService<IReportingQueries>();
+        var marketplaceId = (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Settlements.SingleAsync(s => s.SettlementId == "T-SET-2")).MarketplaceId;
+
+        var rows = await reporting.GetSettlementSkuSummaryAsync(marketplaceId, "T-SET-2", new PageRequest(), CancellationToken.None);
+
+        // Two sales and a refund at 10.00 share one row (the refund in its own column); the 12.00 sale
+        // and the SKU-less fee are separate rows.
+        Assert.Equal(3, rows.TotalCount);
+        var tenDollar = rows.Items.Single(r => r.Sku == "T-SKU-A" && r.SalePrice == 10.00m);
+        Assert.Equal((3, 20.00m, -3.00m, -10.00m, 7.00m), (tenDollar.OrderCount, tenDollar.Sales, tenDollar.Fees, tenDollar.Refunds, tenDollar.Net));
+        Assert.Equal(12.00m, rows.Items.Single(r => r.SalePrice == 12.00m).Sales);
+        Assert.Equal(-39.99m, rows.Items.Single(r => r.Sku is null).Net);
+
+        // The settlement total is the sum of its rows.
+        var settlement = await reporting.GetSettlementAsync(marketplaceId, "T-SET-2", CancellationToken.None);
+        Assert.Equal(rows.Items.Sum(r => r.Net), settlement!.Net);
+
+        // The drill-down lists every line of the group, with amounts in the bucket columns, and adds up to the row.
+        var lines = await reporting.GetSettlementLinesAsync(marketplaceId, "T-SET-2", "T-SKU-A", 10.00m, new PageRequest(), CancellationToken.None);
+        Assert.Equal(tenDollar.LineCount, lines.TotalCount);
+        Assert.Equal(tenDollar.Net, lines.Items.Sum(l => l.Amount));
+        Assert.All(lines.Items.Where(l => l.AmountType == "ItemFees"), l => Assert.Equal(l.Amount, l.Fees));
+    }
+
+    [SqlFact]
     public async Task Restage_FromRawFile_CreatesIndependentBatchThatPromotesIdentically()
     {
         const string csv =

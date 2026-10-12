@@ -124,6 +124,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary><c>rpt.vw_SettlementSummary</c>.</summary>
     public DbSet<SettlementSummary> SettlementSummaries => Set<SettlementSummary>();
 
+    /// <summary><c>rpt.vw_SettlementSkuSummary</c>.</summary>
+    public DbSet<SettlementSkuSummary> SettlementSkuSummaries => Set<SettlementSkuSummary>();
+
+    /// <summary><c>rpt.vw_SettlementLine</c>.</summary>
+    public DbSet<SettlementLineDetail> SettlementLineDetails => Set<SettlementLineDetail>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder builder)
     {
