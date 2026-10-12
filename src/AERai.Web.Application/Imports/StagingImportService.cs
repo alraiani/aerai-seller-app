@@ -122,8 +122,11 @@ public sealed partial class StagingImportService : IStagingImportService
         var missing = mapper.RequiredColumns.Except(parsed.Value.Headers, StringComparer.Ordinal).ToList();
         if (missing.Count > 0)
         {
+            // A wrong report type is the usual cause, so say what the file looks like instead.
+            var looksLike = MatchingSources(parsed.Value.Headers).Where(s => s != command.Source).ToList();
+            var hint = looksLike.Count == 1 ? $" It looks like a {looksLike[0]} file: choose that report type." : string.Empty;
             return Result.Failure<ImportReceipt>(
-                $"The file is missing required {command.Source} column(s): {string.Join(", ", missing)}.");
+                $"The file is missing required {command.Source} column(s): {string.Join(", ", missing)}.{hint}");
         }
 
         if (parsed.Value.Records.Count == 0)
@@ -154,6 +157,33 @@ public sealed partial class StagingImportService : IStagingImportService
 
         return Result.Success(new ImportReceipt(batchId, batch.RowCount));
     }
+
+    /// <inheritdoc/>
+    public async Task<Result<ImportSource>> DetectSourceAsync(Stream content, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        using var reader = new StreamReader(content, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+        var headers = await DelimitedTextParser.ReadHeadersAsync(reader, cancellationToken).ConfigureAwait(false);
+        if (headers.IsFailure)
+        {
+            return Result.Failure<ImportSource>(headers.Error);
+        }
+
+        var matches = MatchingSources(headers.Value);
+        return matches.Count switch
+        {
+            1 => Result.Success(matches[0]),
+            0 => Result.Failure<ImportSource>("The columns don't match any report type this app imports (Orders, Settlements, Inventory, FBA inventory, FBA reserved inventory, FBA restock recommendations). Choose the report type yourself to see which columns are missing."),
+            _ => Result.Failure<ImportSource>($"The columns fit more than one report type ({string.Join(", ", matches)}). Choose the report type yourself."),
+        };
+    }
+
+    /// <summary>The report types whose required columns are all present in the headers.</summary>
+    private List<ImportSource> MatchingSources(IReadOnlyCollection<string> headers) =>
+        [.. _mappers.Values
+            .Where(m => !m.RequiredColumns.Except(headers, StringComparer.Ordinal).Any())
+            .Select(m => m.Source)];
 
     /// <inheritdoc/>
     public async Task<Result<ImportReceipt>> RestageAsync(long batchId, string requestedBy, CancellationToken cancellationToken)

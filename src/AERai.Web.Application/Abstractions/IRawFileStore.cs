@@ -24,4 +24,10 @@ public interface IRawFileStore
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>A readable stream the caller must dispose, or <see langword="null"/> when the file does not exist.</returns>
     Task<Stream?> OpenReadAsync(string path, CancellationToken cancellationToken);
+
+    /// <summary>Lists the files under a folder, oldest first, without reading their content.</summary>
+    /// <param name="prefix">Folder prefix such as <c>ordersapi/</c>; empty lists everything.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The files, oldest first by when they were written.</returns>
+    Task<IReadOnlyList<RawFileInfo>> ListAsync(string prefix, CancellationToken cancellationToken);
 }

@@ -56,6 +56,26 @@ public sealed class BlobRawFileStoreTests : IAsyncLifetime
     }
 
     [BlobFact]
+    public async Task ListAsync_ReturnsFilesUnderThePrefixWithTheirMetadata_OldestFirst()
+    {
+        await Store.SaveAsync("orders/2026/10/01/a.tsv", new MemoryStream("a"u8.ToArray()), new Dictionary<string, string> { ["marketplaceid"] = "ATVPDKIKX0DER" }, CancellationToken.None);
+        await Store.SaveAsync("ordersapi/2026/10/01/b.json", new MemoryStream("bb"u8.ToArray()), new Dictionary<string, string>(), CancellationToken.None);
+        await Store.SaveAsync("settlements/2026/10/01/c.tsv", new MemoryStream("ccc"u8.ToArray()), new Dictionary<string, string>(), CancellationToken.None);
+
+        var everything = await Store.ListAsync(string.Empty, CancellationToken.None);
+        var onlyOrders = await Store.ListAsync("orders/", CancellationToken.None);
+
+        Assert.Equal(["orders/2026/10/01/a.tsv", "ordersapi/2026/10/01/b.json", "settlements/2026/10/01/c.tsv"], everything.Select(f => f.Path).Order(StringComparer.Ordinal));
+        Assert.Equal(everything.OrderBy(f => f.CreatedAt).Select(f => f.Path), everything.Select(f => f.Path));
+        var file = Assert.Single(onlyOrders);
+        Assert.Equal((1L, "ATVPDKIKX0DER"), (file.Size, file.Metadata["marketplaceid"]));
+    }
+
+    [BlobFact]
+    public async Task ListAsync_EmptyContainer_ReturnsNothing() =>
+        Assert.Empty(await Store.ListAsync(string.Empty, CancellationToken.None));
+
+    [BlobFact]
     public async Task SaveAsync_ThenOpenReadAsync_RoundTripsBytesAndReturnsSha256()
     {
         var bytes = Encoding.UTF8.GetBytes("sku,quantity\nA-1,3\n");

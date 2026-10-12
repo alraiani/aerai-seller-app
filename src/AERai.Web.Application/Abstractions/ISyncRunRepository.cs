@@ -57,6 +57,19 @@ public interface ISyncRunRepository
     /// <returns><see langword="true"/> when this caller won the claim.</returns>
     Task<bool> TryClaimCheckAsync(long id, DateTimeOffset expectedNextCheckAt, DateTimeOffset newNextCheckAt, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Finds the latest finished backfill of the same report type and marketplace whose range contains
+    /// the given one. Only backfills count: a scheduled run's window follows the last update, not a
+    /// range the user asked for.
+    /// </summary>
+    /// <param name="reportType">Report type being backfilled.</param>
+    /// <param name="marketplaceId">Marketplace being backfilled.</param>
+    /// <param name="start">Start of the range.</param>
+    /// <param name="end">End of the range.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The run (succeeded or found no data), or <see langword="null"/> when none covers the range.</returns>
+    Task<SyncRun?> FindCoveringBackfillAsync(AmazonReportType reportType, string marketplaceId, DateTimeOffset start, DateTimeOffset end, CancellationToken cancellationToken);
+
     /// <summary>Whether a schedule has a run still waiting for an Amazon report.</summary>
     /// <param name="scheduleId">Schedule id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

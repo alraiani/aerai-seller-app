@@ -66,6 +66,7 @@ public static class DependencyInjection
         services.AddScoped<IStockAlertService, StockAlertService>();
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IBookkeepingService, BookkeepingService>();
+        services.AddScoped<IBlobRefreshService, BlobRefreshService>();
         services.AddScoped<ICurrentMarketplace, CurrentMarketplace>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
         services.AddScoped<IReportIngestionService, ReportIngestionService>();

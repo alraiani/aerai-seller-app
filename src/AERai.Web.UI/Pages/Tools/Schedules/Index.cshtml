@@ -207,6 +207,20 @@
                     </button>
                 }
             </form>
+            @if (!deletedView)
+            {
+                <form method="post" asp-page-handler="SyncAll">
+                    <input type="hidden" name="back" value="@back" />
+                    <button type="submit" class="btn btn-sm btn-soft" disabled="@(!canRun)" data-confirm="Run every schedule that is switched on, once, right now?"
+                            data-bs-toggle="tooltip" data-bs-title="Runs every schedule that is switched on, once, right now (like Run now on each). Leave the page; it keeps going.">
+                        <partial name="_Icon" model='"play"' /> Sync all
+                    </button>
+                </form>
+                <button type="button" class="btn btn-sm btn-soft" data-bs-toggle="modal" data-bs-target="#backfill-all" disabled="@(!canRun || Model.BackfillAllTargets.Count == 0)"
+                        title="@(Model.BackfillAllTargets.Count == 0 ? "Turn on a schedule with history (orders or settlements) first" : "Backfill the same date range for every schedule that is switched on")">
+                    <partial name="_Icon" model='"rewind"' /> Backfill all…
+                </button>
+            }
             <a asp-page="Runs" class="btn btn-sm btn-soft btn-icon" aria-label="Run history" data-bs-toggle="tooltip"
                data-bs-title="Run history: every run of every schedule, newest first, with errors and imported batches.">
                 <partial name="_Icon" model='"history"' />
@@ -461,6 +475,55 @@
     </div>
 }
 
+@if (!deletedView)
+{
+    var allToday = DateOnly.FromDateTime(Model.Now.UtcDateTime);
+    <div class="modal fade" id="backfill-all" tabindex="-1" aria-labelledby="backfill-all-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5" id="backfill-all-title">Backfill all</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="post" asp-page-handler="BackfillAll">
+                    <input type="hidden" name="back" value="@back" />
+                    <div class="modal-body">
+                        <p class="small text-muted-token">
+                            Re-pulls the same date range for every schedule that is switched on and has history. You can leave the page: the runs are
+                            queued and done one at a time. Report-based schedules need one run per 30 days; the Orders API takes the whole range in one
+                            run and goes last, since it is the slowest. Data already imported is updated, never duplicated.
+                        </p>
+                        <div class="form-label">Schedules that will run</div>
+                        <ul class="small">
+                            @foreach (var t in Model.BackfillAllTargets)
+                            {
+                                <li>@t.Name <span class="text-muted-token">(@ScheduleDisplay.ReportLabel(t.ReportType)@(t.ReportType == AmazonReportType.OrdersApi ? ", whole range in one run" : ", 30-day runs"))</span></li>
+                            }
+                        </ul>
+                        <div class="form-label">Date range (UTC)</div>
+                        <div class="row g-2">
+                            <div class="col">
+                                <label for="all-from" class="form-label small mb-1">From</label>
+                                <input type="date" id="all-from" name="from" class="form-control form-control-sm" required
+                                       max="@allToday.ToString("yyyy-MM-dd")" value="@(new DateOnly(allToday.Year, 1, 1).ToString("yyyy-MM-dd"))" />
+                            </div>
+                            <div class="col">
+                                <label for="all-to" class="form-label small mb-1">To</label>
+                                <input type="date" id="all-to" name="to" class="form-control form-control-sm" required
+                                       max="@allToday.ToString("yyyy-MM-dd")" value="@allToday.ToString("yyyy-MM-dd")" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-sm btn-soft" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"rewind"' /> Queue backfill</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
 @* ---------- Per-schedule dialogs (Bootstrap modals open via data attributes; no inline script) ---------- *@
 @if (!deletedView)
 {
@@ -499,7 +562,7 @@
                         </div>
                         <div class="modal-body">
                             <p class="small text-muted-token">
-                                Re-pull history from Amazon (up to @SyncScheduleService.MaxLookbackDays days at a time). Data already imported is
+                                Re-pull history from Amazon (@(s.ReportType == AmazonReportType.OrdersApi ? "any range, in one run" : $"up to {SyncScheduleService.MaxLookbackDays} days at a time")). Data already imported is
                                 updated, never duplicated, and the regular schedule isn't affected.
                             </p>
                             <div class="form-label">Quick pick</div>

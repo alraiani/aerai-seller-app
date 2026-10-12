@@ -80,5 +80,5 @@ internal sealed class ImportBatchQueries(AppDbContext dbContext) : IImportBatchQ
     private static readonly System.Linq.Expressions.Expression<Func<ImportBatch, ImportBatchSummary>> ToSummary = b =>
         new ImportBatchSummary(b.Id, b.Source, b.MarketplaceId, b.FileName, b.UploadedBy, b.UploadedAt, b.Status,
             b.RowCount, b.PromotedRowCount, b.RejectedRowCount, b.PromotedAt, b.ErrorMessage, b.RawFilePath, b.RawFileSha256,
-            b.SkippedRowCount);
+            b.SkippedRowCount, b.DataStart, b.DataEnd);
 }

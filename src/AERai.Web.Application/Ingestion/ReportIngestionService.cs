@@ -35,11 +35,21 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// </summary>
     private static readonly TimeSpan OrdersOverlap = TimeSpan.FromMinutes(15);
 
-    /// <summary>SP-API rejects a data end time in the future; stay safely behind "now".</summary>
-    private static readonly TimeSpan DataEndSafetyMargin = TimeSpan.FromMinutes(2);
+    /// <summary>
+    /// How far behind "now" a window may end. Amazon rejects an end less than 2 minutes before <em>its</em> clock
+    /// (a 400 on <c>createdBefore</c>), so stopping exactly 2 minutes behind ours fails whenever the clocks differ
+    /// by a second; 5 minutes leaves room for that without losing anything the next run's overlap does not re-fetch.
+    /// </summary>
+    public static readonly TimeSpan DataEndSafetyMargin = TimeSpan.FromMinutes(5);
 
     /// <summary>Settlement listing re-checks a day of overlap; the ledger prevents duplicates.</summary>
     private static readonly TimeSpan SettlementListOverlap = TimeSpan.FromDays(1);
+
+    /// <summary>
+    /// How far back Amazon will list reports (<c>getReports</c> rejects a <c>createdSince</c> older than 90
+    /// days); one day inside the limit so clock and time-zone differences never tip a request over it.
+    /// </summary>
+    public static readonly TimeSpan MaxListingAge = TimeSpan.FromDays(89);
 
     /// <summary>Raw landing-zone folder for AWD inventory pages.</summary>
     public const string AwdRawFolder = "awdinventory";
@@ -377,6 +387,15 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             : context.Schedule.LastSuccessfulDataEnd is { } previous
                 ? previous - SettlementListOverlap
                 : now.AddDays(-context.Schedule.LookbackDays);
+
+        // Amazon only lists reports from the last 90 days and rejects an older start with a 400. Start at the
+        // oldest it will accept (a day inside the limit) and say so; older reports have to be uploaded.
+        var oldest = now - MaxListingAge;
+        if (since < oldest)
+        {
+            since = oldest;
+            context.Notes.Add($"Amazon only lists reports from the last 90 days, so this pull starts at {oldest:yyyy-MM-dd}; for older ones, upload the files to raw storage and use Refresh from blobs.");
+        }
 
         var reports = await _gateway.ListCompletedReportsAsync(context.Marketplace, context.Schedule.ReportType, since, cancellationToken).ConfigureAwait(false);
         var until = context.Backfill?.End ?? now;

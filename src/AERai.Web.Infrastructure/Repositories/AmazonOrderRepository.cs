@@ -15,6 +15,7 @@ internal sealed class AmazonOrderRepository(AppDbContext dbContext, IStockAlertR
     internal const long NoImportBatch = 0;
 
     /// <inheritdoc/>
+    /// <remarks>An incoming <c>Unknown</c> status never replaces a status the order already has.</remarks>
     public async Task<OrderUpsertResult> UpsertAsync(string marketplaceId, IReadOnlyCollection<AmazonOrder> orders, DateTimeOffset syncedAt, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
@@ -52,7 +53,13 @@ internal sealed class AmazonOrderRepository(AppDbContext dbContext, IStockAlertR
                 {
                     // An existing order keeps its marketplace: Amazon order ids are unique across marketplaces.
                     order.PurchaseDate = incoming.PurchaseDate;
-                    order.OrderStatus = Truncate(incoming.Status, 32);
+                    // A page without a fulfillment block (an old raw file, or a request that did not ask for it)
+                    // carries no status, and must not wipe one we already know.
+                    if (incoming.Status != OrdersPageParser.UnknownStatus)
+                    {
+                        order.OrderStatus = Truncate(incoming.Status, 32);
+                    }
+
                     order.Currency = currency ?? order.Currency;
                     order.LastImportBatchId = NoImportBatch;
                     order.UpdatedAt = syncedAt;

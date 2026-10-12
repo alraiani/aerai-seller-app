@@ -179,7 +179,7 @@ public sealed class ReportIngestionServiceTests
         await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfill: null, CancellationToken.None);
 
         var filter = Assert.Single(_ordersApi.FiltersSeen);
-        var end = Now - TimeSpan.FromMinutes(2);
+        var end = Now - ReportIngestionService.DataEndSafetyMargin;
         Assert.Equal(end.AddDays(-7), filter.LastUpdatedAfter);
         Assert.Null(filter.CreatedAfter);
         Assert.Null(filter.CreatedBefore);
@@ -210,6 +210,20 @@ public sealed class ReportIngestionServiceTests
         Assert.Equal(window.Start, filter.CreatedAfter);
         Assert.Equal(window.End, filter.CreatedBefore);
         Assert.Null(filter.LastUpdatedAfter);
+    }
+
+    [Fact]
+    public async Task RunAsync_OrdersApiBackfillEndingNow_StopsSafelyBeforeNowSoAmazonAcceptsIt()
+    {
+        AddSchedule(AmazonReportType.OrdersApi);
+        _ordersApi.Pages.Add([ApiOrder("111-1")]);
+
+        await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", new BackfillWindow(Now.AddDays(-283), Now), CancellationToken.None);
+
+        // Amazon rejects createdBefore less than 2 minutes before its own clock; ours may run a little ahead.
+        var filter = Assert.Single(_ordersApi.FiltersSeen);
+        Assert.Equal(Now - ReportIngestionService.DataEndSafetyMargin, filter.CreatedBefore);
+        Assert.True(ReportIngestionService.DataEndSafetyMargin > TimeSpan.FromMinutes(2));
     }
 
     [Fact]
@@ -298,8 +312,8 @@ public sealed class ReportIngestionServiceTests
 
         Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
         var request = Assert.Single(_gateway.Requests);
-        Assert.Equal(Now.AddMinutes(-2).AddDays(-7), request.Start);
-        Assert.Equal(Now.AddMinutes(-2), request.End);
+        Assert.Equal((Now - ReportIngestionService.DataEndSafetyMargin).AddDays(-7), request.Start);
+        Assert.Equal(Now - ReportIngestionService.DataEndSafetyMargin, request.End);
 
         var (path, file) = Assert.Single(_rawFiles.Files);
         Assert.StartsWith("orders/2026/10/02/", path, StringComparison.Ordinal);
@@ -375,6 +389,33 @@ public sealed class ReportIngestionServiceTests
         // Without the backfill, listing would start an hour ago (minus overlap) and miss this report.
         Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
         Assert.Contains(_runs.Ledger, r => r.AmazonReportId == "OLDER");
+    }
+
+    [Fact]
+    public async Task RunAsync_SettlementsBackfillOlderThanAmazonLists_StartsAtTheLimitAndSaysSo()
+    {
+        AddSchedule(AmazonReportType.Settlements);
+        _gateway.Available.Add(new AvailableAmazonReport("RECENT", "D-RECENT", Now.AddDays(-20)));
+        _gateway.Documents["D-RECENT"] = SettlementTsv;
+
+        var summary = await RunToEndAsync(SyncTrigger.Manual, "ops", new BackfillWindow(Now.AddDays(-250), Now), CancellationToken.None);
+
+        // Amazon rejects a createdSince more than 90 days old with a 400, so the request starts inside the limit.
+        Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
+        Assert.Equal(Now - ReportIngestionService.MaxListingAge, Assert.Single(_gateway.SinceSeen));
+        Assert.Contains("only lists reports from the last 90 days", summary.Message, StringComparison.Ordinal);
+        Assert.Contains(_runs.Ledger, r => r.AmazonReportId == "RECENT");
+    }
+
+    [Fact]
+    public async Task RunAsync_SettlementsStartInsideTheLimit_IsNotChangedAndHasNoNote()
+    {
+        AddSchedule(AmazonReportType.Settlements);
+
+        var summary = await RunToEndAsync(SyncTrigger.Manual, "ops", BackfillWindow.LastDays(30, Now), CancellationToken.None);
+
+        Assert.Equal(Now.AddDays(-30), Assert.Single(_gateway.SinceSeen));
+        Assert.DoesNotContain("90 days", summary.Message, StringComparison.Ordinal);
     }
 
     [Fact]

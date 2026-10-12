@@ -26,6 +26,16 @@ public sealed class ImportBatch
     /// <summary>Lower-case hex SHA-256 of the raw file, for integrity checks and duplicate detection.</summary>
     public string? RawFileSha256 { get; set; }
 
+    /// <summary>
+    /// Earliest date the file's data covers, set when the batch is staged: purchase dates for orders, the
+    /// settlement period for settlements, snapshot dates for generic inventory, and the receive date for the
+    /// FBA/restock snapshots. <see langword="null"/> when no date in the file could be read.
+    /// </summary>
+    public DateTimeOffset? DataStart { get; set; }
+
+    /// <summary>Latest date the file's data covers; see <see cref="DataStart"/>.</summary>
+    public DateTimeOffset? DataEnd { get; set; }
+
     /// <summary>User name (email) of the person who uploaded the file.</summary>
     public required string UploadedBy { get; set; }
 

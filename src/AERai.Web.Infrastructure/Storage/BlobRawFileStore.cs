@@ -65,6 +65,24 @@ internal sealed partial class BlobRawFileStore(BlobContainerClient container, IL
     }
 
     /// <summary>Content type by extension, so files preview sensibly in Storage Explorer / the portal.</summary>
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<RawFileInfo>> ListAsync(string prefix, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(prefix);
+
+        var files = new List<RawFileInfo>();
+        await foreach (var blob in container.GetBlobsAsync(BlobTraits.Metadata, BlobStates.None, prefix, cancellationToken).ConfigureAwait(false))
+        {
+            files.Add(new RawFileInfo(
+                blob.Name,
+                blob.Properties.ContentLength ?? 0,
+                blob.Properties.CreatedOn ?? DateTimeOffset.MinValue,
+                blob.Metadata is null ? new Dictionary<string, string>() : new Dictionary<string, string>(blob.Metadata, StringComparer.OrdinalIgnoreCase)));
+        }
+
+        return [.. files.OrderBy(f => f.CreatedAt).ThenBy(f => f.Path, StringComparer.Ordinal)];
+    }
+
     private static string ContentTypeFor(string path) => Path.GetExtension(path).ToLowerInvariant() switch
     {
         ".csv" => "text/csv",

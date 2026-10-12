@@ -1,4 +1,5 @@
 using AERai.Web.Application.Common;
+using AERai.Web.Domain.Staging;
 
 namespace AERai.Web.Application.Imports;
 
@@ -28,6 +29,15 @@ public interface IStagingImportService
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The new batch id and row count, or a failure when the file is missing or unparseable.</returns>
     Task<Result<ImportReceipt>> StageRawFileAsync(StageRawFileCommand command, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Works out which report a file is from its header row, so the user need not say. Exactly one report type's
+    /// required columns must all be present; the file is only read as far as its first line.
+    /// </summary>
+    /// <param name="content">The file content. The caller owns and disposes it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The report type, or a failure when the header matches none or more than one (the message says which).</returns>
+    Task<Result<ImportSource>> DetectSourceAsync(Stream content, CancellationToken cancellationToken);
 
     /// <summary>
     /// Re-stages an earlier batch from its stored raw file into a <em>new</em> batch (the original
