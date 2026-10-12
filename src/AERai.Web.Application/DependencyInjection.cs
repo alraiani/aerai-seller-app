@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<IBlobRefreshService, BlobRefreshService>();
         services.AddScoped<ICurrentMarketplace, CurrentMarketplace>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
+        services.AddScoped<ILoginCodeService, LoginCodeService>();
         services.AddScoped<IReportIngestionService, ReportIngestionService>();
         services.AddScoped<ISyncScheduleService, SyncScheduleService>();
 

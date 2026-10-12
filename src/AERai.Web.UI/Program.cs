@@ -68,6 +68,8 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AllowAnonymousToPage("/Account/ForgotPassword");
     options.Conventions.AllowAnonymousToPage("/Account/ForgotPasswordConfirmation");
     options.Conventions.AllowAnonymousToPage("/Account/ResetPassword");
+    options.Conventions.AllowAnonymousToPage("/Account/LoginWithCode");
+    options.Conventions.AllowAnonymousToPage("/Account/VerifyCode");
     options.Conventions.AllowAnonymousToPage("/Error");
 });
 
@@ -78,15 +80,20 @@ builder.Services.AddRateLimiter(options =>
     {
         context.HttpContext.Response.ContentType = "text/plain; charset=utf-8";
         await context.HttpContext.Response.WriteAsync(
-            "Too many password reset requests from this network. Please wait 15 minutes and try again.", cancellationToken);
+            "Too many requests from this network. Please wait 15 minutes and try again.", cancellationToken);
     };
-    options.AddPolicy(RateLimits.PasswordReset, context =>
+    options.AddPolicy(RateLimits.PasswordReset, context => PostsPerClientIp(context, permitLimit: 5));
+    options.AddPolicy(RateLimits.LoginCode, context => PostsPerClientIp(context, permitLimit: 5));
+    options.AddPolicy(RateLimits.LoginCodeVerify, context => PostsPerClientIp(context, permitLimit: 20));
+
+    // Limits form submissions (POST) per client IP in a 15-minute window; viewing a page (GET) is never limited.
+    static RateLimitPartition<string> PostsPerClientIp(HttpContext context, int permitLimit) =>
         HttpMethods.IsPost(context.Request.Method)
             ? RateLimitPartition.GetFixedWindowLimiter(
                 // Behind App Service the client IP comes from X-Forwarded-For (ASPNETCORE_FORWARDEDHEADERS_ENABLED).
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 })
-            : RateLimitPartition.GetNoLimiter("get"));
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = permitLimit, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 })
+            : RateLimitPartition.GetNoLimiter("get");
 });
 
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("database");

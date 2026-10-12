@@ -408,6 +408,7 @@ html:not(.js) .nav-rail-toggle { display: none; }
 .login-wrapper { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--sidebar-bg); padding: 1rem; }
 .login-card { width: 100%; max-width: 24rem; }
 .login-brand { color: var(--brand); font-weight: 700; }
+.code-input { font-variant-numeric: tabular-nums; letter-spacing: .4em; text-align: center; }
 
 /* ---------- Shared: icons, soft buttons, pills, tags ---------- */
 .icon { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.125em; }
