@@ -5,9 +5,9 @@ param environmentName = 'prod'
 param appName = 'aerai-seller'
 param customHostname = 'seller.aeraigroup.com'
 
-// Flip to true after creating the DNS records described in README.md, then redeploy.
-param bindCustomDomain = false
+// DNS records (seller CNAME, asuid.seller TXT) exist; binds the hostname and managed certificate.
+param bindCustomDomain = true
 
 // Replace with the Entra ID group that administers the database.
 param sqlAdminLogin = 'AERai SQL Admins'
-param sqlAdminObjectId = '00000000-0000-0000-0000-000000000000'
+param sqlAdminObjectId = 'd2c78b79-23ba-42e0-9717-97ce33b0b276'
