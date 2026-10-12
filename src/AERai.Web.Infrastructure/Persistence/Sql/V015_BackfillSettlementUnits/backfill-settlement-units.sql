@@ -16,19 +16,25 @@
 */
 SET NOCOUNT ON;
 
+-- Each raw line is split once, then the wanted fields are picked out by position.
 UPDATE l
-SET OrderItemCode = NULLIF(LTRIM(RTRIM(o.value)), N''),
-    QuantityPurchased = NULLIF(LTRIM(RTRIM(q.value)), N'')
+SET OrderItemCode = NULLIF(LTRIM(RTRIM(p.OrderItemCode)), N''),
+    QuantityPurchased = NULLIF(LTRIM(RTRIM(p.Quantity)), N'')
 FROM stg.SettlementLine AS l
-CROSS APPLY STRING_SPLIT(l.RawLine, CHAR(9), 1) AS o
-CROSS APPLY STRING_SPLIT(l.RawLine, CHAR(9), 1) AS q
-CROSS APPLY STRING_SPLIT(l.RawLine, CHAR(9), 1) AS s
-CROSS APPLY STRING_SPLIT(l.RawLine, CHAR(9), 1) AS a
-WHERE o.ordinal = 19 AND q.ordinal = 23 AND s.ordinal = 22 AND a.ordinal = 15
-  AND l.TransactionType IS NOT NULL
-  AND l.OrderItemCode IS NULL AND l.QuantityPurchased IS NULL
-  AND ISNULL(s.value, N'') = ISNULL(l.Sku, N'')
-  AND ISNULL(a.value, N'') = ISNULL(l.Amount, N'');
+INNER JOIN (
+    SELECT
+        r.Id,
+        MAX(CASE WHEN f.ordinal = 19 THEN f.value END) AS OrderItemCode,
+        MAX(CASE WHEN f.ordinal = 23 THEN f.value END) AS Quantity,
+        MAX(CASE WHEN f.ordinal = 22 THEN f.value END) AS Sku,
+        MAX(CASE WHEN f.ordinal = 15 THEN f.value END) AS Amount
+    FROM stg.SettlementLine AS r
+    CROSS APPLY STRING_SPLIT(r.RawLine, CHAR(9), 1) AS f
+    WHERE r.TransactionType IS NOT NULL AND r.OrderItemCode IS NULL AND r.QuantityPurchased IS NULL
+    GROUP BY r.Id
+) AS p ON p.Id = l.Id
+WHERE ISNULL(p.Sku, N'') = ISNULL(l.Sku, N'')
+  AND ISNULL(p.Amount, N'') = ISNULL(l.Amount, N'');
 
 DECLARE @BatchId bigint;
 DECLARE batches CURSOR LOCAL FAST_FORWARD FOR
