@@ -1,0 +1,46 @@
+@page
+@using AERai.Web.Application.Security
+@model AERai.Web.UI.Pages.Account.VerifyCodeModel
+@{
+    ViewData["Title"] = "Enter your code";
+}
+<div class="login-wrapper">
+    <div class="card shadow login-card">
+        <div class="card-body p-4">
+            <h1 class="h4 login-brand mb-1">Check your email</h1>
+            <p class="text-body-secondary mb-4">
+                If <strong>@Model.Input.Email</strong> has an account, we've sent it a 6-digit code.
+                It expires in @((int)LoginCodeService.CodeLifetime.TotalMinutes) minutes.
+            </p>
+            <partial name="_StatusMessage" />
+
+            <form method="post">
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2" role="alert"></div>
+                <input type="hidden" asp-for="ReturnUrl" />
+                <input type="hidden" asp-for="Input.Email" />
+                <div class="mb-3">
+                    <label asp-for="Input.Code" class="form-label"></label>
+                    <input asp-for="Input.Code" class="form-control form-control-lg code-input" inputmode="numeric" pattern="[0-9 ]{6,7}"
+                           maxlength="7" autocomplete="one-time-code" placeholder="123456" autofocus />
+                    <span asp-validation-for="Input.Code" class="text-danger small"></span>
+                </div>
+                <div class="form-check mb-4">
+                    <input asp-for="Input.RememberMe" class="form-check-input" />
+                    <label asp-for="Input.RememberMe" class="form-check-label"></label>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Sign in</button>
+            </form>
+
+            <form method="post" asp-page="/Account/LoginWithCode" class="mt-2">
+                <input type="hidden" asp-for="ReturnUrl" />
+                <input type="hidden" name="Input.Email" value="@Model.Input.Email" />
+                <input type="hidden" name="Input.Resend" value="true" />
+                <button type="submit" class="btn btn-outline-secondary w-100">Resend code</button>
+            </form>
+            <p class="small mt-4 mb-0"><a asp-page="/Account/Login" asp-route-returnUrl="@Model.ReturnUrl">Sign in with your password instead</a></p>
+        </div>
+    </div>
+</div>
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

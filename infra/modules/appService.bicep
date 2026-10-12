@@ -28,7 +28,10 @@ param rawStorageServiceUri string
 @description('Public base URL used in emailed links (custom domain once bound, otherwise the azurewebsites.net host).')
 param publicBaseUrl string
 
-@description('SMTP host for outgoing email (e.g. smtp.azurecomm.net); empty disables email.')
+@description('Email provider (Resend or Smtp). Resend\'s API key is the Key Vault secret Email--ResendApiKey.')
+param emailProvider string
+
+@description('SMTP host for outgoing email when the provider is Smtp (e.g. smtp.azurecomm.net); empty disables SMTP email.')
 param emailHost string
 
 @description('SMTP user name; the password is the Key Vault secret Email--Password.')
@@ -82,6 +85,8 @@ resource site 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'SpApi__Mode', value: 'Live' }
         // Emailed links are built from this, never from the request Host header (prevents reset poisoning).
         { name: 'App__PublicBaseUrl', value: publicBaseUrl }
+        // Resend's API key is the Key Vault secret Email--ResendApiKey, never an app setting.
+        { name: 'Email__Provider', value: emailProvider }
         { name: 'Email__Host', value: emailHost }
         { name: 'Email__UserName', value: emailUserName }
         { name: 'Email__FromAddress', value: emailFromAddress }

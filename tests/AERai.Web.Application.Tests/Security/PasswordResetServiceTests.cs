@@ -37,6 +37,18 @@ public sealed class PasswordResetServiceTests
         Assert.Empty(_email.Sent);
     }
 
+    [Fact]
+    public async Task RequestResetAsync_SendFails_DoesNotThrow()
+    {
+        // A real account must look exactly like an unknown one, even when the provider is down.
+        _identity.Tokens["ops@aeraigroup.com"] = new PasswordResetToken("u1", "ops@aeraigroup.com", "Ops", "tok123");
+        _email.Fail = true;
+
+        await CreateService().RequestResetAsync("ops@aeraigroup.com", Link, CancellationToken.None);
+
+        Assert.Empty(_email.Sent);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
