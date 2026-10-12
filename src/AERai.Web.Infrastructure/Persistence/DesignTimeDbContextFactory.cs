@@ -19,7 +19,14 @@ public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<App
             ?? "Server=localhost,1433;Database=AERaiSeller;Integrated Security=False;TrustServerCertificate=True";
 
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlServer(connectionString, DependencyInjection.ConfigureSqlServer)
+            .UseSqlServer(connectionString, sql =>
+            {
+                DependencyInjection.ConfigureSqlServer(sql);
+
+                // Applies to the migrations bundle the deploy runs: data migrations (such as re-promoting settlements)
+                // can run for minutes on a serverless database, well past the 30-second default. The running app keeps the default.
+                sql.CommandTimeout((int)TimeSpan.FromMinutes(30).TotalSeconds);
+            })
             .Options;
 
         return new AppDbContext(options);
