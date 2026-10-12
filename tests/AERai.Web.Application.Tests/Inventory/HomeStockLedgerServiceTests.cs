@@ -22,7 +22,11 @@ public sealed class HomeStockLedgerServiceTests
 
     private readonly FakeStockAlertRefreshSignal _alerts = new();
 
-    private HomeStockLedgerService CreateService() => new(_repository, _alerts, _clock, NullLogger<HomeStockLedgerService>.Instance);
+    private readonly FakeInventoryQueries _inventory = new();
+
+    private readonly FakeInventoryRefreshRequester _refresh = new();
+
+    private HomeStockLedgerService CreateService() => new(_repository, _inventory, _refresh, _alerts, _clock, NullLogger<HomeStockLedgerService>.Instance);
 
     private Task<Result<string>> RecordAsync(HomeStockMovementType type, int quantity, string? note = null, DateTimeOffset? at = null) =>
         CreateService().RecordAsync(Us, new HomeStockMovementInput("FOB00BL", type, quantity, at, null, note), User, CancellationToken.None);
@@ -232,5 +236,30 @@ public sealed class HomeStockLedgerServiceTests
         Assert.True(HomeStockCountPayload.Read("FOB00BL\t5").IsFailure);
         Assert.True(HomeStockCountPayload.Read("FOB00BL\t0\t2000000").IsFailure);
         Assert.True(HomeStockCountPayload.Read("").IsFailure);
+    }
+
+    [Fact]
+    public async Task ShipToAmazonAsync_StoresAmazonsStockAndQueuesASync()
+    {
+        var snapshotAt = _clock.GetUtcNow().AddHours(-3);
+        _inventory.Positions.Add(new Domain.Reporting.InventoryPosition { Sku = "FOB00BL", MarketplaceId = Us, SnapshotReceivedAt = snapshotAt, Available = 30, InboundShipped = 5, ReservedCustomerOrder = 4 });
+        await RecordAsync(HomeStockMovementType.ReceivedFromSupplier, 100);
+
+        var result = await CreateService().ShipToAmazonAsync(Us, [new HomeStockShipment("FOB00BL", 100, 40)], "FBA15K7Y3ZQX", User, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(new AmazonBaseline(35, snapshotAt), _repository.Entries[^1].AmazonBaseline); // Sell-through stock: customer orders excluded.
+        Assert.Equal([Us], _refresh.Requests);
+    }
+
+    [Fact]
+    public async Task RecordAsync_OnlySendsStoreABaselineAndQueueASync()
+    {
+        await RecordAsync(HomeStockMovementType.ReceivedFromSupplier, 100);
+        await RecordAsync(HomeStockMovementType.ShippedToAmazon, 10);
+
+        Assert.Null(_repository.Entries[0].AmazonBaseline);
+        Assert.Equal(new AmazonBaseline(0, null), _repository.Entries[1].AmazonBaseline); // Nothing at Amazon yet.
+        Assert.Single(_refresh.Requests);
     }
 }

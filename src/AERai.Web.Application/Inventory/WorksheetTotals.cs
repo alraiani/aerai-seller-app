@@ -5,10 +5,11 @@ namespace AERai.Web.Application.Inventory;
 /// <param name="Sold90d">Units sold in the last 90 days.</param>
 /// <param name="Available">Units sellable at Amazon.</param>
 /// <param name="Inbound">Units on their way into Amazon.</param>
+/// <param name="PendingToAmazon">Units sent from home that Amazon doesn't show yet.</param>
 /// <param name="SendToAmazon">Units to send from home stock.</param>
 /// <param name="HomeStock">Units held at home.</param>
 /// <param name="Reorder">Units for the next supplier order, over SKUs whose order is due soon or overdue.</param>
-public sealed record WorksheetTotals(int Sold30d, int Sold90d, int Available, int Inbound, int SendToAmazon, int HomeStock, int Reorder)
+public sealed record WorksheetTotals(int Sold30d, int Sold90d, int Available, int Inbound, int PendingToAmazon, int SendToAmazon, int HomeStock, int Reorder)
 {
     /// <summary>Totals a set of SKUs.</summary>
     /// <param name="items">The SKUs.</param>
@@ -23,6 +24,7 @@ public sealed record WorksheetTotals(int Sold30d, int Sold90d, int Available, in
             items.Sum(i => i.UnitsSold90d),
             items.Sum(i => i.Position.Available),
             items.Sum(i => i.Position.Inbound),
+            items.Sum(i => i.Position.PendingToAmazon),
             items.Sum(i => i.Restock?.SendToAmazon ?? 0),
             items.Sum(i => i.Position.HomeStock),
             items.Where(i => i.Restock?.DaysUntilReorder <= reorderWithinDays).Sum(i => i.Restock!.ReorderQuantity)); // Non-null: filtered.

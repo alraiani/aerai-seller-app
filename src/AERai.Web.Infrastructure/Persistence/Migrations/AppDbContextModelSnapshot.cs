@@ -306,6 +306,12 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<DateTimeOffset?>("AmazonBaselineAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("AmazonBaselineUnits")
+                        .HasColumnType("int");
+
                     b.Property<int>("BalanceAfter")
                         .HasColumnType("int");
 
@@ -328,6 +334,16 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset>("OccurredAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("ReconciledAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ReconciledBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<int>("ReconciledUnits")
+                        .HasColumnType("int");
 
                     b.Property<string>("Reference")
                         .HasMaxLength(100)
@@ -358,6 +374,10 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.HasIndex("Sku");
 
                     b.HasIndex("MarketplaceId", "OccurredAt");
+
+                    b.HasIndex("MarketplaceId", "Sku")
+                        .HasDatabaseName("IX_HomeStockMovement_PendingToAmazon")
+                        .HasFilter("[Type] = N'ShippedToAmazon' AND [Units] < 0 AND [ReconciledAt] IS NULL");
 
                     b.HasIndex("MarketplaceId", "Sku", "Id");
 
@@ -1216,6 +1236,12 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
 
+                    b.Property<DateTimeOffset?>("OldestPendingAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("PendingToAmazon")
+                        .HasColumnType("int");
+
                     b.Property<int>("ReservedCustomerOrder")
                         .HasColumnType("int");
 
@@ -1234,6 +1260,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.Property<DateOnly?>("SnapshotDate")
                         .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("SnapshotReceivedAt")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<string>("Title")
                         .HasColumnType("nvarchar(max)");

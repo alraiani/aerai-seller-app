@@ -6,17 +6,32 @@ using Microsoft.Extensions.Logging;
 namespace AERai.Web.Application.Inventory;
 
 /// <summary>Default <see cref="IHomeStockLedgerService"/>.</summary>
+/// <remarks>
+/// Every send to Amazon, whichever page logs it, stores the SKU's FBA stock at that moment (its
+/// <see cref="AmazonBaseline"/>) so <see cref="PendingReconciliation"/> can tell when Amazon shows the units,
+/// and queues an inventory sync so that happens soon.
+/// </remarks>
 /// <param name="repository">Ledger persistence.</param>
+/// <param name="inventory">Inventory reads (each SKU's FBA stock when a send is logged).</param>
+/// <param name="refresh">Queues an inventory sync after a send to Amazon.</param>
 /// <param name="alerts">Asks for a stock-alert refresh after home stock changes (it drives reorder timing).</param>
 /// <param name="clock">Clock.</param>
 /// <param name="logger">Logger.</param>
-public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository repository, IStockAlertRefreshSignal alerts, TimeProvider clock, ILogger<HomeStockLedgerService> logger) : IHomeStockLedgerService
+public sealed partial class HomeStockLedgerService(
+    IHomeStockLedgerRepository repository,
+    IInventoryQueries inventory,
+    IInventoryRefreshRequester refresh,
+    IStockAlertRefreshSignal alerts,
+    TimeProvider clock,
+    ILogger<HomeStockLedgerService> logger) : IHomeStockLedgerService
 {
     /// <summary>Longest reference accepted.</summary>
     public const int MaxReferenceLength = 100;
 
     /// <summary>Longest note accepted.</summary>
     public const int MaxNoteLength = 500;
+
+    private static readonly IReadOnlyDictionary<string, AmazonBaseline> NoBaselines = new Dictionary<string, AmazonBaseline>();
 
     /// <summary>How far ahead a movement may be dated (clock skew between browser and server).</summary>
     private static readonly TimeSpan FutureTolerance = TimeSpan.FromDays(1);
@@ -44,13 +59,20 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
             _ => input.Quantity,
         };
 
-        var write = new HomeStockLedgerWrite(marketplaceId, sku, input.Type, units, input.OccurredAt ?? now, reference, note, null, now, user);
+        var isSend = input.Type == HomeStockMovementType.ShippedToAmazon;
+        var baseline = isSend ? (await BaselinesAsync(marketplaceId, cancellationToken).ConfigureAwait(false)).GetValueOrDefault(sku) ?? AmazonBaseline.Of(null) : null;
+        var write = new HomeStockLedgerWrite(marketplaceId, sku, input.Type, units, input.OccurredAt ?? now, reference, note, null, now, user, baseline);
         var (outcome, id) = await repository.RecordAsync(write, cancellationToken).ConfigureAwait(false);
         switch (outcome)
         {
             case HomeStockLedgerOutcome.Recorded:
                 LogRecorded(id, input.Type, sku, units, marketplaceId);
                 alerts.Request();
+                if (isSend)
+                {
+                    await refresh.RequestAsync(marketplaceId, user, cancellationToken).ConfigureAwait(false);
+                }
+
                 return Result.Success(Describe(input, sku));
             case HomeStockLedgerOutcome.Unchanged:
                 return Result.Success($"{sku} already has {input.Quantity:N0} at home; nothing to record.");
@@ -99,7 +121,9 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
         // The same SKU twice keeps the last line, matching how the sheet was reviewed.
         var unique = wanted.GroupBy(c => c.Sku, StringComparer.Ordinal).Select(g => g.Last()).ToList();
         var template = new HomeStockLedgerWrite(marketplaceId, string.Empty, HomeStockMovementType.CountCorrection, 0, options.OccurredAt ?? now, reference, note, null, now, user);
-        var (applied, stale) = await repository.ApplyCountsAsync(marketplaceId, unique, options.IncreaseType, options.DecreaseType, template, cancellationToken).ConfigureAwait(false);
+        var sends = hasDecreases && options.DecreaseType == HomeStockMovementType.ShippedToAmazon;
+        var baselines = sends ? await BaselinesAsync(marketplaceId, cancellationToken).ConfigureAwait(false) : NoBaselines;
+        var (applied, stale) = await repository.ApplyCountsAsync(marketplaceId, unique, options.IncreaseType, options.DecreaseType, template, baselines, cancellationToken).ConfigureAwait(false);
 
         var unitsIn = applied.Where(c => c.Difference > 0).Sum(c => c.Difference);
         var unitsOut = -applied.Where(c => c.Difference < 0).Sum(c => c.Difference);
@@ -107,6 +131,11 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
         if (applied.Count > 0)
         {
             alerts.Request();
+        }
+
+        if (sends && unitsOut > 0)
+        {
+            await refresh.RequestAsync(marketplaceId, user, cancellationToken).ConfigureAwait(false);
         }
 
         return Result.Success(new HomeStockCountResult(applied.Count, unitsIn, unitsOut, stale));
@@ -142,14 +171,16 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
             .Select(s => new HomeStockCountChange(s.Sku, s.Current, s.Current - s.Units))
             .ToList();
         var template = new HomeStockLedgerWrite(marketplaceId, string.Empty, HomeStockMovementType.ShippedToAmazon, 0, now, tidyReference, null, null, now, user);
+        var baselines = await BaselinesAsync(marketplaceId, cancellationToken).ConfigureAwait(false);
         var (applied, stale) = await repository.ApplyCountsAsync(
-            marketplaceId, changes, HomeStockMovementType.ShippedToAmazon, HomeStockMovementType.ShippedToAmazon, template, cancellationToken).ConfigureAwait(false);
+            marketplaceId, changes, HomeStockMovementType.ShippedToAmazon, HomeStockMovementType.ShippedToAmazon, template, baselines, cancellationToken).ConfigureAwait(false);
 
         var unitsOut = -applied.Sum(c => c.Difference);
         LogShipped(applied.Count, unitsOut, stale.Count, marketplaceId);
         if (applied.Count > 0)
         {
             alerts.Request();
+            await refresh.RequestAsync(marketplaceId, user, cancellationToken).ConfigureAwait(false);
         }
 
         return Result.Success(new HomeStockCountResult(applied.Count, 0, unitsOut, stale));
@@ -242,6 +273,11 @@ public sealed partial class HomeStockLedgerService(IHomeStockLedgerRepository re
         HomeStockMovementType.CountCorrection => $"Set {sku}'s home stock to {input.Quantity:N0}.",
         _ => $"Logged {input.Quantity:+#,0;-#,0} {sku}.",
     };
+
+    /// <summary>Each SKU's FBA stock now, to store on sends (read outside the ledger's serializable transaction).</summary>
+    private async Task<IReadOnlyDictionary<string, AmazonBaseline>> BaselinesAsync(string marketplaceId, CancellationToken cancellationToken) =>
+        (await inventory.GetPositionsAsync(marketplaceId, cancellationToken).ConfigureAwait(false))
+            .ToDictionary(p => p.Sku, AmazonBaseline.Of, StringComparer.Ordinal);
 
     private static string? Tidy(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 

@@ -110,4 +110,47 @@ public sealed class RestockPlannerTests
         Assert.Equal(-61, plan.DaysUntilAction);
         Assert.Equal(270, plan.ShortAtHome);
     }
+
+    [Fact]
+    public void Plan_FullSendPendingAtAmazon_SuggestsNothingMore()
+    {
+        // 1/day, 40 at Amazon, target 90 -> send 50; then all 50 are sent but Amazon doesn't show them yet.
+        var before = RestockPlanner.Plan(Today, 1m, 40, 500, Times)!;
+        var after = RestockPlanner.Plan(Today, 1m, 40, 450, Times, pendingToAmazon: 50)!;
+
+        Assert.Equal(50, before.SendToAmazon);
+        Assert.Equal((0, 0, 0), (after.UnitsNeeded, after.SendToAmazon, after.ShortAtHome));
+        Assert.Null(after.SendBy);
+        Assert.Equal(Today.AddDays(90), after.ProjectedStockout);
+    }
+
+    [Fact]
+    public void Plan_PartialSendPending_SuggestsTheRemainder()
+    {
+        var plan = RestockPlanner.Plan(Today, 1m, 40, 480, Times, pendingToAmazon: 20)!;
+
+        Assert.Equal((30, 30, 0), (plan.UnitsNeeded, plan.SendToAmazon, plan.ShortAtHome));
+    }
+
+    [Fact]
+    public void Plan_PendingComesOffAmazonsRecommendation()
+    {
+        // Amazon asked for 80 before the send; 80 sent and pending -> nothing left to send.
+        var amazon = new AmazonRecommendation(80, Today.AddDays(5));
+        var all = RestockPlanner.Plan(Today, 1m, 40, 420, Times, amazon, pendingToAmazon: 80)!;
+        var part = RestockPlanner.Plan(Today, 2m, 400, 470, Times, amazon, pendingToAmazon: 30)!;
+
+        Assert.Equal((0, null), (all.SendToAmazon, all.SendBy));
+        Assert.Equal((50, Today.AddDays(5)), (part.SendToAmazon, part.SendBy)); // Our own need is covered; Amazon's 80 − 30 remains.
+    }
+
+    [Fact]
+    public void Plan_SendingDoesNotMoveTheReorder()
+    {
+        // Units moving from home to "pending" are still stock the seller owns.
+        var before = RestockPlanner.Plan(Today, 3m, 100, 200, Times)!;
+        var after = RestockPlanner.Plan(Today, 3m, 100, 120, Times, pendingToAmazon: 80)!;
+
+        Assert.Equal((before.ReorderBy, before.ReorderQuantity), (after.ReorderBy, after.ReorderQuantity));
+    }
 }

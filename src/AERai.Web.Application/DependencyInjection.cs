@@ -62,6 +62,8 @@ public static class DependencyInjection
         services.AddScoped<IProductPictureService, ProductPictureService>();
         services.AddScoped<IProductFamilyService, ProductFamilyService>();
         services.AddScoped<IHomeStockLedgerService, HomeStockLedgerService>();
+        services.AddScoped<IPendingSendService, PendingSendService>();
+        services.AddScoped<IInventoryRefreshRequester, InventoryRefreshRequester>();
         services.AddScoped<IHomeStockTemplateService, HomeStockTemplateService>();
         services.AddScoped<IStockAlertService, StockAlertService>();
         services.AddScoped<IProductService, ProductService>();

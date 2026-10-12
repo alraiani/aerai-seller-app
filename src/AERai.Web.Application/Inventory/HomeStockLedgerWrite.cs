@@ -16,6 +16,10 @@ namespace AERai.Web.Application.Inventory;
 /// <param name="ReversesId">The entry this one reverses, if any.</param>
 /// <param name="CreatedAt">When it was logged.</param>
 /// <param name="CreatedBy">Email of the user logging it.</param>
+/// <param name="AmazonBaseline">
+/// For a send to Amazon, the SKU's FBA stock when it was logged (see
+/// <see cref="HomeStockMovement.AmazonBaselineUnits"/>); otherwise <see langword="null"/>.
+/// </param>
 public sealed record HomeStockLedgerWrite(
     string MarketplaceId,
     string Sku,
@@ -26,4 +30,5 @@ public sealed record HomeStockLedgerWrite(
     string? Note,
     long? ReversesId,
     DateTimeOffset CreatedAt,
-    string CreatedBy);
+    string CreatedBy,
+    AmazonBaseline? AmazonBaseline = null);
