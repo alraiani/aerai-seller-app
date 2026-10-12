@@ -135,6 +135,85 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     }
 
     [SqlFact]
+    public async Task Settlements_SkuSummaryGroupsByPricePerItem_AndLinesExplainEachGroup()
+    {
+        const string tsv =
+            "settlement-id\tsettlement-start-date\tsettlement-end-date\ttransaction-type\torder-id\torder-item-code\tsku\tquantity-purchased\tamount-type\tamount-description\tamount\tcurrency\n" +
+            "T-SET-2\t2026-09-04 07:00:00 UTC\t2026-09-18 07:00:00 UTC\t\t\t\t\t\t\t\t\tUSD\n" +
+            "T-SET-2\t\t\tOrder\tT-O-1\tI1\tT-SKU-A\t1\tItemPrice\tPrincipal\t10.00\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-1\tI1\tT-SKU-A\t\tItemFees\tCommission\t-1.50\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-2\tI2\tT-SKU-A\t2\tItemPrice\tPrincipal\t20.00\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-2\tI2\tT-SKU-A\t\tItemFees\tCommission\t-3.00\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-3\tI3\tT-SKU-A\t1\tItemPrice\tPrincipal\t12.00\t\n" +
+            "T-SET-2\t\t\tRefund\tT-O-4\tI4\tT-SKU-A\t\tItemPrice\tPrincipal\t-10.00\t\n" +
+            "T-SET-2\t\t\tServiceFee\t\t\t\t\tother-transaction\tSubscription\t-39.99\t\n";
+
+        var batchId = await StageAsync(ImportSource.Settlements, "settlement-sku.tsv", tsv);
+        await PromoteAsync(batchId);
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var reporting = scope.ServiceProvider.GetRequiredService<IReportingQueries>();
+        var marketplaceId = (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Settlements.SingleAsync(s => s.SettlementId == "T-SET-2")).MarketplaceId;
+
+        var rows = await reporting.GetSettlementSkuSummaryAsync(marketplaceId, "T-SET-2", new PageRequest(), CancellationToken.None);
+
+        // A 2-unit order of 20.00 is 10.00 each, so it shares a row with the 1-unit 10.00 order and the 10.00 refund
+        // (the refund in its own column, with no quantity of its own); the 12.00 sale and the SKU-less fee are separate rows.
+        Assert.Equal(3, rows.TotalCount);
+        var tenDollar = rows.Items.Single(r => r.Sku == "T-SKU-A" && r.SalePrice == 10.00m);
+        Assert.Equal((3, 3, 30.00m, -4.50m, -10.00m, 15.50m), (tenDollar.Units, tenDollar.OrderCount, tenDollar.Sales, tenDollar.Fees, tenDollar.Refunds, tenDollar.Net));
+        Assert.Equal((1, 12.00m), (rows.Items.Single(r => r.SalePrice == 12.00m).Units, rows.Items.Single(r => r.SalePrice == 12.00m).Sales));
+        Assert.Equal((0, -39.99m), (rows.Items.Single(r => r.Sku is null).Units, rows.Items.Single(r => r.Sku is null).Net));
+
+        // The settlement total is the sum of its rows.
+        var settlement = await reporting.GetSettlementAsync(marketplaceId, "T-SET-2", CancellationToken.None);
+        Assert.Equal(rows.Items.Sum(r => r.Net), settlement!.Net);
+        Assert.Equal(4, settlement.Units);
+
+        // The drill-down lists every line of the group, with amounts in the bucket columns, and adds up to the row.
+        var lines = await reporting.GetSettlementLinesAsync(marketplaceId, "T-SET-2", "T-SKU-A", 10.00m, new PageRequest(), CancellationToken.None);
+        Assert.Equal(tenDollar.LineCount, lines.TotalCount);
+        Assert.Equal(tenDollar.Net, lines.Items.Sum(l => l.Amount));
+        Assert.Equal(tenDollar.Units, lines.Items.Sum(l => l.Units));
+        Assert.All(lines.Items.Where(l => l.AmountType == "ItemFees"), l => Assert.Equal(l.Amount, l.Fees));
+    }
+
+    [SqlFact]
+    public async Task BackfillSettlementUnits_FillsLinesImportedBeforeUnitsWereKept_AndIsRepeatable()
+    {
+        // The real settlement flat file V2 layout: the backfill reads fields by position, so a compact test file would be skipped.
+        static string Line(string transactionType, string orderId, string itemCode, string sku, string quantity, string amountType, string description, string amount) =>
+            string.Join("\t", "T-SET-3", "", "", "", "", "", transactionType, orderId, "", "", "", "Amazon.com", amountType, description, amount, "AFN", "2026-09-05", "", itemCode, "", "", sku, quantity, "");
+        var tsv =
+            "settlement-id\tsettlement-start-date\tsettlement-end-date\tdeposit-date\ttotal-amount\tcurrency\ttransaction-type\torder-id\tmerchant-order-id\tadjustment-id\tshipment-id\tmarketplace-name\tamount-type\tamount-description\tamount\tfulfillment-id\tposted-date\tposted-date-time\torder-item-code\tmerchant-order-item-id\tmerchant-adjustment-item-id\tsku\tquantity-purchased\tpromotion-id\n" +
+            "T-SET-3\t2026-09-04 07:00:00 UTC\t2026-09-18 07:00:00 UTC\t\t0\tUSD\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\n" +
+            Line("Order", "T-O-9", "I9", "T-SKU-B", "3", "ItemPrice", "Principal", "30.00") + "\n" +
+            Line("Order", "T-O-9", "I9", "T-SKU-B", "", "ItemFees", "Commission", "-4.50") + "\n";
+
+        var batchId = await StageAsync(ImportSource.Settlements, "settlement-backfill.tsv", tsv);
+        await PromoteAsync(batchId);
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // Put the settlement back the way it was before the columns existed.
+        await db.Database.ExecuteSqlRawAsync("UPDATE stg.SettlementLine SET OrderItemCode = NULL, QuantityPurchased = NULL WHERE SettlementId = 'T-SET-3'");
+        await db.Database.ExecuteSqlRawAsync("UPDATE core.SettlementLine SET OrderItemCode = NULL, Quantity = NULL WHERE SettlementId = 'T-SET-3'");
+        var script = SqlResource.Read("V015_BackfillSettlementUnits", "backfill-settlement-units.sql");
+
+        await db.Database.ExecuteSqlRawAsync(script);
+        await db.Database.ExecuteSqlRawAsync(script);
+
+        var lines = await db.SettlementLines.AsNoTracking().Where(l => l.SettlementId == "T-SET-3").ToListAsync();
+        Assert.Equal(2, lines.Count);
+        Assert.All(lines, l => Assert.Equal("I9", l.OrderItemCode));
+        Assert.Equal(3, lines.Single(l => l.AmountDescription == "Principal").Quantity);
+
+        var row = await db.SettlementSkuSummaries.AsNoTracking().SingleAsync(r => r.SettlementId == "T-SET-3" && r.Sku == "T-SKU-B");
+        Assert.Equal((3, 10.00m), (row.Units, row.SalePrice));
+    }
+
+    [SqlFact]
     public async Task Restage_FromRawFile_CreatesIndependentBatchThatPromotesIdentically()
     {
         const string csv =

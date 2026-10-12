@@ -29,6 +29,8 @@ public sealed class SettlementLineMapper : IStagingRowMapper
             PostedDate = record.Get("posted-date"),
             TransactionType = record.Get("transaction-type"),
             OrderId = record.Get("order-id"),
+            OrderItemCode = record.Get("order-item-code"),
+            QuantityPurchased = record.Get("quantity-purchased"),
             Sku = record.Get("sku"),
             AmountType = record.Get("amount-type"),
             AmountDescription = record.Get("amount-description"),

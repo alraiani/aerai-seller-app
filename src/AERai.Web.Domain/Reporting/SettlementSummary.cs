@@ -21,6 +21,9 @@ public sealed class SettlementSummary
     /// <summary>ISO 4217 currency code.</summary>
     public string? Currency { get; set; }
 
+    /// <summary>Units sold in the settlement (refunds do not reduce it).</summary>
+    public int Units { get; set; }
+
     /// <summary>Item price amounts (principal, shipping, tax) on order transactions.</summary>
     public decimal Sales { get; set; }
 

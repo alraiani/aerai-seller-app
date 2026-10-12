@@ -15,7 +15,7 @@
             @foreach (var s in Model.Settlements.Items)
             {
                 <tr>
-                    <td>@s.SettlementId</td>
+                    <td><a asp-page="Summary" asp-route-id="@s.SettlementId">@s.SettlementId</a></td>
                     <td>@s.PeriodStart?.ToString("yyyy-MM-dd") – @s.PeriodEnd?.ToString("yyyy-MM-dd")</td>
                     <td class="text-end">@s.Sales.ToString("N2")</td>
                     <td class="text-end">@s.Fees.ToString("N2")</td>
