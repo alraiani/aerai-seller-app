@@ -179,6 +179,41 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     }
 
     [SqlFact]
+    public async Task BackfillSettlementUnits_FillsLinesImportedBeforeUnitsWereKept_AndIsRepeatable()
+    {
+        // The real settlement flat file V2 layout: the backfill reads fields by position, so a compact test file would be skipped.
+        static string Line(string transactionType, string orderId, string itemCode, string sku, string quantity, string amountType, string description, string amount) =>
+            string.Join("\t", "T-SET-3", "", "", "", "", "", transactionType, orderId, "", "", "", "Amazon.com", amountType, description, amount, "AFN", "2026-09-05", "", itemCode, "", "", sku, quantity, "");
+        var tsv =
+            "settlement-id\tsettlement-start-date\tsettlement-end-date\tdeposit-date\ttotal-amount\tcurrency\ttransaction-type\torder-id\tmerchant-order-id\tadjustment-id\tshipment-id\tmarketplace-name\tamount-type\tamount-description\tamount\tfulfillment-id\tposted-date\tposted-date-time\torder-item-code\tmerchant-order-item-id\tmerchant-adjustment-item-id\tsku\tquantity-purchased\tpromotion-id\n" +
+            "T-SET-3\t2026-09-04 07:00:00 UTC\t2026-09-18 07:00:00 UTC\t\t0\tUSD\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\n" +
+            Line("Order", "T-O-9", "I9", "T-SKU-B", "3", "ItemPrice", "Principal", "30.00") + "\n" +
+            Line("Order", "T-O-9", "I9", "T-SKU-B", "", "ItemFees", "Commission", "-4.50") + "\n";
+
+        var batchId = await StageAsync(ImportSource.Settlements, "settlement-backfill.tsv", tsv);
+        await PromoteAsync(batchId);
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // Put the settlement back the way it was before the columns existed.
+        await db.Database.ExecuteSqlRawAsync("UPDATE stg.SettlementLine SET OrderItemCode = NULL, QuantityPurchased = NULL WHERE SettlementId = 'T-SET-3'");
+        await db.Database.ExecuteSqlRawAsync("UPDATE core.SettlementLine SET OrderItemCode = NULL, Quantity = NULL WHERE SettlementId = 'T-SET-3'");
+        var script = SqlResource.Read("V015_BackfillSettlementUnits", "backfill-settlement-units.sql");
+
+        await db.Database.ExecuteSqlRawAsync(script);
+        await db.Database.ExecuteSqlRawAsync(script);
+
+        var lines = await db.SettlementLines.AsNoTracking().Where(l => l.SettlementId == "T-SET-3").ToListAsync();
+        Assert.Equal(2, lines.Count);
+        Assert.All(lines, l => Assert.Equal("I9", l.OrderItemCode));
+        Assert.Equal(3, lines.Single(l => l.AmountDescription == "Principal").Quantity);
+
+        var row = await db.SettlementSkuSummaries.AsNoTracking().SingleAsync(r => r.SettlementId == "T-SET-3" && r.Sku == "T-SKU-B");
+        Assert.Equal((3, 10.00m), (row.Units, row.SalePrice));
+    }
+
+    [SqlFact]
     public async Task Restage_FromRawFile_CreatesIndependentBatchThatPromotesIdentically()
     {
         const string csv =
