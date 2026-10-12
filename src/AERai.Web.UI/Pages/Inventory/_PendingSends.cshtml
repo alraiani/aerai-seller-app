@@ -1,0 +1,99 @@
+@using System.Globalization
+@model AERai.Web.UI.Models.PendingSendsPanel
+@* Sends from home stock that Amazon's numbers don't show yet. Used on the Worksheet (one family) and the
+   Pending sends page; every form posts to /Inventory/HomeStock/Pending and returns to where it came from. *@
+@{
+    var en = CultureInfo.GetCultureInfo("en-US");
+}
+@if (Model.Items.Count == 0)
+{
+    <div class="empty-state py-4">
+        <div class="empty-title">Nothing pending</div>
+        <div class="empty-detail">Amazon’s numbers show every unit sent from home stock.</div>
+    </div>
+    return;
+}
+<div class="table-responsive">
+    <table class="table data-table pending-table align-middle mb-0">
+        <thead>
+            <tr>
+                <th>Sent</th>
+                <th class="sku-cell">SKU</th>
+                <th class="text-end">Awaiting <partial name="_Tip" model='"Units of the send that Amazon’s numbers don’t show yet, out of the units sent. They count as Amazon stock for the suggested send until then."' /></th>
+                <th>FBA shipment</th>
+                @if (Model.CanEdit)
+                {
+                    <th class="text-end"><span class="visually-hidden">Actions</span></th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.Items)
+            {
+                var s = item.Send;
+                <tr class="@(item.Overdue ? "pending-overdue" : "")">
+                    <td>
+                        <div class="text-nowrap">@Model.Local(s.OccurredAt).ToString("MMM d, h:mm tt", en)</div>
+                        @if (item.Overdue)
+                        {
+                            <div class="cell-sub text-warn pending-note">Amazon hasn’t shown it after @item.AgeDays days — check the shipment</div>
+                        }
+                        else
+                        {
+                            <div class="cell-sub">@(item.AgeDays == 0 ? "today" : $"{item.AgeDays} day{(item.AgeDays == 1 ? "" : "s")} ago")</div>
+                        }
+                    </td>
+                    <td class="sku-cell">
+                        <span class="sku-code">@s.Sku</span>
+                        @if (s.Title is { } title)
+                        {
+                            <span class="sku-title" title="@title">@title</span>
+                        }
+                    </td>
+                    <td class="text-end">
+                        <span class="fw-semibold">@s.Pending.ToString("N0", en)</span>
+                        @if (s.Pending != s.UnitsSent)
+                        {
+                            <div class="cell-sub">of @s.UnitsSent.ToString("N0", en) sent</div>
+                        }
+                    </td>
+                    <td>
+                        @if (s.Reference is { } reference)
+                        {
+                            <span class="@(s.HasShipmentId ? "sku-code" : "cell-sub")">@reference</span>
+                        }
+                        else if (Model.CanEdit)
+                        {
+                            <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="ShipmentId" asp-route-id="@s.Id" asp-route-back="@Model.Back" asp-route-family="@Model.FamilyId" class="shipment-id-form">
+                                <input type="text" name="shipmentId" class="form-control form-control-sm shipment-ref" placeholder="Add FBA shipment id" maxlength="100" required aria-label="FBA shipment id for the @s.Sku send" />
+                                <button type="submit" class="btn btn-sm btn-soft btn-icon" aria-label="Save the shipment id" title="Save the shipment id"><partial name="_Icon" model='"check"' /></button>
+                            </form>
+                        }
+                        else
+                        {
+                            <span class="cell-sub">—</span>
+                        }
+                    </td>
+                    @if (Model.CanEdit)
+                    {
+                        <td class="text-end text-nowrap">
+                            <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="Reconciled" asp-route-id="@s.Id" asp-route-back="@Model.Back" asp-route-family="@Model.FamilyId" class="d-inline"
+                                  data-confirm="Mark the @s.Sku send as received by Amazon? Its @s.Pending.ToString("N0", en) awaiting units stop counting as Amazon stock.">
+                                <button type="submit" class="btn btn-sm btn-soft" aria-label="Mark the @s.Sku send as received by Amazon"
+                                        data-bs-toggle="tooltip" data-bs-title="Amazon has it: stop counting it as pending">Received</button>
+                            </form>
+                            @if (s.ReconciledUnits == 0)
+                            {
+                                <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="Cancel" asp-route-id="@s.Id" asp-route-back="@Model.Back" asp-route-family="@Model.FamilyId" class="d-inline"
+                                      data-confirm="Cancel the @s.Sku send? A reversing ledger entry puts its @s.UnitsSent.ToString("N0", en) units back in home stock.">
+                                    <button type="submit" class="btn btn-sm btn-soft-bad btn-icon" aria-label="Cancel the @s.Sku send"
+                                            data-bs-toggle="tooltip" data-bs-title="It never went out: put the units back in home stock"><partial name="_Icon" model='"x"' /></button>
+                                </form>
+                            }
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,46 @@
+@page
+@using System.Globalization
+@model AERai.Web.UI.Pages.Inventory.HomeStock.PendingModel
+@{
+    ViewData["Title"] = "Pending sends";
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var panel = Model.Panel;
+}
+
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="../Index">Inventory</a>
+    <span aria-hidden="true">/</span>
+    @if (Model.FamilyId is not null)
+    {
+        <a asp-page="../Worksheet" asp-route-family="@Model.FamilyId">Worksheet</a>
+        <span aria-hidden="true">/</span>
+    }
+    <span>Pending sends</span>
+</nav>
+
+<div class="list-toolbar mb-3">
+    <form method="get" class="filters" data-autosubmit-form>
+        <select name="family" class="form-select form-select-sm" aria-label="Family">
+            <option value="">All families</option>
+            @foreach (var f in Model.Families)
+            {
+                <option value="@f.Id" selected="@(Model.FamilyId == f.Id)">@f.Name</option>
+            }
+        </select>
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Show</button>
+    </form>
+    <div class="card-toolbar-group">
+        <a asp-page="Ledger" asp-route-family="@Model.FamilyId" asp-route-type="ShippedToAmazon" class="btn btn-sm btn-soft"><partial name="_Icon" model='"list"' /> All sends in the ledger</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@panel.Items.Count.ToString("N0", en) send@(panel.Items.Count == 1 ? "" : "s") awaiting Amazon</span>
+            <span class="text-muted-token fw-normal">@panel.Units.ToString("N0", en) units in @Model.Marketplace.Name@(panel.OverdueCount > 0 ? $" · {panel.OverdueCount} to check" : "")</span>
+            <partial name="_Tip" model='$"Units sent from home stock that Amazon’s numbers don’t show yet. They count as Amazon stock so the Worksheet doesn’t suggest sending them again, and clear on their own once an inventory sync shows them (a send with an FBA shipment id is matched by its inbound units). After {panel.ExpiryDays} days a send is flagged for someone to check."' />
+        </span>
+    </div>
+    <partial name="_PendingSends" model="panel" />
+</div>

@@ -463,6 +463,7 @@ a.pill:hover { filter: brightness(0.95); }
 .tag-settlements { color: var(--teal); background: var(--teal-soft); }
 
 .cell-sub { font-size: 0.78rem; color: var(--muted); }
+.cell-sub.text-warn { color: var(--warning); }
 .crumbs { display: flex; flex-wrap: wrap; gap: 0.4rem; font-size: 0.85rem; color: var(--muted); margin-bottom: 1rem; }
 .crumbs a { text-decoration: none; }
 .page-footnote { font-size: 0.8rem; color: var(--muted); margin: 0.75rem 0 0; }
@@ -751,6 +752,15 @@ th .tip { text-transform: none; }
 .worksheet-table .after-send { color: var(--brand); }
 .worksheet-table .after-send.text-warn { color: var(--warning); }
 .save-bar .shipment-ref { width: 14rem; max-width: 100%; }
+
+/* Sends awaiting Amazon (Worksheet panel and Pending sends page). */
+.shipment-id-form { display: flex; align-items: center; gap: 0.25rem; }
+.shipment-id-form .shipment-ref { width: 12rem; max-width: 100%; }
+.pending-table tr.pending-overdue > td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+.pending-table .sku-cell { min-width: 11rem; }
+.pending-table .sku-code { font-weight: 600; letter-spacing: 0.01em; }
+.pending-table .sku-title { display: block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75rem; color: var(--muted); }
+.pending-table .pending-note { min-width: 10rem; max-width: 16rem; white-space: normal; }
 .worksheet-table .action-due { color: var(--warning); font-weight: 600; }
 .worksheet-table .action-late { color: var(--negative); font-weight: 600; }
 .worksheet-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }

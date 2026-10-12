@@ -63,12 +63,13 @@
             </span>
             <partial name="_Tip" model='"Every unit that came into or went out of home stock. Each SKU’s entries add up to its home stock; Balance is the SKU’s count right after the entry. Edits on the Worksheet, Edit page, bulk page, and uploads appear as count corrections. Mistakes are reversed, never deleted."' />
         </span>
-        @if (Model.CanEdit)
-        {
-            <div class="card-toolbar-group">
+        <div class="card-toolbar-group">
+            <a asp-page="Pending" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"><partial name="_Icon" model='"truck"' /> Pending sends</a>
+            @if (Model.CanEdit)
+            {
                 <a asp-route-log="true" asp-route-sku="@Model.Sku" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#log-dialog"><partial name="_Icon" model='"plus"' /> Log movement</a>
-            </div>
-        }
+            }
+        </div>
     </div>
 
     @if (rows.Count == 0)

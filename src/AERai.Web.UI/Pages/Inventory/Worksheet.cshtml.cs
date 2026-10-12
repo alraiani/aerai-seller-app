@@ -19,10 +19,11 @@ namespace AERai.Web.UI.Pages.Inventory;
 /// <param name="inventory">Inventory numbers and the worksheet layout.</param>
 /// <param name="items">Item editing (families list, home-stock saves).</param>
 /// <param name="ledger">Home-stock ledger (logs units sent to Amazon).</param>
+/// <param name="pending">Sends Amazon doesn't show yet, listed under the sheet.</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
 /// <param name="options">Restock settings (when an action counts as due soon).</param>
 /// <param name="clock">Clock (the sheet is dated in the marketplace's local calendar).</param>
-public sealed class WorksheetModel(IInventoryService inventory, IInventoryItemService items, IHomeStockLedgerService ledger, ICurrentMarketplace currentMarketplace, IOptions<InventoryOptions> options, TimeProvider clock) : PageModel
+public sealed class WorksheetModel(IInventoryService inventory, IInventoryItemService items, IHomeStockLedgerService ledger, IPendingSendService pending, ICurrentMarketplace currentMarketplace, IOptions<InventoryOptions> options, TimeProvider clock) : PageModel
 {
     /// <summary>Marketplace shown.</summary>
     public Domain.Core.Marketplace Marketplace { get; private set; } = default!;
@@ -42,6 +43,12 @@ public sealed class WorksheetModel(IInventoryService inventory, IInventoryItemSe
 
     /// <summary>The worksheet, or <see langword="null"/> when there is no family to show.</summary>
     public InventoryWorksheet? Sheet { get; private set; }
+
+    /// <summary>The family's sends awaiting Amazon, or <see langword="null"/> when there is no family to show.</summary>
+    public PendingSendsPanel? Pending { get; private set; }
+
+    /// <summary>A send still awaiting Amazon after this many days is flagged.</summary>
+    public int PendingExpiryDays => options.Value.PendingSendExpiryDays;
 
     /// <summary>Restock actions due within this many days are highlighted.</summary>
     public int SoonDays => options.Value.AlertLeadDays;
@@ -147,7 +154,7 @@ public sealed class WorksheetModel(IInventoryService inventory, IInventoryItemSe
         var done = new List<string>();
         if (shipped is { Applied: > 0 })
         {
-            done.Add($"Logged {shipped.UnitsOut:N0} unit{(shipped.UnitsOut == 1 ? "" : "s")} sent to Amazon for {shipped.Applied:N0} SKU{(shipped.Applied == 1 ? "" : "s")}.");
+            done.Add($"Logged {shipped.UnitsOut:N0} unit{(shipped.UnitsOut == 1 ? "" : "s")} sent to Amazon for {shipped.Applied:N0} SKU{(shipped.Applied == 1 ? "" : "s")}; they count as awaiting Amazon until its numbers show them.");
         }
 
         if (counts.Count > 0)
@@ -175,6 +182,8 @@ public sealed class WorksheetModel(IInventoryService inventory, IInventoryItemSe
         if (Family is not null)
         {
             Sheet = await inventory.GetWorksheetAsync(Marketplace, Family.Id, cancellationToken);
+            var sends = await pending.ListAsync(Marketplace.MarketplaceId, Family.Id, cancellationToken);
+            Pending = new PendingSendsPanel(sends, CanEdit, TimeZoneInfo.FindSystemTimeZoneById(Marketplace.TimeZoneId), PendingExpiryDays, "worksheet", Family.Id);
         }
     }
 
