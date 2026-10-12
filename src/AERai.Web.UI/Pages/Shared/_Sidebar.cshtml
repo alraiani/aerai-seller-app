@@ -1,0 +1,113 @@
+@{
+    var isOperator = User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator);
+    var isAdmin = User.IsInRole(AppRoles.Admin);
+    var currentPath = Context.Request.Path.Value ?? "/";
+
+    // Whether the sidebar entry for a section is the current one.
+    // A section link stays current on its sub-pages, except one that has its own link (except:).
+    bool IsActive(string prefix, string? except = null) =>
+        (prefix == "/" ? currentPath == "/" : currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            && (except is null || !currentPath.StartsWith(except, StringComparison.OrdinalIgnoreCase));
+
+    // The label stays in the markup in rail mode (only visually hidden) so screen readers still read it;
+    // data-bs-title gives sighted rail users the same label as a tooltip.
+    async Task NavLink(string pagePath, string icon, string label, bool active, string? extraClass = null)
+    {
+        <a class="nav-link @extraClass @(active ? "active" : null)" asp-page="@pagePath" aria-current="@(active ? "page" : null)" data-bs-title="@label">
+            <partial name="_Icon" model="icon" />
+            <span class="nav-label">@label</span>
+        </a>
+    }
+
+    // One collapsible category. Rendered open so the whole menu works without script; site.js
+    // closes the ones this browser collapsed last time, except the one holding the current page.
+    async Task GroupHead(string icon, string label)
+    {
+        <summary class="nav-section" data-bs-title="@label">
+            <partial name="_Icon" model="icon" />
+            <span class="nav-label">@label</span>
+            <span class="nav-chevron"><partial name="_Icon" model="@("chevron-down")" /></span>
+        </summary>
+    }
+}
+<nav class="app-sidebar" id="app-sidebar" aria-label="Main navigation">
+    <div class="sidebar-head">
+        <a class="app-brand" asp-page="/Index" aria-label="AERai Seller home">
+            <span class="brand-mark" aria-hidden="true">A</span>
+            <span class="brand-text">AERai <span>Seller</span></span>
+        </a>
+        @* Desktop only: shrinks the sidebar to an icon rail. Hidden without script, which is what applies the rail. *@
+        <button type="button" class="nav-rail-toggle" data-nav-rail-toggle aria-controls="app-sidebar" aria-expanded="true">
+            <partial name="_Icon" model="@("panel-left")" />
+            <span class="visually-hidden" data-nav-rail-label>Collapse menu</span>
+        </button>
+        @* CSS-only toggle (no script needed): the links collapse behind it on small screens. *@
+        <label class="nav-toggle-label" for="nav-toggle">
+            <partial name="_Icon" model="@("menu")" />
+            <span class="visually-hidden">Menu</span>
+        </label>
+    </div>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Show navigation" />
+    <div class="nav-links">
+        <details class="nav-group nav-group-overview" data-nav-group="overview" open>
+            @{ await GroupHead("home", "Overview"); }
+            <div class="nav-group-items">
+                @{ await NavLink("/Index", "dashboard", "Dashboard", IsActive("/")); }
+                @{ await NavLink("/Notifications/Index", "bell", "Notifications", IsActive("/Notifications")); }
+            </div>
+        </details>
+
+        <details class="nav-group nav-group-operations" data-nav-group="operations" open>
+            @{ await GroupHead("truck", "Operations"); }
+            <div class="nav-group-items">
+                @* Inventory keeps its own link; the chevron beside it folds its sub-pages away. *@
+                <div class="nav-subgroup">
+                    @{ await NavLink("/Inventory/Index", "box", "Inventory", IsActive("/Inventory", except: "/Inventory/Worksheet")); }
+                    <details data-nav-group="inventory" open>
+                        <summary class="nav-sub-toggle" data-bs-title="Inventory pages">
+                            <partial name="_Icon" model="@("chevron-down")" />
+                            <span class="visually-hidden">Inventory pages</span>
+                        </summary>
+                        @{ await NavLink("/Inventory/Worksheet", "grid", "Worksheet", IsActive("/Inventory/Worksheet"), "nav-sub"); }
+                    </details>
+                </div>
+                @{ await NavLink("/Orders/Index", "cart", "Orders", IsActive("/Orders")); }
+                @{ await NavLink("/Products/Index", "tag", "Products & COGS", IsActive("/Products")); }
+            </div>
+        </details>
+
+        <details class="nav-group nav-group-bookkeeping" data-nav-group="bookkeeping" open>
+            @{ await GroupHead("receipt", "Bookkeeping"); }
+            <div class="nav-group-items">
+                @{ await NavLink("/Settlements/Index", "wallet", "Settlements", IsActive("/Settlements")); }
+                @if (isOperator)
+                {
+                    await NavLink("/Bookkeeping/Index", "book", "QuickBooks export", IsActive("/Bookkeeping"));
+                }
+            </div>
+        </details>
+
+        @if (isOperator)
+        {
+            <details class="nav-group nav-group-tools" data-nav-group="tools" open>
+                @{ await GroupHead("wrench", "Tools"); }
+                <div class="nav-group-items">
+                    @{ await NavLink("/Tools/Import", "upload", "Import data", IsActive("/Tools/Import")); }
+                    @{ await NavLink("/Tools/Batches/Index", "layers", "Import batches", IsActive("/Tools/Batches")); }
+                    @{ await NavLink("/Tools/Schedules/Index", "refresh", "Amazon sync", IsActive("/Tools/Schedules")); }
+                    @{ await NavLink("/Tools/Refresh", "cloud-download", "Refresh from blobs", IsActive("/Tools/Refresh")); }
+                </div>
+            </details>
+        }
+
+        @if (isAdmin)
+        {
+            <details class="nav-group nav-group-admin" data-nav-group="admin" open>
+                @{ await GroupHead("shield", "Admin"); }
+                <div class="nav-group-items">
+                    @{ await NavLink("/Admin/Users/Index", "users", "Users", IsActive("/Admin/Users")); }
+                </div>
+            </details>
+        }
+    </div>
+</nav>

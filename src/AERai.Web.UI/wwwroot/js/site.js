@@ -13,6 +13,124 @@
         }
     }
 
+    // ---------- Sidebar ----------
+    // Categories are <details> groups rendered open. This browser's collapsed ones are kept in
+    // localStorage and closed again on load, except a group holding the current page, which always
+    // shows. The rail toggle shrinks the sidebar to icons on desktop (theme.js applies the saved choice
+    // early); the rail opens every group, because its icons are the only way to reach those pages, and
+    // turns each label into a tooltip. Storage failures just mean nothing is remembered.
+    var navGroupsKey = "aerai-nav-groups";
+    var navRailKey = "aerai-nav";
+    var navTips = [];
+    // Must match the rail's media query in site.css: phones always get the full drawer.
+    var navDesktop = window.matchMedia ? window.matchMedia("(min-width: 769px)") : null;
+
+    function readClosedGroups() {
+        try {
+            var value = JSON.parse(localStorage.getItem(navGroupsKey) || "[]");
+            return Array.isArray(value) ? value : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function navGroups() {
+        return document.querySelectorAll(".app-sidebar details[data-nav-group]");
+    }
+
+    function railShown() {
+        return document.documentElement.getAttribute("data-nav") === "rail" && (!navDesktop || navDesktop.matches);
+    }
+
+    function setupNavGroups() {
+        var groups = navGroups();
+        if (groups.length === 0) { return; }
+
+        var closed = readClosedGroups();
+        for (var i = 0; i < groups.length; i++) {
+            var key = groups[i].getAttribute("data-nav-group");
+            if (closed.indexOf(key) >= 0 && !groups[i].querySelector("[aria-current='page']")) {
+                groups[i].open = false;
+            }
+        }
+
+        // Only the toggled group's key changes, so a group held open for the current page keeps its saved
+        // "closed" preference (the restore above also fires toggle events, which then change nothing).
+        // Opening and closing in the rail is temporary and never saved.
+        for (var j = 0; j < groups.length; j++) {
+            groups[j].addEventListener("toggle", function (event) {
+                if (railShown()) { return; }
+                var group = event.currentTarget;
+                var keys = readClosedGroups();
+                var key = group.getAttribute("data-nav-group");
+                var at = keys.indexOf(key);
+                if (group.open && at >= 0) { keys.splice(at, 1); }
+                if (!group.open && at < 0) { keys.push(key); }
+                try { localStorage.setItem(navGroupsKey, JSON.stringify(keys)); } catch (e) { /* not remembered */ }
+            });
+        }
+    }
+
+    // Opens collapsed groups while the rail shows, and closes exactly those again when it goes away.
+    function syncRailGroups() {
+        var rail = railShown();
+        var groups = navGroups();
+        for (var i = 0; i < groups.length; i++) {
+            if (rail && !groups[i].open) {
+                groups[i].setAttribute("data-rail-opened", "");
+                groups[i].open = true;
+            } else if (!rail && groups[i].hasAttribute("data-rail-opened")) {
+                groups[i].removeAttribute("data-rail-opened");
+                groups[i].open = false;
+            }
+        }
+    }
+
+    function updateNavRail() {
+        var rail = railShown();
+        syncRailGroups();
+        var toggle = document.querySelector("[data-nav-rail-toggle]");
+        if (toggle) {
+            var text = rail ? "Expand menu" : "Collapse menu";
+            toggle.setAttribute("aria-expanded", rail ? "false" : "true");
+            toggle.setAttribute("data-bs-title", text);
+            var label = toggle.querySelector("[data-nav-rail-label]");
+            if (label) { label.textContent = text; }
+        }
+
+        if (!window.bootstrap || !window.bootstrap.Tooltip) { return; }
+        for (var i = 0; i < navTips.length; i++) { navTips[i].dispose(); }
+        navTips = [];
+        // Labels are visible in the full sidebar, so only the rail needs tooltips (the toggle always has one).
+        var targets = document.querySelectorAll(rail ? ".app-sidebar [data-bs-title]" : "[data-nav-rail-toggle]");
+        for (var j = 0; j < targets.length; j++) {
+            navTips.push(new window.bootstrap.Tooltip(targets[j], { placement: "right", container: "body", delay: { show: 200, hide: 0 } }));
+        }
+    }
+
+    document.addEventListener("click", function (event) {
+        var toggle = event.target.closest && event.target.closest("[data-nav-rail-toggle]");
+        if (!toggle) { return; }
+        var rail = document.documentElement.getAttribute("data-nav") !== "rail";
+        if (rail) {
+            document.documentElement.setAttribute("data-nav", "rail");
+        } else {
+            document.documentElement.removeAttribute("data-nav");
+        }
+        try {
+            if (rail) { localStorage.setItem(navRailKey, "rail"); } else { localStorage.removeItem(navRailKey); }
+        } catch (e) { /* not remembered */ }
+        updateNavRail();
+    });
+
+    // Crossing the phone/desktop width switches between the drawer and the rail.
+    if (navDesktop && navDesktop.addEventListener) { navDesktop.addEventListener("change", updateNavRail); }
+
+    // site.js loads at the end of <body>, so the sidebar already exists: restore groups now, before the
+    // first paint where possible, rather than waiting for DOMContentLoaded.
+    setupNavGroups();
+    syncRailGroups();
+
     // ---------- Bulk selection ----------
     // Row checkboxes ([data-select-row]) feed a bulk bar ([data-bulk-bar]): its count reads
     // "N <noun>s selected" (noun from data-bulk-noun) and its [data-bulk-button] controls are disabled
@@ -123,6 +241,7 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         setupTooltips();
+        updateNavRail();
 
         var dirty = document.querySelectorAll("[data-dirty-form]");
         for (var d = 0; d < dirty.length; d++) { setupDirtyForm(dirty[d]); }

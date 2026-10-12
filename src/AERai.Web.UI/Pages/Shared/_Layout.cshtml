@@ -1,14 +1,5 @@
 @{
     var isSignedIn = User.Identity?.IsAuthenticated == true;
-    var isOperator = User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator);
-    var isAdmin = User.IsInRole(AppRoles.Admin);
-    var currentPath = Context.Request.Path.Value ?? "/";
-
-    // Highlights the sidebar entry for the current section.
-    // A section link stays highlighted on its sub-pages, except one that has its own link (except:).
-    string Active(string prefix, string? except = null) =>
-        (prefix == "/" ? currentPath == "/" : currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            && (except is null || !currentPath.StartsWith(except, StringComparison.OrdinalIgnoreCase)) ? "active" : string.Empty;
 }
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="light">
@@ -26,43 +17,7 @@
 @if (isSignedIn)
 {
     <div class="app-shell">
-        <nav class="app-sidebar" aria-label="Main navigation">
-            <div class="sidebar-head">
-                <a class="app-brand" asp-page="/Index">AERai <span>Seller</span></a>
-                @* CSS-only toggle (no script needed): the links collapse behind it on small screens. *@
-                <label class="nav-toggle-label" for="nav-toggle">Menu</label>
-            </div>
-            <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Show navigation" />
-            <div class="nav-links">
-            <div class="nav-section">Overview</div>
-            <a class="nav-link @Active("/")" asp-page="/Index">Dashboard</a>
-            <a class="nav-link @Active("/Notifications")" asp-page="/Notifications/Index">Notifications</a>
-            <div class="nav-section">Operations</div>
-            <a class="nav-link @Active("/Inventory", except: "/Inventory/Worksheet")" asp-page="/Inventory/Index">Inventory</a>
-            <a class="nav-link nav-sub @Active("/Inventory/Worksheet")" asp-page="/Inventory/Worksheet">Worksheet</a>
-            <a class="nav-link @Active("/Orders")" asp-page="/Orders/Index">Orders</a>
-            <a class="nav-link @Active("/Products")" asp-page="/Products/Index">Products &amp; COGS</a>
-            <div class="nav-section">Bookkeeping</div>
-            <a class="nav-link @Active("/Settlements")" asp-page="/Settlements/Index">Settlements</a>
-            @if (isOperator)
-            {
-                <a class="nav-link @Active("/Bookkeeping")" asp-page="/Bookkeeping/Index">QuickBooks export</a>
-            }
-            @if (isOperator)
-            {
-                <div class="nav-section">Tools</div>
-                <a class="nav-link @Active("/Tools/Import")" asp-page="/Tools/Import">Import data</a>
-                <a class="nav-link @Active("/Tools/Batches")" asp-page="/Tools/Batches/Index">Import batches</a>
-                <a class="nav-link @Active("/Tools/Schedules")" asp-page="/Tools/Schedules/Index">Amazon sync</a>
-                <a class="nav-link @Active("/Tools/Refresh")" asp-page="/Tools/Refresh">Refresh from blobs</a>
-            }
-            @if (isAdmin)
-            {
-                <div class="nav-section">Admin</div>
-                <a class="nav-link @Active("/Admin/Users")" asp-page="/Admin/Users/Index">Users</a>
-            }
-            </div>
-        </nav>
+        <partial name="_Sidebar" />
         <div class="app-main">
             <header class="app-topbar">
                 <h1 class="h5 mb-0">@ViewData["Title"]</h1>
