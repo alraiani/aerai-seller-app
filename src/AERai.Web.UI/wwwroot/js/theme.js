@@ -52,6 +52,16 @@
     // Lets CSS hide no-script fallbacks (e.g. "Apply" buttons) before first paint, so they never flash.
     document.documentElement.classList.add("js");
 
+    // The sidebar's icon-rail mode is applied here too, before first paint, so the menu never jumps.
+    // site.js owns the toggle that changes it.
+    try {
+        if (localStorage.getItem("aerai-nav") === "rail") {
+            document.documentElement.setAttribute("data-nav", "rail");
+        }
+    } catch (e) {
+        // Storage unavailable: the full sidebar shows.
+    }
+
     // Follow OS changes live while on "System".
     if (media && media.addEventListener) {
         media.addEventListener("change", function () {

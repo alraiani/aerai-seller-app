@@ -3,7 +3,8 @@
 @{
     ViewData["Title"] = "Sign in";
 }
-<div class="login-wrapper">
+@* Every sign-in starts the sidebar from its default (only Overview open): site.js forgets the saved state here. *@
+<div class="login-wrapper" data-nav-reset>
     <div class="card shadow login-card">
         <div class="card-body p-4">
             <h1 class="h3 login-brand mb-1">AERai Seller</h1>
