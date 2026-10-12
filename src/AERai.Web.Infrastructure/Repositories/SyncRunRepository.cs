@@ -1,0 +1,151 @@
+using AERai.Web.Application.Abstractions;
+using AERai.Web.Application.Common;
+using AERai.Web.Domain.Ingestion;
+using AERai.Web.Infrastructure.Persistence;
+using AERai.Web.Infrastructure.Queries;
+using Microsoft.EntityFrameworkCore;
+
+namespace AERai.Web.Infrastructure.Repositories;
+
+/// <summary>
+/// EF Core implementation of <see cref="ISyncRunRepository"/>.
+/// </summary>
+/// <param name="dbContext">Scoped database context.</param>
+internal sealed class SyncRunRepository(AppDbContext dbContext) : ISyncRunRepository
+{
+    /// <inheritdoc/>
+    public async Task<long> StartAsync(SyncRun run, CancellationToken cancellationToken)
+    {
+        dbContext.SyncRuns.Add(run);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        dbContext.Entry(run).State = EntityState.Detached;
+        return run.Id;
+    }
+
+    /// <inheritdoc/>
+    public Task CompleteAsync(SyncRun run, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+
+        return dbContext.SyncRuns
+            .Where(r => r.Id == run.Id)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(r => r.Status, run.Status)
+                .SetProperty(r => r.CompletedAt, run.CompletedAt)
+                .SetProperty(r => r.DataStart, run.DataStart)
+                .SetProperty(r => r.DataEnd, run.DataEnd)
+                .SetProperty(r => r.AmazonReportIds, run.AmazonReportIds)
+                .SetProperty(r => r.ImportBatchIds, run.ImportBatchIds)
+                .SetProperty(r => r.PendingReportId, (string?)null)
+                .SetProperty(r => r.NextCheckAt, (DateTimeOffset?)null)
+                .SetProperty(r => r.Message, run.Message == null ? null : run.Message.Substring(0, Math.Min(run.Message.Length, 4000))),
+                cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public Task<SyncRun?> GetAsync(long id, CancellationToken cancellationToken) =>
+        dbContext.SyncRuns.AsNoTracking().SingleOrDefaultAsync(r => r.Id == id, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task SaveProgressAsync(SyncRun run, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+
+        return dbContext.SyncRuns
+            .Where(r => r.Id == run.Id)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(r => r.DataStart, run.DataStart)
+                .SetProperty(r => r.DataEnd, run.DataEnd)
+                .SetProperty(r => r.AmazonReportIds, run.AmazonReportIds)
+                .SetProperty(r => r.PendingReportId, run.PendingReportId)
+                .SetProperty(r => r.NextCheckAt, run.NextCheckAt)
+                .SetProperty(r => r.PollAttempts, run.PollAttempts),
+                cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<SyncRun>> GetPendingDueAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
+        await dbContext.SyncRuns
+            .AsNoTracking()
+            .Where(r => r.Status == SyncRunStatus.Running && r.PendingReportId != null && r.NextCheckAt <= now)
+            .OrderBy(r => r.NextCheckAt)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public Task<DateTimeOffset?> GetNextPendingCheckAtAsync(CancellationToken cancellationToken) =>
+        dbContext.SyncRuns
+            .Where(r => r.Status == SyncRunStatus.Running && r.PendingReportId != null)
+            .MinAsync(r => r.NextCheckAt, cancellationToken);
+
+    /// <inheritdoc/>
+    public async Task<bool> TryClaimCheckAsync(long id, DateTimeOffset expectedNextCheckAt, DateTimeOffset newNextCheckAt, CancellationToken cancellationToken)
+    {
+        var affected = await dbContext.SyncRuns
+            .Where(r => r.Id == id && r.Status == SyncRunStatus.Running && r.NextCheckAt == expectedNextCheckAt)
+            .ExecuteUpdateAsync(set => set.SetProperty(r => r.NextCheckAt, newNextCheckAt), cancellationToken)
+            .ConfigureAwait(false);
+
+        return affected == 1;
+    }
+
+    /// <inheritdoc/>
+    public Task<SyncRun?> FindCoveringBackfillAsync(AmazonReportType reportType, string marketplaceId, DateTimeOffset start, DateTimeOffset end, CancellationToken cancellationToken) =>
+        dbContext.SyncRuns.AsNoTracking()
+            .Where(r => r.ReportType == reportType && r.MarketplaceId == marketplaceId
+                && (r.Status == SyncRunStatus.Succeeded || r.Status == SyncRunStatus.NoData)
+                && r.BackfillStart <= start && r.BackfillEnd >= end)
+            .OrderByDescending(r => r.CompletedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<bool> HasPendingAsync(int scheduleId, CancellationToken cancellationToken) =>
+        dbContext.SyncRuns.AnyAsync(r => r.SyncScheduleId == scheduleId && r.Status == SyncRunStatus.Running && r.PendingReportId != null, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<int> FailAbandonedAsync(DateTimeOffset startedBefore, string message, DateTimeOffset completedAt, CancellationToken cancellationToken) =>
+        dbContext.SyncRuns
+            .Where(r => r.Status == SyncRunStatus.Running && r.PendingReportId == null && r.StartedAt < startedBefore)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(r => r.Status, SyncRunStatus.Failed)
+                .SetProperty(r => r.Message, message)
+                .SetProperty(r => r.CompletedAt, completedAt),
+                cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<PagedResult<SyncRun>> ListAsync(string marketplaceId, int? scheduleId, PageRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var query = dbContext.SyncRuns.AsNoTracking().Where(r => r.MarketplaceId == marketplaceId);
+        if (scheduleId is { } id)
+        {
+            query = query.Where(r => r.SyncScheduleId == id);
+        }
+
+        return query.OrderByDescending(r => r.Id).ToPagedResultAsync(request, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyDictionary<int, SyncRun>> GetLatestByScheduleAsync(CancellationToken cancellationToken)
+    {
+        var latestIds = dbContext.SyncRuns.GroupBy(r => r.SyncScheduleId).Select(g => g.Max(r => r.Id));
+        return await dbContext.SyncRuns
+            .AsNoTracking()
+            .Where(r => latestIds.Contains(r.Id))
+            .ToDictionaryAsync(r => r.SyncScheduleId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public Task<bool> IsReportIngestedAsync(string amazonReportId, CancellationToken cancellationToken) =>
+        dbContext.IngestedReports.AnyAsync(r => r.AmazonReportId == amazonReportId, cancellationToken);
+
+    /// <inheritdoc/>
+    public async Task AddIngestedReportAsync(IngestedReport report, CancellationToken cancellationToken)
+    {
+        dbContext.IngestedReports.Add(report);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        dbContext.Entry(report).State = EntityState.Detached;
+    }
+}

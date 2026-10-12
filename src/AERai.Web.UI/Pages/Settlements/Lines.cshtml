@@ -1,0 +1,72 @@
+@page "{id}"
+@model AERai.Web.UI.Pages.Settlements.LinesModel
+@{
+    var g = Model.Group;
+    ViewData["Title"] = $"Settlement {g.SettlementId} – {g.Sku ?? "no SKU"}";
+}
+<div class="card-toolbar">
+    <p class="text-body-secondary mb-0">
+        Settlement @g.SettlementId · <strong>@(g.Sku ?? "(no SKU)")</strong>
+        @if (g.Asin is not null)
+        {
+            <span>· ASIN @g.Asin</span>
+        }
+        @if (g.SalePrice is not null)
+        {
+            <span>· @g.SalePrice.Value.ToString("N2") @g.Currency each</span>
+        }
+        <span>· every line behind this summary row, not grouped.</span>
+    </p>
+    <a asp-page="Summary" asp-route-id="@g.SettlementId" class="btn btn-outline-secondary btn-sm">Back to summary</a>
+</div>
+<form method="get" class="d-flex gap-2 mb-3" role="search">
+    <input type="hidden" name="sku" value="@Model.Sku" />
+    <input type="hidden" name="price" value="@Model.Price" />
+    <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm search-input" placeholder="Search order id…" aria-label="Search" />
+    <button type="submit" class="btn btn-sm btn-outline-primary">Search</button>
+</form>
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead>
+                <tr><th>Posted (UTC)</th><th>Order</th><th>Transaction</th><th>Amount type</th><th>Description</th><th class="text-end">Units</th><th class="text-end">Sales</th><th class="text-end">Fees</th><th class="text-end">Refunds</th><th class="text-end">Other</th><th class="text-end">Net</th></tr>
+            </thead>
+            <tbody>
+            @foreach (var l in Model.Lines.Items)
+            {
+                <tr>
+                    <td class="text-nowrap">@l.PostedDate?.ToUniversalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@l.AmazonOrderId</td>
+                    <td>@l.TransactionType</td>
+                    <td>@l.AmountType</td>
+                    <td>@l.AmountDescription</td>
+                    <td class="text-end">@(l.Units == 0 ? "" : l.Units.ToString("N0"))</td>
+                    <td class="text-end">@l.Sales.ToString("N2")</td>
+                    <td class="text-end">@l.Fees.ToString("N2")</td>
+                    <td class="text-end">@l.Refunds.ToString("N2")</td>
+                    <td class="text-end">@l.Other.ToString("N2")</td>
+                    <td class="text-end fw-semibold">@l.Amount.ToString("N2")</td>
+                </tr>
+            }
+            @if (Model.Lines.Items.Count == 0)
+            {
+                <tr><td colspan="11" class="text-body-secondary p-3">No lines found.</td></tr>
+            }
+            </tbody>
+            <tfoot>
+                <tr class="fw-semibold">
+                    <td colspan="5">Total of all @g.LineCount.ToString("N0") lines (matches the summary row)</td>
+                    <td class="text-end">@g.Units.ToString("N0")</td>
+                    <td class="text-end">@g.Sales.ToString("N2")</td>
+                    <td class="text-end">@g.Fees.ToString("N2")</td>
+                    <td class="text-end">@g.Refunds.ToString("N2")</td>
+                    <td class="text-end">@g.Other.ToString("N2")</td>
+                    <td class="text-end">@g.Net.ToString("N2")</td>
+                </tr>
+            </tfoot>
+        </table>
+        </div>
+    </div>
+</div>
+<partial name="_Pager" model="Model.Lines.ToPager(Model.Search, Model.PagerFilters())" />
