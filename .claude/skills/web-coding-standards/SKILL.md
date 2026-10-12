@@ -1,11 +1,11 @@
 ---
 name: web-coding-standards
-description: Coding principles, patterns, practices, and professional commenting standards for the AERai web app under web/ (ASP.NET Core Razor Pages, EF Core, SQL Server, Azure). Use whenever writing, modifying, or reviewing any C#, Razor, SQL, Bicep, or pipeline code under web/ — new pages, services, entities, migrations, views, stored procedures, or infrastructure — so every change follows the same standards.
+description: Coding principles, patterns, practices, and professional commenting standards for the AERai seller web app (ASP.NET Core Razor Pages, EF Core, SQL Server, Azure). Use whenever writing, modifying, or reviewing any C#, Razor, SQL, Bicep, or pipeline code in this repo — new pages, services, entities, migrations, views, stored procedures, or infrastructure — so every change follows the same standards.
 ---
 
 # AERai web coding standards
 
-Applies to everything under `web/`. Read `web/CLAUDE.md` first for the architecture rules this skill enforces. The WPF app under `src/` is a domain reference only — never add a project reference to it and never copy its SQLite-specific workarounds.
+Applies to all code in this repository. Read `CLAUDE.md` first for the architecture rules this skill enforces.
 
 Detailed guidance lives in two reference files — load them when the task touches that area:
 - `references/patterns.md` — layer responsibilities, data flow (stg → core → rpt), Result/Options/PRG patterns, EF Core and SQL conventions, Razor Pages conventions, security.
@@ -60,14 +60,14 @@ Detailed guidance lives in two reference files — load them when the task touch
 
 ## 5. Pre-finish checklist
 
-Before calling a change under `web/` done, verify each:
+Before calling a change done, verify each:
 
-1. `dotnet build web/AERai.Web.slnx` passes with zero warnings (warnings are errors).
-2. `dotnet test web/AERai.Web.slnx` passes; new Application logic has tests.
+1. `dotnet build AERai.Seller.slnx` passes with zero warnings (warnings are errors).
+2. `dotnet test AERai.Seller.slnx` passes; new Application logic has tests.
 3. No new reference violates the layering (UI ↛ Infrastructure outside `Program.cs`; Domain references nothing).
 4. New pages are covered by authorization (default policy or explicit role policy); forms use antiforgery and PRG.
 5. Schema changes have a named migration with a working `Down`; views/procs have headers.
 6. All public members have XML docs; comments explain why.
 7. No secrets, connection strings, or passwords in committed files (check `git diff` for `Password=`, `MSSQL_SA_PASSWORD=` with a real value, keys).
 8. No new `HttpClient` calls Amazon outside `SpApiPipelineHandler`; no credentials in logs, exceptions, or UI.
-9. `web/CLAUDE.md` updated if a convention changed.
+9. `CLAUDE.md` updated if a convention changed.

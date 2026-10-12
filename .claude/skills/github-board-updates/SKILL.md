@@ -5,7 +5,7 @@ description: Keep the GitHub project board (alraiani "aerai-seller-app-project",
 
 # GitHub board updates
 
-The board at https://github.com/users/alraiani/projects/3 is the team's record of what is being built. Each item's **issue comments are the work log**: anyone reading the issue should be able to tell what was done, in what order, and why, without opening the code. Applies to both the WPF app (`src/`) and the web app (`web/`).
+The board at https://github.com/users/alraiani/projects/3 is the team's record of what is being built. Each item's **issue comments are the work log**: anyone reading the issue should be able to tell what was done, in what order, and why, without opening the code.
 
 Requires `gh` with the `project` scope (`gh auth status` lists it; if missing, ask the user to run `gh auth refresh -s project`).
 
