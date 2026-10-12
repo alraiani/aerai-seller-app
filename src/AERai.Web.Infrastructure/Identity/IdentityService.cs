@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
@@ -28,6 +30,16 @@ internal sealed partial class IdentityService(
     /// <summary>Same message for unknown email and wrong password, so sign-in can't be used to enumerate accounts.</summary>
     private const string InvalidCredentials = "Invalid email or password.";
 
+    private const string LockedOutMessage = "This account is locked. Try again later or contact an administrator.";
+
+    /// <summary>Login provider and name of the outstanding sign-in code in Identity's user-token table (one per user).</summary>
+    private const string LoginCodeProvider = "AERai";
+
+    private const string LoginCodeName = "LoginCode";
+
+    /// <summary>Identity's authentication-method claim value for code sign-ins (shown in sign-in logs).</summary>
+    private const string LoginCodeAuthenticationMethod = "otp";
+
     /// <inheritdoc/>
     public async Task<Result> PasswordSignInAsync(string email, string password, bool rememberMe, CancellationToken cancellationToken)
     {
@@ -42,7 +54,7 @@ internal sealed partial class IdentityService(
         if (result.IsLockedOut)
         {
             LogLockedOut(email);
-            return Result.Failure("This account is locked. Try again later or contact an administrator.");
+            return Result.Failure(LockedOutMessage);
         }
 
         LogSignInFailed(email);
@@ -216,6 +228,89 @@ internal sealed partial class IdentityService(
         return Result.Success();
     }
 
+    /// <inheritdoc/>
+    public async Task<LoginCode?> CreateLoginCodeAsync(string email, TimeSpan lifetime, TimeSpan resendCooldown, CancellationToken cancellationToken)
+    {
+        var user = await userManager.FindByEmailAsync(email).ConfigureAwait(false);
+
+        // Unlike a reset, a code is a way in, so any lockout (admin or failed attempts) blocks it.
+        if (user is null || await userManager.IsLockedOutAsync(user).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var previous = StoredLoginCode.Parse(await userManager.GetAuthenticationTokenAsync(user, LoginCodeProvider, LoginCodeName).ConfigureAwait(false));
+        if (previous is not null && now - previous.IssuedAt < resendCooldown)
+        {
+            return null;
+        }
+
+        var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6", CultureInfo.InvariantCulture);
+        var stored = new StoredLoginCode(userManager.PasswordHasher.HashPassword(user, code), now, now + lifetime, Attempts: 0);
+        await SaveLoginCodeAsync(user, stored).ConfigureAwait(false);
+        return new LoginCode(user.Id, user.Email ?? email, user.DisplayName, code);
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result> CodeSignInAsync(string email, string code, bool rememberMe, int maxAttempts, CancellationToken cancellationToken)
+    {
+        var user = await userManager.FindByEmailAsync(email).ConfigureAwait(false);
+        if (user is null)
+        {
+            return Result.Failure(LoginCodeService.InvalidCodeMessage);
+        }
+
+        if (await userManager.IsLockedOutAsync(user).ConfigureAwait(false))
+        {
+            LogLockedOut(email);
+            return Result.Failure(LockedOutMessage);
+        }
+
+        var stored = StoredLoginCode.Parse(await userManager.GetAuthenticationTokenAsync(user, LoginCodeProvider, LoginCodeName).ConfigureAwait(false));
+        if (stored is null || timeProvider.GetUtcNow() >= stored.ExpiresAt || stored.Attempts >= maxAttempts)
+        {
+            return Result.Failure(LoginCodeService.InvalidCodeMessage);
+        }
+
+        // Claim the attempt before checking the code. Identity saves the user with its concurrency stamp, so
+        // of several guesses racing on the same stored state only one write succeeds; the rest are refused
+        // here and the per-code cap holds even under parallel requests.
+        var attempts = stored.Attempts + 1;
+        var claimed = attempts >= maxAttempts
+            ? await userManager.RemoveAuthenticationTokenAsync(user, LoginCodeProvider, LoginCodeName).ConfigureAwait(false)
+            : await SaveLoginCodeAsync(user, stored with { Attempts = attempts }).ConfigureAwait(false);
+        if (!claimed.Succeeded)
+        {
+            return Result.Failure(LoginCodeService.InvalidCodeMessage);
+        }
+
+        if (userManager.PasswordHasher.VerifyHashedPassword(user, stored.Hash, code) == PasswordVerificationResult.Failed)
+        {
+            // Counts toward the same lockout as wrong passwords.
+            await userManager.AccessFailedAsync(user).ConfigureAwait(false);
+            LogSignInFailed(email);
+            return await userManager.IsLockedOutAsync(user).ConfigureAwait(false)
+                ? Result.Failure(LockedOutMessage)
+                : Result.Failure(LoginCodeService.InvalidCodeMessage);
+        }
+
+        // Single use: the code is gone before the cookie is issued (a concurrent use of the same code loses here).
+        if (attempts < maxAttempts
+            && !(await userManager.RemoveAuthenticationTokenAsync(user, LoginCodeProvider, LoginCodeName).ConfigureAwait(false)).Succeeded)
+        {
+            return Result.Failure(LoginCodeService.InvalidCodeMessage);
+        }
+
+        await userManager.ResetAccessFailedCountAsync(user).ConfigureAwait(false);
+        await signInManager.SignInAsync(user, rememberMe, LoginCodeAuthenticationMethod).ConfigureAwait(false);
+        LogSignedInWithCode(email);
+        return Result.Success();
+    }
+
+    private Task<IdentityResult> SaveLoginCodeAsync(AppUser user, StoredLoginCode stored) =>
+        userManager.SetAuthenticationTokenAsync(user, LoginCodeProvider, LoginCodeName, stored.Format());
+
     private static bool TryDecode(string token, out string decoded)
     {
         try
@@ -237,6 +332,9 @@ internal sealed partial class IdentityService(
     [LoggerMessage(Level = LogLevel.Information, Message = "User {Email} signed in")]
     private partial void LogSignedIn(string email);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "User {Email} signed in with an emailed code")]
+    private partial void LogSignedInWithCode(string email);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Sign-in failed for {Email}")]
     private partial void LogSignInFailed(string email);
 
@@ -251,4 +349,26 @@ internal sealed partial class IdentityService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "User {UserId} lockout set to {Locked} by {ActingUserId}")]
     private partial void LogLockoutChanged(string userId, bool locked, string actingUserId);
+
+    /// <summary>
+    /// The outstanding sign-in code as kept in the user-token value: a hash of the code (never the code
+    /// itself), when it was issued and expires, and how many wrong guesses it has had.
+    /// </summary>
+    private sealed record StoredLoginCode(string Hash, DateTimeOffset IssuedAt, DateTimeOffset ExpiresAt, int Attempts)
+    {
+        // The hash is Base64 (no '|'), so a pipe-separated value round-trips safely.
+        public string Format() => string.Join(
+            '|', Hash, IssuedAt.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture), ExpiresAt.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture), Attempts.ToString(CultureInfo.InvariantCulture));
+
+        public static StoredLoginCode? Parse(string? value)
+        {
+            var parts = value?.Split('|');
+            return parts is { Length: 4 }
+                && long.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var issued)
+                && long.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out var expires)
+                && int.TryParse(parts[3], NumberStyles.None, CultureInfo.InvariantCulture, out var attempts)
+                    ? new StoredLoginCode(parts[0], DateTimeOffset.FromUnixTimeSeconds(issued), DateTimeOffset.FromUnixTimeSeconds(expires), attempts)
+                    : null;
+        }
+    }
 }

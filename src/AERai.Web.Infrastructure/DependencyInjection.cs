@@ -74,7 +74,19 @@ public static class DependencyInjection
         services.Configure<DataProtectionTokenProviderOptions>(o => o.TokenLifespan = PasswordResetService.LinkLifetime);
 
         services.AddOptions<EmailOptions>().BindConfiguration(EmailOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
-        services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        // Resend (HTTP API) in Azure; SMTP for local Mailpit. Chosen once at startup from Email:Provider.
+        if (string.Equals(configuration[$"{EmailOptions.SectionName}:{nameof(EmailOptions.Provider)}"], EmailOptions.ResendProvider, StringComparison.Ordinal))
+        {
+            services.AddHttpClient<IEmailSender, ResendEmailSender>((provider, client) =>
+            {
+                client.BaseAddress = provider.GetRequiredService<IOptions<EmailOptions>>().Value.ResendBaseUrl;
+                client.Timeout = TimeSpan.FromSeconds(30);
+            });
+        }
+        else
+        {
+            services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        }
 
         services.AddOptions<SeedOptions>().BindConfiguration(SeedOptions.SectionName);
 

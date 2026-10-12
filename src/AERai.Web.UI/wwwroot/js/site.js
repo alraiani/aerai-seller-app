@@ -13,6 +13,172 @@
         }
     }
 
+    // ---------- Sidebar ----------
+    // Categories are <details> groups. The server opens Overview and the current page's category; what
+    // this browser opened or collapsed since sign-in is kept in localStorage (the login page forgets it,
+    // so every sign-in starts from that default), but the current page's category always shows.
+    // The rail toggle shrinks the sidebar to icons on desktop (theme.js applies the saved choice early).
+    // The rail shows only the current page's category; another category's icon opens that category's
+    // first page, and each label becomes a tooltip. Storage failures just mean nothing is remembered.
+    var navStateKey = "aerai-nav-state";
+    var navRailKey = "aerai-nav";
+    var navTips = [];
+    // Must match the rail's media query in site.css: phones always get the full drawer.
+    var navDesktop = window.matchMedia ? window.matchMedia("(min-width: 769px)") : null;
+
+    function readNavState() {
+        try {
+            var value = JSON.parse(localStorage.getItem(navStateKey) || "{}");
+            return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function navGroups() {
+        return document.querySelectorAll(".app-sidebar details[data-nav-group]");
+    }
+
+    function holdsCurrentPage(group) {
+        return !!group.querySelector("[aria-current='page']");
+    }
+
+    function railShown() {
+        return document.documentElement.getAttribute("data-nav") === "rail" && (!navDesktop || navDesktop.matches);
+    }
+
+    function setupNavGroups() {
+        try {
+            // Replaced by aerai-nav-state; drop the old list so it doesn't linger.
+            localStorage.removeItem("aerai-nav-groups");
+            if (document.querySelector("[data-nav-reset]")) { localStorage.removeItem(navStateKey); }
+        } catch (e) { /* nothing stored */ }
+
+        var groups = navGroups();
+        if (groups.length === 0) { return; }
+
+        var state = readNavState();
+        for (var i = 0; i < groups.length; i++) {
+            var key = groups[i].getAttribute("data-nav-group");
+            if (typeof state[key] === "boolean" && !holdsCurrentPage(groups[i])) {
+                groups[i].open = state[key];
+            }
+        }
+
+        // Only the toggled group's key is written, so a group held open for the current page keeps its
+        // saved choice (the restore above fires toggle events too, which write what was just read).
+        // Opening and closing in the rail is temporary and never saved.
+        for (var j = 0; j < groups.length; j++) {
+            groups[j].addEventListener("toggle", function (event) {
+                var group = event.currentTarget;
+                if (group.hasAttribute("data-rail-restoring")) { group.removeAttribute("data-rail-restoring"); return; }
+                if (railShown()) { return; }
+                if (holdsCurrentPage(group) && group.open) { return; }
+                var saved = readNavState();
+                saved[group.getAttribute("data-nav-group")] = group.open;
+                try { localStorage.setItem(navStateKey, JSON.stringify(saved)); } catch (e) { /* not remembered */ }
+            });
+        }
+    }
+
+    // While the rail shows, only the current page's groups are open; the others are put back exactly as
+    // they were when the full sidebar returns.
+    function syncRailGroups() {
+        var rail = railShown();
+        var groups = navGroups();
+        for (var i = 0; i < groups.length; i++) {
+            var group = groups[i];
+            if (rail) {
+                // A sub-page group (Inventory → Worksheet) also counts as current on its parent's own page.
+                var scope = group.parentElement.classList.contains("nav-subgroup") ? group.parentElement : group;
+                var want = holdsCurrentPage(scope);
+                if (group.open !== want) {
+                    if (!group.hasAttribute("data-rail-was")) { group.setAttribute("data-rail-was", group.open ? "open" : "closed"); }
+                    group.open = want;
+                }
+            } else if (group.hasAttribute("data-rail-was")) {
+                var was = group.getAttribute("data-rail-was") === "open";
+                group.removeAttribute("data-rail-was");
+                if (group.open !== was) {
+                    // Putting a group back is not a choice of the user's; the toggle handler skips saving it.
+                    group.setAttribute("data-rail-restoring", "");
+                    group.open = was;
+                }
+            }
+        }
+    }
+
+    function firstLink(group) {
+        return group.querySelector(".nav-group-items a.nav-link");
+    }
+
+    function updateNavRail() {
+        var rail = railShown();
+        syncRailGroups();
+        var toggle = document.querySelector("[data-nav-rail-toggle]");
+        if (toggle) {
+            var text = rail ? "Expand menu" : "Collapse menu";
+            toggle.setAttribute("aria-expanded", rail ? "false" : "true");
+            toggle.setAttribute("data-bs-title", text);
+            var label = toggle.querySelector("[data-nav-rail-label]");
+            if (label) { label.textContent = text; }
+        }
+
+        if (!window.bootstrap || !window.bootstrap.Tooltip) { return; }
+        for (var i = 0; i < navTips.length; i++) { navTips[i].dispose(); }
+        navTips = [];
+        // Labels are visible in the full sidebar, so only the rail needs tooltips (the toggle always has one).
+        var targets = document.querySelectorAll(rail ? ".app-sidebar [data-bs-title]" : "[data-nav-rail-toggle]");
+        for (var j = 0; j < targets.length; j++) {
+            var options = { placement: "right", container: "body", delay: { show: 200, hide: 0 } };
+            var group = targets[j].matches("summary.nav-section") ? targets[j].parentElement : null;
+            var link = group && !holdsCurrentPage(group) ? firstLink(group) : null;
+            // A category icon in the rail navigates, so its tooltip says where to.
+            if (link) { options.title = targets[j].getAttribute("data-bs-title") + " · opens " + link.querySelector(".nav-label").textContent; }
+            navTips.push(new window.bootstrap.Tooltip(targets[j], options));
+        }
+    }
+
+    document.addEventListener("click", function (event) {
+        var target = event.target.closest ? event.target : null;
+        if (!target) { return; }
+
+        // In the rail a category icon opens that category's first page (its group then opens as the current
+        // one). The current category's icon does nothing. Enter/Space on a focused summary also land here.
+        var summary = target.closest(".app-sidebar summary.nav-section");
+        if (summary && railShown()) {
+            event.preventDefault();
+            var group = summary.parentElement;
+            var link = holdsCurrentPage(group) ? null : firstLink(group);
+            if (link) {
+                group.open = true;
+                window.location.assign(link.href);
+            }
+            return;
+        }
+
+        var toggle = target.closest("[data-nav-rail-toggle]");
+        if (!toggle) { return; }
+        var rail = document.documentElement.getAttribute("data-nav") !== "rail";
+        if (rail) {
+            document.documentElement.setAttribute("data-nav", "rail");
+        } else {
+            document.documentElement.removeAttribute("data-nav");
+        }
+        try {
+            if (rail) { localStorage.setItem(navRailKey, "rail"); } else { localStorage.removeItem(navRailKey); }
+        } catch (e) { /* not remembered */ }
+        updateNavRail();
+    });
+
+    // Crossing the phone/desktop width switches between the drawer and the rail.
+    if (navDesktop && navDesktop.addEventListener) { navDesktop.addEventListener("change", updateNavRail); }
+
+    // site.js loads at the end of <body>, so the sidebar already exists: restore groups now, before the
+    // first paint where possible, rather than waiting for DOMContentLoaded.
+    setupNavGroups();
+    syncRailGroups();
+
     // ---------- Bulk selection ----------
     // Row checkboxes ([data-select-row]) feed a bulk bar ([data-bulk-bar]): its count reads
     // "N <noun>s selected" (noun from data-bulk-noun) and its [data-bulk-button] controls are disabled
@@ -123,6 +289,7 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         setupTooltips();
+        updateNavRail();
 
         var dirty = document.querySelectorAll("[data-dirty-form]");
         for (var d = 0; d < dirty.length; d++) { setupDirtyForm(dirty[d]); }
@@ -144,6 +311,23 @@
             var focus = dialog.querySelector("input[type=text]");
             if (focus) { dialog.addEventListener("shown.bs.modal", function () { focus.focus(); }, { once: true }); }
         }
+    });
+
+    // ---------- Show / hide password ----------
+    // A [data-password-toggle] button (Shared/_PasswordToggle) flips the password input in its .input-group
+    // between hidden and plain text; aria-pressed drives which eye icon shows (site.css).
+    document.addEventListener("click", function (event) {
+        var button = event.target.closest && event.target.closest("[data-password-toggle]");
+        if (!button) { return; }
+        var input = button.parentElement.querySelector("input");
+        if (!input) { return; }
+        var show = input.type === "password";
+        input.type = show ? "text" : "password";
+        var label = show ? "Hide password" : "Show password";
+        button.setAttribute("aria-pressed", show ? "true" : "false");
+        button.setAttribute("aria-label", label);
+        button.setAttribute("title", label);
+        input.focus();
     });
 
     // ---------- Confirm before destructive submits ----------

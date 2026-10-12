@@ -51,6 +51,14 @@
     --c-brown: #92400e;
     --c-beige: #a8875a;
     --c-multi: #9333ea;
+    /* Sidebar category colors: the sidebar is dark in both themes, so these are bright in both. */
+    --nav-overview: #60a5fa;
+    --nav-operations: #2dd4bf;
+    --nav-bookkeeping: #a78bfa;
+    --nav-tools: #fbbf24;
+    --nav-admin: #fb7185;
+    --sidebar-strong: #ffffff;
+    --sidebar-border: rgba(255, 255, 255, 0.12);
 }
 
 [data-bs-theme="dark"] {
@@ -98,6 +106,13 @@
     --c-brown: #d6a26a;
     --c-beige: #e2c9a0;
     --c-multi: #c084fc;
+    --nav-overview: #93c5fd;
+    --nav-operations: #5eead4;
+    --nav-bookkeeping: #c4b5fd;
+    --nav-tools: #fcd34d;
+    --nav-admin: #fda4af;
+    --sidebar-strong: #f8fafc;
+    --sidebar-border: rgba(255, 255, 255, 0.08);
 }
 
 /* Bootstrap integration: surfaces and text use the tokens in both themes. */
@@ -135,32 +150,108 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
 /* ---------- Shell ---------- */
 .app-shell { display: flex; min-height: 100vh; }
 
+/* Sticky with its own scroll, so a long menu never stretches the page or scrolls away with the content. */
 .app-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--sidebar-hover) transparent;
     width: 15rem;
     flex-shrink: 0;
     background: var(--sidebar-bg);
     color: var(--sidebar-fg);
-    padding: 1rem 0.75rem;
+    padding: 0.85rem 0.75rem 1.5rem;
     display: flex;
     flex-direction: column;
     gap: 0.125rem;
+    transition: width 0.18s ease, padding 0.18s ease;
 }
 
-.app-brand { color: #fff; font-weight: 700; font-size: 1.2rem; text-decoration: none; padding: 0.25rem 0.75rem 1rem; }
-.app-brand:hover { color: #fff; }
-.app-brand span { font-weight: 300; }
+.sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0 0 0.75rem; }
+.app-brand { display: inline-flex; align-items: center; gap: 0.55rem; color: var(--sidebar-strong); font-weight: 700; font-size: 1.15rem; text-decoration: none; padding: 0.25rem 0.25rem; min-width: 0; }
+.app-brand:hover { color: var(--sidebar-strong); }
+.brand-text { white-space: nowrap; }
+.brand-text span { font-weight: 300; }
+.brand-mark {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 1.85rem; height: 1.85rem; border-radius: 0.5rem;
+    background: var(--sidebar-active); color: var(--sidebar-strong); font-size: 1rem; font-weight: 700;
+}
+
+.nav-rail-toggle, .nav-toggle-label {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 2rem; height: 2rem; padding: 0; border-radius: 0.5rem; cursor: pointer;
+    border: 1px solid var(--sidebar-border); background: transparent; color: var(--sidebar-fg);
+}
+.nav-rail-toggle:hover, .nav-toggle-label:hover { background: var(--sidebar-hover); color: var(--sidebar-strong); }
+.nav-rail-toggle .icon, .nav-toggle-label .icon { width: 1.1rem; height: 1.1rem; }
+/* The rail is applied by script, so the button that toggles it only appears when script runs. */
+html:not(.js) .nav-rail-toggle { display: none; }
+.nav-toggle-label { display: none; }
+/* Visually hidden but still focusable, so keyboard users can open the mobile menu. */
+.nav-toggle { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.app-sidebar:has(.nav-toggle:focus-visible) .nav-toggle-label { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.nav-links { display: flex; flex-direction: column; gap: 0.35rem; }
+
+/* Categories: a .nav-group-* class sets --nav-accent, which colors the category's icon, rule, and current page. */
+.nav-group-overview { --nav-accent: var(--nav-overview); }
+.nav-group-operations { --nav-accent: var(--nav-operations); }
+.nav-group-bookkeeping { --nav-accent: var(--nav-bookkeeping); }
+.nav-group-tools { --nav-accent: var(--nav-tools); }
+.nav-group-admin { --nav-accent: var(--nav-admin); }
+
+.app-sidebar summary { list-style: none; }
+.app-sidebar summary::-webkit-details-marker { display: none; }
 
 .app-sidebar .nav-section {
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.45rem 0.75rem; border-radius: 0.5rem; cursor: pointer; user-select: none;
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--sidebar-muted);
-    padding: 0.85rem 0.75rem 0.25rem;
 }
+.app-sidebar .nav-section:hover { background: var(--sidebar-hover); color: var(--sidebar-fg); }
+.app-sidebar .nav-section > .icon { width: 1rem; height: 1rem; color: var(--nav-accent); }
+.nav-section .nav-label { flex: 1; }
+.nav-chevron { display: inline-flex; transition: transform 0.15s ease; }
+.nav-chevron .icon { width: 0.9rem; height: 0.9rem; }
+.nav-group:not([open]) > summary .nav-chevron { transform: rotate(-90deg); }
 
-.app-sidebar .nav-link { color: var(--sidebar-fg); border-radius: 0.5rem; padding: 0.45rem 0.75rem; font-size: 0.925rem; }
-.app-sidebar .nav-link:hover { background: var(--sidebar-hover); color: #fff; }
-.app-sidebar .nav-link.active { background: var(--sidebar-active); color: #fff; }
+/* A thin rule in the category color ties its links together. */
+.nav-group-items { display: flex; flex-direction: column; gap: 0.125rem; margin: 0.15rem 0 0.25rem 1.2rem; padding-left: 0.4rem; border-left: 2px solid color-mix(in srgb, var(--nav-accent) 35%, transparent); }
+
+.app-sidebar .nav-link {
+    display: flex; align-items: center; gap: 0.65rem;
+    color: var(--sidebar-fg); border-radius: 0.5rem; padding: 0.42rem 0.65rem; font-size: 0.9rem;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+.app-sidebar .nav-link .icon { width: 1.05rem; height: 1.05rem; color: var(--sidebar-muted); transition: color 0.12s ease; }
+.app-sidebar .nav-link:hover { background: var(--sidebar-hover); color: var(--sidebar-strong); }
+.app-sidebar .nav-link:hover .icon { color: var(--nav-accent); }
+.app-sidebar .nav-link.active { background: color-mix(in srgb, var(--nav-accent) 22%, transparent); color: var(--sidebar-strong); box-shadow: inset 3px 0 0 var(--nav-accent); font-weight: 500; }
+.app-sidebar .nav-link.active .icon { color: var(--nav-accent); }
+.nav-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.app-sidebar .nav-section:focus-visible,
+.app-sidebar .nav-link:focus-visible,
+.nav-sub-toggle:focus-visible,
+.nav-rail-toggle:focus-visible { outline: 2px solid var(--nav-accent, var(--brand)); outline-offset: 1px; box-shadow: none; }
+
+/* Inventory → Worksheet: the parent keeps its own link, and the chevron beside it folds the sub-pages away. */
+.nav-subgroup { position: relative; }
+.nav-subgroup > .nav-link { padding-right: 2.2rem; }
+.nav-sub-toggle {
+    position: absolute; top: 0.2rem; right: 0.25rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.6rem; height: 1.6rem; border-radius: 0.4rem; cursor: pointer; color: var(--sidebar-muted);
+}
+.nav-sub-toggle:hover { background: var(--sidebar-hover); color: var(--sidebar-strong); }
+.nav-sub-toggle .icon { width: 0.9rem; height: 0.9rem; transition: transform 0.15s ease; }
+.nav-subgroup > details:not([open]) .nav-sub-toggle .icon { transform: rotate(-90deg); }
+.app-sidebar .nav-link.nav-sub { margin-left: 1rem; font-size: 0.85rem; }
 
 .app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
@@ -177,28 +268,47 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
 .app-content { padding: 1.5rem; }
 .topbar-actions { display: flex; align-items: center; gap: 1rem; }
 
-.nav-links { display: flex; flex-direction: column; gap: 0.125rem; }
-.nav-toggle-label { display: none; }
-/* Visually hidden but still focusable, so keyboard users can open the mobile menu. */
-.nav-toggle { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.app-sidebar:has(.nav-toggle:focus-visible) .nav-toggle-label { outline: 2px solid var(--brand); outline-offset: 2px; }
+/* Icon rail (desktop only): the sidebar shrinks to icons; labels are visually hidden, not removed,
+   so screen readers still announce them, and site.js shows them as tooltips. */
+@media (min-width: 769px) {
+    :root[data-nav="rail"] .app-sidebar { width: 4.25rem; padding-left: 0.6rem; padding-right: 0.6rem; }
+    :root[data-nav="rail"] .sidebar-head { flex-direction: column; align-items: center; }
+    :root[data-nav="rail"] .brand-text,
+    :root[data-nav="rail"] .nav-label {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+    }
+    :root[data-nav="rail"] .nav-rail-toggle .icon { transform: scaleX(-1); }
+    :root[data-nav="rail"] .nav-chevron { display: none; }
+    :root[data-nav="rail"] .app-sidebar .nav-section { justify-content: center; padding: 0.5rem 0; border-top: 1px solid var(--sidebar-border); border-radius: 0; }
+    :root[data-nav="rail"] .nav-group:first-child > .nav-section { border-top: 0; }
+    :root[data-nav="rail"] .app-sidebar .nav-section > .icon { width: 0.9rem; height: 0.9rem; }
+    :root[data-nav="rail"] .nav-group:not([open]) > .nav-section > .icon { opacity: 0.55; }
+    :root[data-nav="rail"] .nav-group-items { margin: 0; padding: 0; border: 0; }
+    :root[data-nav="rail"] .app-sidebar .nav-link { justify-content: center; padding: 0.55rem 0; }
+    :root[data-nav="rail"] .app-sidebar .nav-link .icon { width: 1.2rem; height: 1.2rem; }
+    :root[data-nav="rail"] .nav-subgroup > .nav-link { padding-right: 0; }
+    :root[data-nav="rail"] .app-sidebar .nav-link.nav-sub { margin-left: 0; }
+    :root[data-nav="rail"] .nav-sub-toggle { top: auto; bottom: -0.1rem; right: -0.15rem; width: 1rem; height: 1rem; }
+    :root[data-nav="rail"] .nav-sub-toggle .icon { width: 0.7rem; height: 0.7rem; }
+}
 
 @media (max-width: 768px) {
     .app-shell { flex-direction: column; }
-    .app-sidebar { width: 100%; padding: 0.5rem 0.75rem; }
-    .sidebar-head { display: flex; align-items: center; justify-content: space-between; }
-    .app-brand { padding: 0.25rem 0; }
-    .nav-toggle-label {
-        display: inline-block; cursor: pointer; padding: 0.3rem 0.8rem; border-radius: 0.5rem;
-        border: 1px solid rgba(255, 255, 255, 0.15); color: var(--sidebar-fg); font-size: 0.875rem;
-    }
-    .nav-links { display: none; padding-top: 0.5rem; }
+    .app-sidebar { position: static; height: auto; overflow: visible; width: 100%; padding: 0.5rem 0.75rem; }
+    .sidebar-head { padding: 0; }
+    .nav-rail-toggle { display: none; }
+    .nav-toggle-label { display: inline-flex; }
+    .nav-links { display: none; padding: 0.5rem 0 0.25rem; }
     .nav-toggle:checked ~ .nav-links { display: flex; }
     .app-content { padding: 1rem; }
     .app-topbar { padding: 0.75rem 1rem; flex-wrap: wrap; row-gap: 0.5rem; }
     .app-topbar h1 { font-size: 1.05rem; }
     /* Marketplace, theme, and sign-out wrap under the title instead of running off-screen. */
     .topbar-actions { flex-wrap: wrap; gap: 0.5rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-sidebar, .nav-chevron, .nav-sub-toggle .icon, .app-sidebar .nav-link, .app-sidebar .nav-link .icon { transition: none; }
 }
 
 
@@ -298,11 +408,16 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
 .login-wrapper { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--sidebar-bg); padding: 1rem; }
 .login-card { width: 100%; max-width: 24rem; }
 .login-brand { color: var(--brand); font-weight: 700; }
+.code-input { font-variant-numeric: tabular-nums; letter-spacing: .4em; text-align: center; }
 
 /* ---------- Shared: icons, soft buttons, pills, tags ---------- */
 .icon { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.125em; }
 .min-w-0 { min-width: 0; }
 .js .js-hide { display: none !important; }
+/* The eye button needs site.js; without script it stays hidden and the password field works as usual. */
+:root:not(.js) .password-toggle { display: none; }
+.password-toggle-hide, .password-toggle[aria-pressed="true"] .password-toggle-show { display: none; }
+.password-toggle[aria-pressed="true"] .password-toggle-hide { display: inline; }
 
 /* Tinted buttons for secondary actions: clearly clickable, never the grey that reads as "disabled". */
 .btn-soft, .btn-soft-ok, .btn-soft-warn {
@@ -584,8 +699,6 @@ th .tip { text-transform: none; }
 .alert-body { flex: 1 1 auto; min-width: 0; }
 .alert-message { font-size: 0.875rem; }
 
-/* Sub-page link under a section in the sidebar (e.g. Inventory → Worksheet). */
-.app-sidebar .nav-link.nav-sub { padding-left: 1.9rem; font-size: 0.85rem; }
 .bulk-divider { width: 1px; align-self: stretch; margin: 0.2rem 0.25rem; background: var(--border); }
 
 /* ---------- Product colors ----------

@@ -60,6 +60,34 @@ public interface IIdentityService
     /// </remarks>
     Task<Result> ResetPasswordAsync(string userId, string token, string newPassword, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Issues a one-time sign-in code for an email address, replacing any earlier code, if it belongs to
+    /// an account that may sign in.
+    /// </summary>
+    /// <param name="email">The address someone entered on the login-with-code form.</param>
+    /// <param name="lifetime">How long the code works.</param>
+    /// <param name="resendCooldown">No new code is issued within this time of the previous one.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>
+    /// The code, or <see langword="null"/> when no account exists, it is locked (by an administrator or
+    /// failed attempts), or the previous code was issued within <paramref name="resendCooldown"/>.
+    /// </returns>
+    /// <remarks>Only a hash of the code is stored.</remarks>
+    Task<LoginCode?> CreateLoginCodeAsync(string email, TimeSpan lifetime, TimeSpan resendCooldown, CancellationToken cancellationToken);
+
+    /// <summary>Checks a code from <see cref="CreateLoginCodeAsync"/> and, if it matches, issues the authentication cookie.</summary>
+    /// <param name="email">The account's email.</param>
+    /// <param name="code">The six digits entered.</param>
+    /// <param name="rememberMe">Whether the cookie should persist across browser sessions.</param>
+    /// <param name="maxAttempts">Wrong guesses after which the code is discarded.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Success, or a failure with a message safe to show (never says which check failed).</returns>
+    /// <remarks>
+    /// A code works once. Every wrong guess also counts as a failed sign-in, so the account's normal
+    /// lockout applies to codes and passwords alike.
+    /// </remarks>
+    Task<Result> CodeSignInAsync(string email, string code, bool rememberMe, int maxAttempts, CancellationToken cancellationToken);
+
     /// <summary>Locks or unlocks a user's sign-in.</summary>
     /// <param name="userId">The user to change.</param>
     /// <param name="locked">Whether to lock (<see langword="true"/>) or unlock.</param>

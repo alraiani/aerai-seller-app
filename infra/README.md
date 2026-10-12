@@ -45,10 +45,12 @@ Azure SQL, Blob Storage, and Key Vault through its **system-assigned managed ide
 
    Restart the app. The **Amazon sync** page shows "Live" with no warning once the first three are present;
    then switch on the schedules you want. Secret rotation = update the secret and restart.
-7. **Email for password resets.** Any SMTP provider works; with Azure Communication Services
-   (Email), verify the `aeraigroup.com` domain there, then set `emailHost = 'smtp.azurecomm.net'`,
-   `emailUserName`, and `emailFromAddress` in `main.bicepparam` and add the SMTP password as the Key
-   Vault secret `Email--Password`. Emailed links use `App__PublicBaseUrl` (the custom domain once
+7. **Email (password resets, sign-in codes).** The default provider is **Resend**
+   (`emailProvider = 'Resend'`): verify the `aeraigroup.com` domain in Resend (Domains → add the DNS
+   records it lists), create an API key with *Sending access*, and add it as the Key Vault secret
+   `Email--ResendApiKey`; `emailFromAddress` must be on the verified domain. Restart the app after adding
+   the secret. To use an SMTP provider instead, set `emailProvider = 'Smtp'`, `emailHost`,
+   `emailUserName`, and add the SMTP password as `Email--Password`. Emailed links use `App__PublicBaseUrl` (the custom domain once
    `bindCustomDomain = true`), never the request's Host header.
 8. **Seed the first administrator** (optional): add Key Vault secrets `Seed--AdminEmail` and
    `Seed--AdminPassword`, restart the app, sign in, then **delete both secrets**.
@@ -82,7 +84,7 @@ The subscription cannot create new SQL servers in eastus or eastus2, so the reso
 
 ## Pipeline order
 
-On every push to `main` that touches `web/**`, `web-ci.yml` runs: build/test → **deploy-infra** (applies
+On every push to `main`, `web-ci.yml` runs: build/test → **deploy-infra** (applies
 `main.bicep` + `main.bicepparam` to `AZURE_RESOURCE_GROUP`) → **deploy** (EF migrations bundle, then App
 Service). Because the Bicep is re-applied each time, `main.bicepparam` is the source of truth: after DNS
 exists, commit `bindCustomDomain = true` rather than deploying by hand. The CI identity therefore needs
