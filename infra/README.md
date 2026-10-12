@@ -82,7 +82,7 @@ The subscription cannot create new SQL servers in eastus or eastus2, so the reso
 
 ## Pipeline order
 
-On every push to `main` that touches `web/**`, `web-ci.yml` runs: build/test → **deploy-infra** (applies
+On every push to `main`, `web-ci.yml` runs: build/test → **deploy-infra** (applies
 `main.bicep` + `main.bicepparam` to `AZURE_RESOURCE_GROUP`) → **deploy** (EF migrations bundle, then App
 Service). Because the Bicep is re-applied each time, `main.bicepparam` is the source of truth: after DNS
 exists, commit `bindCustomDomain = true` rather than deploying by hand. The CI identity therefore needs
