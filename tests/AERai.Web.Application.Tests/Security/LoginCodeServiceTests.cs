@@ -37,6 +37,18 @@ public sealed class LoginCodeServiceTests
         Assert.Empty(_email.Sent);
     }
 
+    [Fact]
+    public async Task RequestCodeAsync_SendFails_DoesNotThrow()
+    {
+        // A real account must look exactly like an unknown one, even when the provider is down.
+        _identity.LoginCodes["ops@aeraigroup.com"] = new LoginCode("u1", "ops@aeraigroup.com", "Ops", "042137");
+        _email.Fail = true;
+
+        await CreateService().RequestCodeAsync("ops@aeraigroup.com", CancellationToken.None);
+
+        Assert.Empty(_email.Sent);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

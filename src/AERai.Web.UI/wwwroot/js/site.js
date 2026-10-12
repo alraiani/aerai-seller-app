@@ -313,6 +313,23 @@
         }
     });
 
+    // ---------- Show / hide password ----------
+    // A [data-password-toggle] button (Shared/_PasswordToggle) flips the password input in its .input-group
+    // between hidden and plain text; aria-pressed drives which eye icon shows (site.css).
+    document.addEventListener("click", function (event) {
+        var button = event.target.closest && event.target.closest("[data-password-toggle]");
+        if (!button) { return; }
+        var input = button.parentElement.querySelector("input");
+        if (!input) { return; }
+        var show = input.type === "password";
+        input.type = show ? "text" : "password";
+        var label = show ? "Hide password" : "Show password";
+        button.setAttribute("aria-pressed", show ? "true" : "false");
+        button.setAttribute("aria-label", label);
+        button.setAttribute("title", label);
+        input.focus();
+    });
+
     // ---------- Confirm before destructive submits ----------
     // A form with data-confirm="message" asks first; without JavaScript it simply submits.
     document.addEventListener("submit", function (event) {

@@ -1,6 +1,9 @@
+using System.Globalization;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Security;
+using AERai.Web.Infrastructure.Identity;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AERai.Web.Infrastructure.Tests;
@@ -81,6 +84,38 @@ public sealed class LoginCodeTests(SqlDatabaseFixture fixture) : IClassFixture<S
         Assert.Contains("locked", results[^1], StringComparison.Ordinal); // The fifth failure trips the account lockout.
         Assert.True(right.IsFailure);
         Assert.Null(await identity.CreateLoginCodeAsync(email, Lifetime, NoCooldown, CancellationToken.None)); // No codes while locked out.
+    }
+
+    [SqlFact]
+    public async Task CodeSignIn_ParallelWrongGuesses_FailCleanlyWithinTheCap()
+    {
+        string email;
+        LoginCode code;
+        await using (var setup = CreateRequestScope())
+        {
+            (var identity, _, email) = await CreateUserAsync(setup);
+            code = (await identity.CreateLoginCodeAsync(email, Lifetime, NoCooldown, CancellationToken.None))!;
+        }
+
+        // Each guess is its own request (scope), all reading the same stored attempt count at once.
+        var guesses = Enumerable.Range(0, 3 * LoginCodeService.MaxAttempts).Select(async _ =>
+        {
+            await using var scope = CreateRequestScope();
+            var identity = scope.ServiceProvider.GetRequiredService<IIdentityService>();
+            return await identity.CodeSignInAsync(email, Wrong(code.Code), rememberMe: false, LoginCodeService.MaxAttempts, CancellationToken.None);
+        });
+        var results = await Task.WhenAll(guesses);
+        Assert.All(results, r => Assert.True(r.IsFailure)); // Lost races are refused, never thrown.
+
+        await using var check = CreateRequestScope();
+        var checker = check.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var user = (await checker.FindByEmailAsync(email))!;
+
+        var stored = await checker.GetAuthenticationTokenAsync(user, "AERai", "LoginCode");
+        if (stored is not null)
+        {
+            Assert.True(int.Parse(stored.Split('|')[3], CultureInfo.InvariantCulture) <= LoginCodeService.MaxAttempts);
+        }
     }
 
     [SqlFact]

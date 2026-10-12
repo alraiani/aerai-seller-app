@@ -273,18 +273,20 @@ internal sealed partial class IdentityService(
             return Result.Failure(LoginCodeService.InvalidCodeMessage);
         }
 
+        // Claim the attempt before checking the code. Identity saves the user with its concurrency stamp, so
+        // of several guesses racing on the same stored state only one write succeeds; the rest are refused
+        // here and the per-code cap holds even under parallel requests.
+        var attempts = stored.Attempts + 1;
+        var claimed = attempts >= maxAttempts
+            ? await userManager.RemoveAuthenticationTokenAsync(user, LoginCodeProvider, LoginCodeName).ConfigureAwait(false)
+            : await SaveLoginCodeAsync(user, stored with { Attempts = attempts }).ConfigureAwait(false);
+        if (!claimed.Succeeded)
+        {
+            return Result.Failure(LoginCodeService.InvalidCodeMessage);
+        }
+
         if (userManager.PasswordHasher.VerifyHashedPassword(user, stored.Hash, code) == PasswordVerificationResult.Failed)
         {
-            var attempts = stored.Attempts + 1;
-            if (attempts >= maxAttempts)
-            {
-                await userManager.RemoveAuthenticationTokenAsync(user, LoginCodeProvider, LoginCodeName).ConfigureAwait(false);
-            }
-            else
-            {
-                await SaveLoginCodeAsync(user, stored with { Attempts = attempts }).ConfigureAwait(false);
-            }
-
             // Counts toward the same lockout as wrong passwords.
             await userManager.AccessFailedAsync(user).ConfigureAwait(false);
             LogSignInFailed(email);
@@ -293,8 +295,13 @@ internal sealed partial class IdentityService(
                 : Result.Failure(LoginCodeService.InvalidCodeMessage);
         }
 
-        // Single use: the code is gone before the cookie is issued.
-        await userManager.RemoveAuthenticationTokenAsync(user, LoginCodeProvider, LoginCodeName).ConfigureAwait(false);
+        // Single use: the code is gone before the cookie is issued (a concurrent use of the same code loses here).
+        if (attempts < maxAttempts
+            && !(await userManager.RemoveAuthenticationTokenAsync(user, LoginCodeProvider, LoginCodeName).ConfigureAwait(false)).Succeeded)
+        {
+            return Result.Failure(LoginCodeService.InvalidCodeMessage);
+        }
+
         await userManager.ResetAccessFailedCountAsync(user).ConfigureAwait(false);
         await signInManager.SignInAsync(user, rememberMe, LoginCodeAuthenticationMethod).ConfigureAwait(false);
         LogSignedInWithCode(email);

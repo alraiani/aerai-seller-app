@@ -38,7 +38,18 @@ public sealed partial class PasswordResetService(IIdentityService identity, IEma
         }
 
         var message = PasswordResetEmail.Create(token, buildResetLink(token), LinkLifetime);
-        await emailSender.SendAsync(message, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await emailSender.SendAsync(message, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Failing loudly would show an error only for real accounts, revealing which addresses exist;
+            // the page shows its usual message and the failure goes to the logs for an operator.
+            LogSendFailed(ex, token.UserId);
+            return;
+        }
+
         LogResetSent(token.UserId);
     }
 
@@ -67,4 +78,7 @@ public sealed partial class PasswordResetService(IIdentityService identity, IEma
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Password reset completed for user {UserId}")]
     private partial void LogResetCompleted(string userId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Password reset email for user {UserId} could not be sent")]
+    private partial void LogSendFailed(Exception exception, string userId);
 }

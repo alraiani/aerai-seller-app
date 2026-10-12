@@ -50,7 +50,18 @@ public sealed partial class LoginCodeService(IIdentityService identity, IEmailSe
             return;
         }
 
-        await emailSender.SendAsync(LoginCodeEmail.Create(code, CodeLifetime), cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await emailSender.SendAsync(LoginCodeEmail.Create(code, CodeLifetime), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Failing loudly would show an error only for real accounts, revealing which addresses exist;
+            // the page shows its usual message and the failure goes to the logs for an operator.
+            LogSendFailed(ex, code.UserId);
+            return;
+        }
+
         LogCodeSent(code.UserId);
     }
 
@@ -71,4 +82,7 @@ public sealed partial class LoginCodeService(IIdentityService identity, IEmailSe
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sign-in code requested but not sent (no eligible account, or cooldown)")]
     private partial void LogCodeNotSent();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Sign-in code email for user {UserId} could not be sent")]
+    private partial void LogSendFailed(Exception exception, string userId);
 }

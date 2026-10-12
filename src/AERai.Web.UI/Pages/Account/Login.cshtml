@@ -22,7 +22,10 @@
                 </div>
                 <div class="mb-3">
                     <label asp-for="Input.Password" class="form-label">Password</label>
-                    <input asp-for="Input.Password" class="form-control" autocomplete="current-password" />
+                    <div class="input-group">
+                        <input asp-for="Input.Password" class="form-control" autocomplete="current-password" />
+                        <partial name="_PasswordToggle" />
+                    </div>
                     <span asp-validation-for="Input.Password" class="text-danger small"></span>
                 </div>
                 <div class="d-flex justify-content-end mb-2">

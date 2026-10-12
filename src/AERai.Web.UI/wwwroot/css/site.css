@@ -414,6 +414,10 @@ html:not(.js) .nav-rail-toggle { display: none; }
 .icon { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.125em; }
 .min-w-0 { min-width: 0; }
 .js .js-hide { display: none !important; }
+/* The eye button needs site.js; without script it stays hidden and the password field works as usual. */
+:root:not(.js) .password-toggle { display: none; }
+.password-toggle-hide, .password-toggle[aria-pressed="true"] .password-toggle-show { display: none; }
+.password-toggle[aria-pressed="true"] .password-toggle-hide { display: inline; }
 
 /* Tinted buttons for secondary actions: clearly clickable, never the grey that reads as "disabled". */
 .btn-soft, .btn-soft-ok, .btn-soft-warn {
