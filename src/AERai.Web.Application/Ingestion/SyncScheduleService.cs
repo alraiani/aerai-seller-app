@@ -9,6 +9,7 @@ namespace AERai.Web.Application.Ingestion;
 /// Default <see cref="ISyncScheduleService"/>.
 /// </summary>
 /// <param name="repository">Schedule persistence.</param>
+/// <param name="runs">Run history, to spot a range that was already backfilled.</param>
 /// <param name="settings">App-wide sync settings (pause).</param>
 /// <param name="queue">Scheduler inbox: manual runs, and a wake after every change to when schedules run.</param>
 /// <param name="connection">Amazon connection state.</param>
@@ -18,6 +19,7 @@ namespace AERai.Web.Application.Ingestion;
 /// <param name="logger">Logger.</param>
 public sealed partial class SyncScheduleService(
     ISyncScheduleRepository repository,
+    ISyncRunRepository runs,
     ISyncSettingsRepository settings,
     IManualRunChannel queue,
     IAmazonConnectionInfo connection,
@@ -37,6 +39,15 @@ public sealed partial class SyncScheduleService(
 
     /// <summary>Amazon caps the orders report data window at 30 days.</summary>
     public const int MaxLookbackDays = 30;
+
+    /// <summary>How much earlier than the requested end an earlier backfill may have ended and still count as covering it.</summary>
+    public static readonly TimeSpan BackfillCoverageEndTolerance = TimeSpan.FromDays(1);
+
+    /// <summary>
+    /// Most runs "backfill all" queues in one go. The manual-run inbox holds 100 and waits when full, so this
+    /// keeps a click from hanging the request, and it stops a typo'd range from queueing years of work.
+    /// </summary>
+    public const int MaxBackfillAllRuns = 90;
 
     /// <summary>Longest notes text.</summary>
     public const int MaxNotesLength = 500;
@@ -159,11 +170,6 @@ public sealed partial class SyncScheduleService(
             return Result.Failure("The backfill can't end in the future.");
         }
 
-        if (window.Span > TimeSpan.FromDays(MaxLookbackDays))
-        {
-            return Result.Failure($"Backfill at most {MaxLookbackDays} days at a time (Amazon's limit for one report).");
-        }
-
         if (!connection.CanRun)
         {
             return Result.Failure($"Amazon is not connected: {connection.Problem}");
@@ -175,6 +181,23 @@ public sealed partial class SyncScheduleService(
             return Result.Failure("Schedule not found.");
         }
 
+        // Settlement reports are listed, and Amazon lists only the last 90 days. A range that starts earlier is
+        // shortened by the run itself; one that ends before the limit has nothing to list at all.
+        var oldestListable = now - ReportIngestionService.MaxListingAge;
+        if (schedule.ReportType == AmazonReportType.Settlements && window.End <= oldestListable)
+        {
+            return Result.Failure(
+                $"Amazon only lists settlement reports from the last 90 days (since {oldestListable:yyyy-MM-dd}). " +
+                "Download older settlements from Seller Central, upload them to raw storage, and use Tools → Refresh from blobs.");
+        }
+
+        // The 30 days is Amazon's limit for one report. The Orders API pages through results instead of
+        // building a report, so it can take any range in one run.
+        if (schedule.ReportType != AmazonReportType.OrdersApi && window.Span > TimeSpan.FromDays(MaxLookbackDays))
+        {
+            return Result.Failure($"Backfill at most {MaxLookbackDays} days at a time (Amazon's limit for one report).");
+        }
+
         if (schedule.ReportType.IsSnapshot())
         {
             return Result.Failure("Inventory reports are a current snapshot, so there is no history to backfill.");
@@ -183,6 +206,181 @@ public sealed partial class SyncScheduleService(
         var clamped = window.End > now ? window with { End = now } : window;
         await queue.EnqueueAsync(new ManualRunRequest(id, user, clamped), cancellationToken).ConfigureAwait(false);
         return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result<SyncAllResult>> SyncAllAsync(string user, CancellationToken cancellationToken)
+    {
+        if (!connection.CanRun)
+        {
+            return Result.Failure<SyncAllResult>($"Amazon is not connected: {connection.Problem}");
+        }
+
+        var schedules = await EnabledInActiveMarketplacesAsync(cancellationToken).ConfigureAwait(false);
+        if (schedules.Count == 0)
+        {
+            return Result.Failure<SyncAllResult>("Turn on at least one schedule first.");
+        }
+
+        var queued = new List<string>();
+        var skipped = new List<string>();
+        foreach (var schedule in schedules)
+        {
+            // A run still waiting on Amazon for this schedule is already doing this work.
+            if (await runs.HasPendingAsync(schedule.Id, cancellationToken).ConfigureAwait(false))
+            {
+                skipped.Add(schedule.Name);
+                continue;
+            }
+
+            await queue.EnqueueAsync(new ManualRunRequest(schedule.Id, user), cancellationToken).ConfigureAwait(false);
+            queued.Add(schedule.Name);
+        }
+
+        LogSyncAll(queued.Count, skipped.Count, user);
+        return Result.Success(new SyncAllResult(queued, skipped));
+    }
+
+    /// <summary>Switched-on schedules in active marketplaces, by marketplace then report type.</summary>
+    private async Task<IReadOnlyList<SyncSchedule>> EnabledInActiveMarketplacesAsync(CancellationToken cancellationToken)
+    {
+        var active = (await marketplaces.GetAllAsync(cancellationToken).ConfigureAwait(false))
+            .Where(m => m.IsActive)
+            .Select(m => m.MarketplaceId)
+            .ToHashSet(StringComparer.Ordinal);
+        var schedules = await repository.ListAsync(cancellationToken).ConfigureAwait(false);
+        return [.. schedules
+            .Where(s => s.IsEnabled && active.Contains(s.MarketplaceId))
+            .OrderBy(s => s.MarketplaceId, StringComparer.Ordinal)
+            .ThenBy(s => s.ReportType)];
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<SyncSchedule>> GetBackfillAllTargetsAsync(CancellationToken cancellationToken)
+    {
+        var enabled = await EnabledInActiveMarketplacesAsync(cancellationToken).ConfigureAwait(false);
+        return [.. enabled.Where(s => !s.ReportType.IsSnapshot())];
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result<BackfillAllResult>> BackfillAllAsync(BackfillWindow window, string user, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+
+        var now = clock.GetUtcNow();
+        if (window.End <= window.Start)
+        {
+            return Result.Failure<BackfillAllResult>("The backfill start must be before its end.");
+        }
+
+        if (window.End > now.AddMinutes(1))
+        {
+            return Result.Failure<BackfillAllResult>("The backfill can't end in the future.");
+        }
+
+        if (!connection.CanRun)
+        {
+            return Result.Failure<BackfillAllResult>($"Amazon is not connected: {connection.Problem}");
+        }
+
+        var targets = await GetBackfillAllTargetsAsync(cancellationToken).ConfigureAwait(false);
+        if (targets.Count == 0)
+        {
+            return Result.Failure<BackfillAllResult>("Turn on at least one schedule that has history to backfill (orders or settlements) first.");
+        }
+
+        var clamped = window.End > now ? window with { End = now } : window;
+
+        // The Orders API takes any range in one run, so it goes last: the scheduler does one thing at a
+        // time and that run is the slow one, which would otherwise hold up every quick run behind it.
+        var oldestListable = now - ReportIngestionService.MaxListingAge;
+        var plan = targets
+            .OrderBy(s => s.ReportType == AmazonReportType.OrdersApi ? 1 : 0)
+            .Select(s => PlanFor(s, clamped, oldestListable))
+            .ToList();
+
+        var total = plan.Sum(p => p.Windows.Count);
+        if (total == 0)
+        {
+            return Result.Failure<BackfillAllResult>(plan.Select(p => p.Note).FirstOrDefault(n => n is not null) ?? "There is nothing to backfill in that range.");
+        }
+
+        if (total > MaxBackfillAllRuns)
+        {
+            return Result.Failure<BackfillAllResult>(
+                $"That range needs {total} runs across {plan.Count} schedules; at most {MaxBackfillAllRuns} can be queued at once. Choose a shorter range.");
+        }
+
+        var results = new List<BackfillAllScheduleResult>();
+        foreach (var (schedule, windows, note) in plan)
+        {
+            // Checked before queueing so a run can't match itself. A repeat is only reported, never refused.
+            var covered = 0;
+            foreach (var w in windows)
+            {
+                var earlier = await runs.FindCoveringBackfillAsync(
+                    schedule.ReportType, schedule.MarketplaceId, w.Start, w.End - BackfillCoverageEndTolerance, cancellationToken).ConfigureAwait(false);
+                covered += earlier is null ? 0 : 1;
+            }
+
+            foreach (var w in windows)
+            {
+                await queue.EnqueueAsync(new ManualRunRequest(schedule.Id, user, w), cancellationToken).ConfigureAwait(false);
+            }
+
+            results.Add(new BackfillAllScheduleResult(schedule.Name, schedule.ReportType, windows.Count, covered, note));
+        }
+
+        LogBackfillAll(plan.Count, total, clamped, user);
+        return Result.Success(new BackfillAllResult(clamped, results));
+    }
+
+    /// <summary>
+    /// The windows one schedule needs for a "backfill all" range. The Orders API takes the whole range in one
+    /// run; report-based schedules need 30-day windows; Settlements can only list the last 90 days, so
+    /// anything older is dropped and the result says so.
+    /// </summary>
+    private static (SyncSchedule Schedule, IReadOnlyList<BackfillWindow> Windows, string? Note) PlanFor(
+        SyncSchedule schedule, BackfillWindow range, DateTimeOffset oldestListable)
+    {
+        if (schedule.ReportType == AmazonReportType.OrdersApi)
+        {
+            return (schedule, [range], null);
+        }
+
+        if (schedule.ReportType != AmazonReportType.Settlements || range.Start >= oldestListable)
+        {
+            return (schedule, BackfillSplitter.Split(range, MaxLookbackDays), null);
+        }
+
+        const string upload = "Amazon only lists settlement reports from the last 90 days; download older ones from Seller Central, upload them to raw storage, and use Refresh from blobs.";
+        if (range.End <= oldestListable)
+        {
+            return (schedule, [], $"Nothing queued: the whole range is older than 90 days. {upload}");
+        }
+
+        var listable = range with { Start = oldestListable };
+        return (schedule, BackfillSplitter.Split(listable, MaxLookbackDays), $"Starts at {oldestListable:yyyy-MM-dd} instead of {range.Start:yyyy-MM-dd}. {upload}");
+    }
+
+    /// <inheritdoc/>
+    public async Task<BackfillCoverage?> FindCoveringBackfillAsync(int id, BackfillWindow window, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+
+        var schedule = await repository.GetAsync(id, cancellationToken).ConfigureAwait(false);
+        if (schedule is null || schedule.ReportType.IsSnapshot())
+        {
+            return null;
+        }
+
+        // A range ending "now" is asked for again a little later with a later "now", so the end gets a
+        // day of slack; the start must still be covered exactly.
+        var covering = await runs.FindCoveringBackfillAsync(
+            schedule.ReportType, schedule.MarketplaceId, window.Start, window.End - BackfillCoverageEndTolerance, cancellationToken).ConfigureAwait(false);
+        return covering is { BackfillStart: { } start, BackfillEnd: { } end, CompletedAt: { } completedAt }
+            ? new BackfillCoverage(new BackfillWindow(start, end), completedAt, covering.TriggeredBy)
+            : null;
     }
 
     /// <inheritdoc/>
@@ -384,4 +582,10 @@ public sealed partial class SyncScheduleService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Scheduled syncs paused = {Paused} by {User}")]
     private partial void LogPaused(bool paused, string user);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Backfill all queued {Runs} runs for {Schedules} schedules over {Window} by {User}")]
+    private partial void LogBackfillAll(int schedules, int runs, BackfillWindow window, string user);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sync all queued {Queued} runs and skipped {Skipped} by {User}")]
+    private partial void LogSyncAll(int queued, int skipped, string user);
 }

@@ -844,6 +844,34 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.ToTable("SettlementLine", "core");
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Ingestion.AppliedBlob", b =>
+                {
+                    b.Property<string>("Path")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<DateTimeOffset>("AppliedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("AppliedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Path");
+
+                    b.ToTable("AppliedBlob", "ops");
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Ingestion.IngestedReport", b =>
                 {
                     b.Property<string>("AmazonReportId")
@@ -1339,6 +1367,12 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset?>("DataEnd")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("DataStart")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(2000)

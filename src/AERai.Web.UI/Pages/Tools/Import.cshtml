@@ -12,7 +12,10 @@
                     <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
                     <div class="mb-3">
                         <label asp-for="Input.Source" class="form-label"></label>
-                        <select asp-for="Input.Source" asp-items="Html.GetEnumSelectList<ImportSource>()" class="form-select"></select>
+                        <select asp-for="Input.Source" asp-items="Html.GetEnumSelectList<ImportSource>()" class="form-select">
+                            <option value="">Detect from each file (recommended)</option>
+                        </select>
+                        <div class="form-text">Detection reads each file's column headings, so a mixed selection (orders and settlements together) works. Pick a type yourself only to override.</div>
                     </div>
                     <div class="mb-3">
                         <label asp-for="Input.MarketplaceId" class="form-label"></label>
@@ -20,12 +23,19 @@
                         <div class="form-text">Every row in the file is recorded under this marketplace.</div>
                     </div>
                     <div class="mb-3">
-                        <label asp-for="Input.File" class="form-label"></label>
-                        <input asp-for="Input.File" type="file" class="form-control" accept="@string.Join(",", Model.Limits.AllowedExtensions)" />
+                        <label asp-for="Input.Files" class="form-label"></label>
+                        <input asp-for="Input.Files" type="file" multiple class="form-control" accept="@string.Join(",", Model.Limits.AllowedExtensions)" />
+                        <span asp-validation-for="Input.Files" class="text-danger small"></span>
                         <div class="form-text">
+                            Choose one or several files (up to @ImportModel.MaxFilesPerUpload at a time; hold Ctrl or Shift to select many).
                             @string.Join(", ", Model.Limits.AllowedExtensions) · up to @(Model.Limits.MaxFileBytes / (1024 * 1024)) MB
-                            and @Model.Limits.MaxRows.ToString("N0") rows. Comma- or tab-delimited with a header row.
+                            and @Model.Limits.MaxRows.ToString("N0") rows each. Comma- or tab-delimited with a header row. Each file becomes its own batch.
                         </div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input asp-for="Input.PromoteAfterStaging" class="form-check-input" />
+                        <label asp-for="Input.PromoteAfterStaging" class="form-check-label"></label>
+                        <div class="form-text">Off stages each file for you to review and promote from its batch page. Turn it on when uploading many files.</div>
                     </div>
                     <button type="submit" class="btn btn-primary">Upload</button>
                 </form>

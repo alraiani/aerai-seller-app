@@ -68,6 +68,14 @@ internal sealed class FakeSyncRunRepository : ISyncRunRepository
         return Task.FromResult(true);
     }
 
+    public Task<SyncRun?> FindCoveringBackfillAsync(AmazonReportType reportType, string marketplaceId, DateTimeOffset start, DateTimeOffset end, CancellationToken cancellationToken) =>
+        Task.FromResult(Stored.Values
+            .Where(r => r.ReportType == reportType && r.MarketplaceId == marketplaceId
+                && r.Status is SyncRunStatus.Succeeded or SyncRunStatus.NoData
+                && r.BackfillStart <= start && r.BackfillEnd >= end)
+            .OrderByDescending(r => r.CompletedAt)
+            .FirstOrDefault());
+
     public Task<bool> HasPendingAsync(int scheduleId, CancellationToken cancellationToken) =>
         Task.FromResult(Pending.Any(r => r.SyncScheduleId == scheduleId));
 

@@ -1,0 +1,59 @@
+@page
+@model AERai.Web.UI.Pages.Tools.RefreshModel
+@{
+    ViewData["Title"] = "Refresh from blobs";
+}
+<div class="card col-lg-8 mb-4">
+    <div class="card-body">
+        <p>
+            Load the database from files already in raw storage, <strong>without calling Amazon</strong>. Upload report files or Orders API pages to the
+            <code>raw</code> container (for example with Azure Storage Explorer), then refresh here. Files already loaded are skipped, and a file that fails
+            is reported without stopping the rest.
+        </p>
+
+        <div class="d-flex flex-wrap gap-3 mb-3">
+            <div><div class="fs-4">@Model.Preview.NewFiles.ToString("N0")</div><div class="small text-body-secondary">new files waiting</div></div>
+            <div><div class="fs-4">@Model.Preview.NewReportFiles.ToString("N0")</div><div class="small text-body-secondary">report files</div></div>
+            <div><div class="fs-4">@Model.Preview.NewOrderPages.ToString("N0")</div><div class="small text-body-secondary">Orders API pages</div></div>
+            <div><div class="fs-4">@Model.Preview.AlreadyLoaded.ToString("N0")</div><div class="small text-body-secondary">already loaded</div></div>
+        </div>
+
+        <form method="post">
+            <div class="form-check mb-2">
+                <input asp-for="Promote" class="form-check-input" />
+                <label asp-for="Promote" class="form-check-label">Promote reports into the data right away</label>
+                <div class="form-text">Off leaves them staged on the Import batches page to review first.</div>
+            </div>
+            <div class="form-check mb-3">
+                <input asp-for="Reprocess" class="form-check-input" />
+                <label asp-for="Reprocess" class="form-check-label">Also load files that were already loaded</label>
+                <div class="form-text">For rebuilding a fresh database from all the raw files. It adds new import batches for reports that were loaded before.</div>
+            </div>
+            <button type="submit" class="btn btn-primary" data-confirm="Load the waiting files into the database now?">Refresh from blobs</button>
+            <a asp-page="/Tools/Schedules/Index" class="btn btn-link">Amazon sync</a>
+        </form>
+    </div>
+</div>
+
+<h2 class="h6">What goes where</h2>
+<div class="card col-lg-8">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-sm mb-0">
+            <thead><tr><th>Folder in <code>raw</code></th><th>What to put there</th></tr></thead>
+            <tbody>
+                <tr><td><code>orders/</code></td><td>Orders report files (<code>GET_FLAT_FILE_ALL_ORDERS_DATA_BY_LAST_UPDATE_GENERAL</code>), tab-separated.</td></tr>
+                <tr><td><code>settlements/</code></td><td>Settlement report files (flat file V2), tab-separated.</td></tr>
+                <tr><td><code>inventory/</code></td><td>Generic inventory files with a <code>snapshot-date</code> column.</td></tr>
+                <tr><td><code>ordersapi/</code></td><td>Orders API <code>searchOrders</code> responses, one JSON file per page.</td></tr>
+                <tr><td><code>fbainventory/</code>, <code>fbareservedinventory/</code>, <code>fbarestockrecommendations/</code>, <code>awdinventory/</code></td>
+                    <td>Never loaded here: these snapshots are dated by the day they arrive, so an old file would be dated today. Use the Import page or a sync.</td></tr>
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+<p class="small text-body-secondary mt-3">
+    Put each file at <code>folder/yyyy/MM/dd/name</code>. Files you upload by hand are loaded for the marketplace selected in the top bar (<strong>@Model.Marketplace.Name</strong>);
+    a file whose metadata has <code>marketplaceid</code> is loaded for that marketplace. Pages the app saved itself were already applied when they arrived and are skipped.
+</p>

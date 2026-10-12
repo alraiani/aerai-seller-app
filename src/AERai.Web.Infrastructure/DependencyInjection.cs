@@ -102,6 +102,7 @@ public static class DependencyInjection
         services.AddScoped<ISyncRunRepository, SyncRunRepository>();
         services.AddScoped<IAwdInventoryRepository, AwdInventoryRepository>();
         services.AddScoped<IAmazonOrderRepository, AmazonOrderRepository>();
+        services.AddScoped<IAppliedBlobRepository, AppliedBlobRepository>();
         services.AddScoped<ISyncSettingsRepository, SyncSettingsRepository>();
 
         AddSpApi(services, configuration);

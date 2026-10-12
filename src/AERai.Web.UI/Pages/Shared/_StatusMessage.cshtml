@@ -7,3 +7,7 @@
 {
     <div class="alert alert-danger" role="alert">@error</div>
 }
+@if (TempData[StatusMessage.Warning] is string warning)
+{
+    <div class="alert alert-warning" role="status">@warning</div>
+}

@@ -19,6 +19,12 @@ internal sealed class InMemoryRawFileStore : IRawFileStore
         return Convert.ToHexStringLower(SHA256.HashData(_files[path]));
     }
 
+    public Task<IReadOnlyList<RawFileInfo>> ListAsync(string prefix, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<RawFileInfo>>([.. _files
+            .Where(f => f.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(f => new RawFileInfo(f.Key, f.Value.Length, DateTimeOffset.MinValue, new Dictionary<string, string>()))
+            .OrderBy(f => f.Path, StringComparer.Ordinal)]);
+
     public Task<Stream?> OpenReadAsync(string path, CancellationToken cancellationToken) =>
         Task.FromResult<Stream?>(_files.TryGetValue(path, out var bytes) ? new MemoryStream(bytes) : null);
 }

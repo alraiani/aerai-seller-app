@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using AERai.Web.Application.Ingestion;
 using AERai.Web.Domain.Core;
 using Microsoft.Extensions.Options;
@@ -20,7 +19,8 @@ internal sealed class OrdersApiClient(HttpClient http, IOptions<SpApiOptions> op
 {
     private const string BasePath = "orders/2026-01-01";
 
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    /// <summary>The optional sections of an order to request; the status lives in <c>FULFILLMENT</c>.</summary>
+    internal const string IncludedData = "FULFILLMENT";
 
     /// <summary>Calls <c>searchOrders</c> for one page.</summary>
     /// <param name="marketplace">Marketplace to search; its region selects the endpoint and credentials.</param>
@@ -39,7 +39,9 @@ internal sealed class OrdersApiClient(HttpClient http, IOptions<SpApiOptions> op
         }
 
         // Amazon wants the filter on every request, including later pages, so it is rebuilt each time.
-        var query = $"marketplaceIds={Uri.EscapeDataString(marketplace.MarketplaceId)}";
+        // Without includedData the response is only the basics (ids, times, items): no fulfillment
+        // block, hence no order status. FULFILLMENT adds order.fulfillment.fulfillmentStatus.
+        var query = $"marketplaceIds={Uri.EscapeDataString(marketplace.MarketplaceId)}&includedData={IncludedData}";
         if (filter.CreatedAfter is { } createdAfter)
         {
             query += $"&createdAfter={Uri.EscapeDataString(Iso8601(createdAfter))}";
@@ -78,86 +80,17 @@ internal sealed class OrdersApiClient(HttpClient http, IOptions<SpApiOptions> op
         return ParsePage(body, marketplace.Currency);
     }
 
-    /// <summary>Parses a <c>searchOrders</c> response body.</summary>
+    /// <summary>Parses a <c>searchOrders</c> response body (see <see cref="OrdersPageParser"/>).</summary>
     /// <param name="json">The response body.</param>
     /// <param name="fallbackCurrency">Currency used when Amazon sends none for an order.</param>
-    /// <returns>The page. Items without a SKU are dropped, and a SKU repeated within an order is summed.</returns>
-    /// <exception cref="InvalidOperationException">The body is empty or not a search result.</exception>
-    public static AmazonOrdersPage ParsePage(string json, string? fallbackCurrency = null)
-    {
-        var response = JsonSerializer.Deserialize<SearchOrdersResponse>(json, JsonOptions)
-            ?? throw new InvalidOperationException($"SP-API {SpApiOperation.SearchOrders} returned an empty body.");
+    /// <returns>The page.</returns>
+    public static AmazonOrdersPage ParsePage(string json, string? fallbackCurrency = null) => OrdersPageParser.Parse(json, fallbackCurrency);
 
-        var orders = (response.Orders ?? [])
-            .Where(o => !string.IsNullOrWhiteSpace(o.OrderId))
-            .Select(o => new AmazonOrder(
-                o.OrderId!.Trim(), // Non-null: orders without an id were filtered out just above.
-                o.CreatedTime,
-                o.LastUpdatedTime,
-                NormalizeStatus(o.Fulfillment?.FulfillmentStatus),
-                o.Proceeds?.GrandTotal?.CurrencyCode ?? fallbackCurrency,
-                MapLines(o.OrderItems ?? [])))
-            .ToList();
-        return new AmazonOrdersPage(orders, response.Pagination?.NextToken, json);
-    }
-
-    /// <summary>
-    /// Puts Amazon's upper-case status (<c>PARTIALLY_SHIPPED</c>) in the spelling the Orders report and
-    /// every view already use (<c>Partially Shipped</c>), so <c>Cancelled</c> and <c>Pending</c> keep meaning
-    /// the same whichever way an order arrived.
-    /// </summary>
+    /// <summary>Puts Amazon's status in the spelling the views use (see <see cref="OrdersPageParser.NormalizeStatus"/>).</summary>
     /// <param name="fulfillmentStatus">Amazon's fulfillment status, if any.</param>
-    /// <returns>Title-cased words, or <c>Unknown</c> when Amazon sent none.</returns>
-    internal static string NormalizeStatus(string? fulfillmentStatus)
-    {
-        if (string.IsNullOrWhiteSpace(fulfillmentStatus))
-        {
-            return "Unknown";
-        }
-
-        var words = fulfillmentStatus.Trim().Split(['_', ' '], StringSplitOptions.RemoveEmptyEntries)
-            .Select(w => char.ToUpperInvariant(w[0]) + w[1..].ToLowerInvariant());
-        return string.Join(' ', words);
-    }
-
-    private static List<AmazonOrderLine> MapLines(IReadOnlyList<ApiOrderItem> items) =>
-        items
-            .Where(i => !string.IsNullOrWhiteSpace(i.Product?.SellerSku))
-            .Select(i =>
-            {
-                var quantity = i.QuantityOrdered ?? 0;
-                var unitPrice = decimal.TryParse(i.Product!.Price?.UnitPrice?.Amount, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed) ? parsed : 0m;
-                return new AmazonOrderLine(i.Product.SellerSku!.Trim(), i.Product.Asin, i.Product.Title, quantity, decimal.Round(unitPrice * quantity, 2));
-            })
-            .GroupBy(l => l.Sku, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new AmazonOrderLine(g.First().Sku, g.First().Asin, g.First().Title, g.Sum(l => l.Quantity), g.Sum(l => l.ItemPrice)))
-            .ToList();
+    /// <returns>The normalized status.</returns>
+    internal static string NormalizeStatus(string? fulfillmentStatus) => OrdersPageParser.NormalizeStatus(fulfillmentStatus);
 
     // Amazon rejects fractional seconds and non-UTC offsets, so send whole-second UTC.
     private static string Iso8601(DateTimeOffset value) => value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
-
-    private sealed record SearchOrdersResponse(IReadOnlyList<ApiOrder>? Orders, ApiPagination? Pagination);
-
-    private sealed record ApiPagination(string? NextToken);
-
-    private sealed record ApiOrder(
-        string? OrderId,
-        DateTimeOffset CreatedTime,
-        DateTimeOffset LastUpdatedTime,
-        ApiFulfillment? Fulfillment,
-        ApiProceeds? Proceeds,
-        IReadOnlyList<ApiOrderItem>? OrderItems);
-
-    private sealed record ApiFulfillment(string? FulfillmentStatus);
-
-    private sealed record ApiProceeds(ApiMoney? GrandTotal);
-
-    private sealed record ApiOrderItem(int? QuantityOrdered, ApiProduct? Product);
-
-    private sealed record ApiProduct(string? Asin, string? Title, string? SellerSku, ApiPrice? Price);
-
-    private sealed record ApiPrice(ApiMoney? UnitPrice);
-
-    /// <summary>SP-API sends amounts as strings (<c>"49.99"</c>), not JSON numbers.</summary>
-    private sealed record ApiMoney(string? Amount, string? CurrencyCode);
 }

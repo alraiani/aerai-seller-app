@@ -20,6 +20,8 @@ namespace AERai.Web.Application.Imports;
 /// <param name="RawFilePath">Path of the original file in raw blob storage, if stored.</param>
 /// <param name="RawFileSha256">SHA-256 of the original file, if stored.</param>
 /// <param name="SkippedRowCount">Rows left out on the last promotion because they belong to another marketplace.</param>
+/// <param name="DataStart">Earliest date the file's data covers (purchase dates, settlement period, snapshot dates, or the receive date for snapshots), if any could be read.</param>
+/// <param name="DataEnd">Latest date the file's data covers.</param>
 public sealed record ImportBatchSummary(
     long Id,
     ImportSource Source,
@@ -35,4 +37,6 @@ public sealed record ImportBatchSummary(
     string? ErrorMessage,
     string? RawFilePath,
     string? RawFileSha256,
-    int SkippedRowCount = 0);
+    int SkippedRowCount = 0,
+    DateTimeOffset? DataStart = null,
+    DateTimeOffset? DataEnd = null);

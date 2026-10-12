@@ -1,6 +1,7 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Domain.Staging;
 using AERai.Web.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace AERai.Web.Infrastructure.Repositories;
 
@@ -21,6 +22,10 @@ internal sealed class StagingRepository(AppDbContext dbContext) : IStagingReposi
 
         dbContext.ImportBatches.Add(batch);
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // The dates are read from the staged text by the same parser promotion uses, so the batch shows
+        // exactly the range that will promote.
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"EXEC stg.usp_SetBatchDataRange @BatchId = {batch.Id}", cancellationToken).ConfigureAwait(false);
 
         // Staging rows are write-once; detaching keeps a large batch from lingering in the change tracker.
         dbContext.ChangeTracker.Clear();

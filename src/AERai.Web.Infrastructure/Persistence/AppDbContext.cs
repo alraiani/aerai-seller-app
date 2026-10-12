@@ -103,6 +103,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>App-wide sync settings (single row).</summary>
     public DbSet<SyncSettings> SyncSettings => Set<SyncSettings>();
 
+    /// <summary>Raw files the blob refresh has already loaded.</summary>
+    public DbSet<AppliedBlob> AppliedBlobs => Set<AppliedBlob>();
+
     /// <summary>Ledger of Amazon reports already ingested.</summary>
     public DbSet<IngestedReport> IngestedReports => Set<IngestedReport>();
 

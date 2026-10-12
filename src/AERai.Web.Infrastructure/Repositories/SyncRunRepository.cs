@@ -90,6 +90,15 @@ internal sealed class SyncRunRepository(AppDbContext dbContext) : ISyncRunReposi
     }
 
     /// <inheritdoc/>
+    public Task<SyncRun?> FindCoveringBackfillAsync(AmazonReportType reportType, string marketplaceId, DateTimeOffset start, DateTimeOffset end, CancellationToken cancellationToken) =>
+        dbContext.SyncRuns.AsNoTracking()
+            .Where(r => r.ReportType == reportType && r.MarketplaceId == marketplaceId
+                && (r.Status == SyncRunStatus.Succeeded || r.Status == SyncRunStatus.NoData)
+                && r.BackfillStart <= start && r.BackfillEnd >= end)
+            .OrderByDescending(r => r.CompletedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc/>
     public Task<bool> HasPendingAsync(int scheduleId, CancellationToken cancellationToken) =>
         dbContext.SyncRuns.AnyAsync(r => r.SyncScheduleId == scheduleId && r.Status == SyncRunStatus.Running && r.PendingReportId != null, cancellationToken);
 

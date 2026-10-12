@@ -22,6 +22,15 @@ internal sealed class FakeRawFileStore : IRawFileStore
         return Convert.ToHexStringLower(SHA256.HashData(bytes));
     }
 
+    /// <summary>When each file was "written"; files without an entry count as written at the epoch.</summary>
+    public Dictionary<string, DateTimeOffset> CreatedAt { get; } = new(StringComparer.Ordinal);
+
+    public Task<IReadOnlyList<RawFileInfo>> ListAsync(string prefix, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<RawFileInfo>>([.. Files
+            .Where(f => f.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(f => new RawFileInfo(f.Key, f.Value.Content.Length, CreatedAt.GetValueOrDefault(f.Key), f.Value.Metadata))
+            .OrderBy(f => f.CreatedAt).ThenBy(f => f.Path, StringComparer.Ordinal)]);
+
     public Task<Stream?> OpenReadAsync(string path, CancellationToken cancellationToken) =>
         Task.FromResult<Stream?>(Files.TryGetValue(path, out var file) ? new MemoryStream(file.Content) : null);
 }

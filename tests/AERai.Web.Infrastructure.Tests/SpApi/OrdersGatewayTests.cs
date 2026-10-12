@@ -55,7 +55,7 @@ public sealed class OrdersGatewayTests : IDisposable
 
         var request = Assert.Single(_handler.Requests);
         Assert.Equal(
-            "https://sellingpartnerapi-na.amazon.com/orders/2026-01-01/orders?marketplaceIds=ATVPDKIKX0DER&lastUpdatedAfter=2026-10-01T12%3A00%3A00Z",
+            "https://sellingpartnerapi-na.amazon.com/orders/2026-01-01/orders?marketplaceIds=ATVPDKIKX0DER&includedData=FULFILLMENT&lastUpdatedAfter=2026-10-01T12%3A00%3A00Z",
             request.RequestUri!.ToString());
         Assert.True(request.Options.TryGetValue(SpApiOperation.OptionKey, out var operation));
         Assert.Equal(SpApiOperation.SearchOrders, operation);
@@ -131,6 +131,8 @@ public sealed class OrdersGatewayTests : IDisposable
     [Theory]
     [InlineData("SHIPPED", "Shipped")]
     [InlineData("CANCELLED", "Cancelled")]
+    [InlineData("PENDING_AVAILABILITY", "Pending Availability")]
+    [InlineData("UNFULFILLABLE", "Unfulfillable")]
     [InlineData("PARTIALLY_SHIPPED", "Partially Shipped")]
     [InlineData("  unshipped ", "Unshipped")]
     [InlineData(null, "Unknown")]

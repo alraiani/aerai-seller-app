@@ -91,6 +91,9 @@ public sealed class IndexModel(
     /// <summary>Current time, for relative times.</summary>
     public DateTimeOffset Now { get; } = clock.GetUtcNow();
 
+    /// <summary>The schedules "backfill all" would run (switched on, with history to backfill), across active marketplaces.</summary>
+    public IReadOnlyList<SyncSchedule> BackfillAllTargets { get; private set; } = [];
+
     /// <summary>Whether any filter (other than the view tab) is applied.</summary>
     public bool IsFiltered =>
         !string.IsNullOrWhiteSpace(Query) || Status != ScheduleStatusFilter.All || ReportType is not null
@@ -111,6 +114,7 @@ public sealed class IndexModel(
         DeletedCount = all.Count(s => s.IsDeleted);
         Users = await identity.ListUsersAsync(cancellationToken);
         Settings = await syncSettings.GetAsync(cancellationToken);
+        BackfillAllTargets = await scheduleService.GetBackfillAllTargetsAsync(cancellationToken);
     }
 
     /// <summary>
@@ -182,6 +186,86 @@ public sealed class IndexModel(
         return RedirectToPage("Runs", new { scheduleId = id });
     }
 
+    /// <summary>Queues a normal run of every switched-on schedule.</summary>
+    /// <param name="back">The list's query string.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect to the run history, or back to the list with an error.</returns>
+    public async Task<IActionResult> OnPostSyncAllAsync(string? back, CancellationToken cancellationToken)
+    {
+        var result = await scheduleService.SyncAllAsync(User.Identity!.Name!, cancellationToken);
+        if (result.IsFailure)
+        {
+            TempData[StatusMessage.Error] = result.Error;
+            return BackToList(back);
+        }
+
+        var queued = result.Value.Queued.Count;
+        TempData[StatusMessage.Success] =
+            $"Sync all queued {queued} run{(queued == 1 ? "" : "s")}. You can leave this page; follow progress in the run history.";
+        if (result.Value.Skipped.Count > 0)
+        {
+            TempData[StatusMessage.Warning] =
+                $"Skipped because the previous run is still waiting on Amazon: {string.Join(", ", result.Value.Skipped)}.";
+        }
+
+        return RedirectToPage("Runs");
+    }
+
+    /// <summary>Queues a backfill of the same date range for every switched-on schedule that has history.</summary>
+    /// <param name="from">Range start date (UTC day).</param>
+    /// <param name="to">Range end date (UTC day, inclusive).</param>
+    /// <param name="back">The list's query string.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect to the run history, or back to the list with an error.</returns>
+    public async Task<IActionResult> OnPostBackfillAllAsync(DateOnly? from, DateOnly? to, string? back, CancellationToken cancellationToken)
+    {
+        if (from is not { } start || to is not { } end)
+        {
+            TempData[StatusMessage.Error] = "Choose both a start and an end date.";
+            return BackToList(back);
+        }
+
+        var now = clock.GetUtcNow();
+        var window = new BackfillWindow(
+            new DateTimeOffset(start.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
+            // Inclusive end day: through midnight after it, capped to now.
+            new DateTimeOffset(end.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero));
+        if (window.End > now)
+        {
+            window = window with { End = now };
+        }
+
+        var result = await scheduleService.BackfillAllAsync(window, User.Identity!.Name!, cancellationToken);
+        if (result.IsFailure)
+        {
+            TempData[StatusMessage.Error] = result.Error;
+            return BackToList(back);
+        }
+
+        var queued = result.Value;
+        TempData[StatusMessage.Success] =
+            $"Backfill {queued.Window} queued: {queued.TotalRuns} run{(queued.TotalRuns == 1 ? "" : "s")} across {queued.Schedules.Count} schedule{(queued.Schedules.Count == 1 ? "" : "s")}. " +
+            "You can leave this page; follow progress in the run history. The Orders API run goes last and can take a while.";
+        var warnings = new List<string>();
+        foreach (var schedule in queued.Schedules.Where(s => s.Note is not null))
+        {
+            warnings.Add($"{schedule.ScheduleName}: {schedule.Note}");
+        }
+
+        if (queued.TotalAlreadyCovered > 0)
+        {
+            var repeats = string.Join(", ", queued.Schedules.Where(s => s.AlreadyCovered > 0).Select(s => $"{s.ScheduleName} ({s.AlreadyCovered} of {s.Runs})"));
+            warnings.Add($"Some ranges were already backfilled and will call Amazon again for data you already have: {repeats}. Nothing is duplicated; rows are refreshed in place.");
+        }
+
+        if (warnings.Count > 0)
+        {
+            TempData[StatusMessage.Warning] = string.Join(" ", warnings);
+        }
+
+        return RedirectToPage("Runs");
+    }
+
     /// <summary>Queues a backfill for the last N days or a date range.</summary>
     /// <param name="id">Schedule id.</param>
     /// <param name="days">Quick pick (7/14/30); ignored when a range is given.</param>
@@ -215,6 +299,9 @@ public sealed class IndexModel(
             window = window with { End = now };
         }
 
+        // Checked before queueing so the new run can't match itself. It only warns: repeating is allowed.
+        var alreadyDone = await scheduleService.FindCoveringBackfillAsync(id, window, cancellationToken);
+
         var result = await scheduleService.BackfillAsync(id, window, User.Identity!.Name!, cancellationToken);
         if (result.IsFailure)
         {
@@ -223,6 +310,13 @@ public sealed class IndexModel(
         }
 
         TempData[StatusMessage.Success] = $"Backfill {window} queued. Amazon can take several minutes to build a large report.";
+        if (alreadyDone is not null)
+        {
+            TempData[StatusMessage.Warning] =
+                $"This range was already backfilled ({alreadyDone.Window}, finished {alreadyDone.CompletedAt:yyyy-MM-dd HH:mm} UTC by {alreadyDone.TriggeredBy}). " +
+                "It will call Amazon again for data you already have; nothing is duplicated, and rows are refreshed in place.";
+        }
+
         return RedirectToPage("Runs", new { scheduleId = id });
     }
 

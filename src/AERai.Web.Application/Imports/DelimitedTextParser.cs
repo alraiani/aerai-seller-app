@@ -12,6 +12,24 @@ namespace AERai.Web.Application.Imports;
 /// </remarks>
 public static class DelimitedTextParser
 {
+    /// <summary>Reads only the header row, normalized the way <see cref="ParseAsync"/> normalizes it.</summary>
+    /// <param name="reader">Source text. The caller owns and disposes it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The normalized column names, or a failure when the input is empty.</returns>
+    public static async Task<Result<IReadOnlyList<string>>> ReadHeadersAsync(TextReader reader, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+
+        var headerLine = await ReadRecordTextAsync(reader, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(headerLine))
+        {
+            return Result.Failure<IReadOnlyList<string>>("The file is empty or has no header row.");
+        }
+
+        var delimiter = headerLine.Contains('\t', StringComparison.Ordinal) ? '\t' : ',';
+        return Result.Success<IReadOnlyList<string>>([.. SplitFields(headerLine, delimiter).Select(NormalizeHeader)]);
+    }
+
     /// <summary>
     /// Parses the whole input.
     /// </summary>

@@ -12,6 +12,8 @@ internal sealed class FakeAmazonReportsGateway : IAmazonReportsGateway
     public List<(AmazonReportType Type, DateTimeOffset? Start, DateTimeOffset? End)> Requests { get; } = [];
 
     /// <summary>Marketplace ids passed to every gateway call, in order.</summary>
+    public List<DateTimeOffset> SinceSeen { get; } = [];
+
     public List<string> MarketplacesSeen { get; } = [];
 
     /// <summary>Statuses returned by successive GetReportStatusAsync calls (last one repeats).</summary>
@@ -44,6 +46,7 @@ internal sealed class FakeAmazonReportsGateway : IAmazonReportsGateway
     public Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)
     {
         MarketplacesSeen.Add(marketplace.MarketplaceId);
+        SinceSeen.Add(createdSince);
         return Task.FromResult<IReadOnlyList<AvailableAmazonReport>>(Available.Where(r => r.CreatedAt >= createdSince).ToList());
     }
 

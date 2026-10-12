@@ -10,6 +10,7 @@ namespace AERai.Web.Application.Tests.Ingestion;
 public sealed class SyncScheduleServiceTests
 {
     private readonly FakeSyncScheduleRepository _repository = new();
+    private readonly FakeSyncRunRepository _runs = new();
     private readonly FakeManualRunChannel _channel = new();
     private readonly FakeSyncSettingsRepository _settings = new();
     private readonly FakeIdentityService _identity = new();
@@ -17,7 +18,7 @@ public sealed class SyncScheduleServiceTests
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 2, 12, 0, 0, TimeSpan.Zero));
 
     private SyncScheduleService CreateService(bool canRun = true) =>
-        new(_repository, _settings, _channel, new FakeConnection(canRun), _identity, _marketplaces, _clock, NullLogger<SyncScheduleService>.Instance);
+        new(_repository, _runs, _settings, _channel, new FakeConnection(canRun), _identity, _marketplaces, _clock, NullLogger<SyncScheduleService>.Instance);
 
     private static SyncScheduleInput Input(
         ScheduleFrequency frequency = ScheduleFrequency.Interval, int? interval = 60, string zone = "America/New_York", int lookback = 7, bool enabled = true,
@@ -158,6 +159,268 @@ public sealed class SyncScheduleServiceTests
         var result = await CreateService().BackfillAsync(id, window, "ops", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
+        Assert.Equal(window, Assert.Single(_channel.Enqueued).Backfill);
+    }
+
+    private SyncRun FinishedBackfill(AmazonReportType type, DateTimeOffset start, DateTimeOffset end, SyncRunStatus status = SyncRunStatus.Succeeded, string marketplaceId = MarketplaceIds.UnitedStates)
+    {
+        var run = new SyncRun
+        {
+            Id = _runs.Stored.Count + 1, SyncScheduleId = 1, ReportType = type, MarketplaceId = marketplaceId, TriggeredBy = "ops",
+            Status = status, BackfillStart = start, BackfillEnd = end, CompletedAt = _clock.GetUtcNow(),
+        };
+        _runs.Stored[run.Id] = run;
+        return run;
+    }
+
+    [Fact]
+    public async Task FindCoveringBackfillAsync_EarlierBackfillContainsTheRange_ReturnsIt()
+    {
+        var id = (await CreateService().CreateAsync(Input() with { ReportType = AmazonReportType.OrdersApi }, "ops", CancellationToken.None)).Value;
+        var now = _clock.GetUtcNow();
+        FinishedBackfill(AmazonReportType.OrdersApi, now.AddDays(-100), now);
+
+        var coverage = await CreateService().FindCoveringBackfillAsync(id, new BackfillWindow(now.AddDays(-60), now.AddDays(-30)), CancellationToken.None);
+
+        Assert.NotNull(coverage);
+        Assert.Equal(new BackfillWindow(now.AddDays(-100), now), coverage.Window);
+        Assert.Equal("ops", coverage.TriggeredBy);
+    }
+
+    [Fact]
+    public async Task FindCoveringBackfillAsync_EarlierEndWithinADay_StillCounts()
+    {
+        var id = (await CreateService().CreateAsync(Input() with { ReportType = AmazonReportType.OrdersApi }, "ops", CancellationToken.None)).Value;
+        var now = _clock.GetUtcNow();
+        FinishedBackfill(AmazonReportType.OrdersApi, now.AddDays(-100), now.AddHours(-5));
+
+        Assert.NotNull(await CreateService().FindCoveringBackfillAsync(id, new BackfillWindow(now.AddDays(-100), now), CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(-100, -10, -100, 0)]   // Earlier backfill stopped 10 days short of the new end.
+    [InlineData(-90, 0, -100, 0)]      // Earlier backfill started after the new start.
+    public async Task FindCoveringBackfillAsync_RangeNotFullyCovered_ReturnsNull(int earlierStart, int earlierEnd, int start, int end)
+    {
+        var id = (await CreateService().CreateAsync(Input() with { ReportType = AmazonReportType.OrdersApi }, "ops", CancellationToken.None)).Value;
+        var now = _clock.GetUtcNow();
+        FinishedBackfill(AmazonReportType.OrdersApi, now.AddDays(earlierStart), now.AddDays(earlierEnd));
+
+        Assert.Null(await CreateService().FindCoveringBackfillAsync(id, new BackfillWindow(now.AddDays(start), now.AddDays(end)), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindCoveringBackfillAsync_FailedOtherTypeOrOtherMarketplace_AreIgnored()
+    {
+        var id = (await CreateService().CreateAsync(Input() with { ReportType = AmazonReportType.OrdersApi }, "ops", CancellationToken.None)).Value;
+        var now = _clock.GetUtcNow();
+        FinishedBackfill(AmazonReportType.OrdersApi, now.AddDays(-100), now, SyncRunStatus.Failed);
+        FinishedBackfill(AmazonReportType.Orders, now.AddDays(-100), now);
+        FinishedBackfill(AmazonReportType.OrdersApi, now.AddDays(-100), now, marketplaceId: MarketplaceIds.Canada);
+
+        Assert.Null(await CreateService().FindCoveringBackfillAsync(id, new BackfillWindow(now.AddDays(-60), now.AddDays(-30)), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindCoveringBackfillAsync_SnapshotSchedule_ReturnsNull()
+    {
+        var id = (await CreateService().CreateAsync(Input() with { ReportType = AmazonReportType.FbaInventory }, "ops", CancellationToken.None)).Value;
+        var now = _clock.GetUtcNow();
+        FinishedBackfill(AmazonReportType.FbaInventory, now.AddDays(-100), now);
+
+        Assert.Null(await CreateService().FindCoveringBackfillAsync(id, new BackfillWindow(now.AddDays(-5), now), CancellationToken.None));
+    }
+
+    private async Task<int> AddScheduleAsync(string name, AmazonReportType type, bool enabled = true, string marketplaceId = MarketplaceIds.UnitedStates) =>
+        (await CreateService().CreateAsync(Input(marketplaceId: marketplaceId, enabled: enabled) with { Name = name, ReportType = type }, "ops", CancellationToken.None)).Value;
+
+    [Fact]
+    public async Task BackfillAllAsync_QueuesEnabledHistorySchedulesAndSendsTheOrdersApiLast()
+    {
+        var ordersApi = await AddScheduleAsync("Orders API", AmazonReportType.OrdersApi);
+        var settlements = await AddScheduleAsync("Settlements", AmazonReportType.Settlements);
+        await AddScheduleAsync("Orders report", AmazonReportType.Orders);
+        await AddScheduleAsync("FBA", AmazonReportType.FbaInventory);                  // A snapshot has no history.
+        await AddScheduleAsync("Orders off", AmazonReportType.Orders, enabled: false);  // Switched off.
+        var now = _clock.GetUtcNow();
+        var window = new BackfillWindow(now.AddDays(-65), now);
+
+        var result = await CreateService().BackfillAllAsync(window, "ops", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var queued = _channel.Enqueued;
+        Assert.Equal(3 + 3 + 1, queued.Count); // 65 days is 3 windows for each of the two report schedules, plus one Orders API run.
+        Assert.Equal(["Orders report", "Settlements", "Orders API"], result.Value.Schedules.Select(s => s.ScheduleName));
+
+        // The Orders API takes the whole range in one run and is queued last, behind the quick runs.
+        Assert.Equal(new ManualRunRequest(ordersApi, "ops", window), queued[^1]);
+        Assert.All(queued.Take(6), q => Assert.True(q.Backfill!.Span <= TimeSpan.FromDays(30)));
+        Assert.Equal(3, queued.Count(q => q.ScheduleId == settlements));
+    }
+
+    [Fact]
+    public async Task BackfillAllAsync_NothingToBackfill_Fails()
+    {
+        await AddScheduleAsync("FBA", AmazonReportType.FbaInventory);
+        var now = _clock.GetUtcNow();
+
+        var result = await CreateService().BackfillAllAsync(new BackfillWindow(now.AddDays(-10), now), "ops", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(_channel.Enqueued);
+    }
+
+    [Fact]
+    public async Task BackfillAllAsync_TooManyRuns_FailsWithoutQueueingAnything()
+    {
+        await AddScheduleAsync("Orders report", AmazonReportType.Orders);
+        var now = _clock.GetUtcNow();
+
+        var result = await CreateService().BackfillAllAsync(new BackfillWindow(now.AddDays(-30 * 100), now), "ops", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("at most", result.Error, StringComparison.Ordinal);
+        Assert.Empty(_channel.Enqueued);
+    }
+
+    [Fact]
+    public async Task BackfillAllAsync_RangeAlreadyBackfilled_StillQueuesAndCountsTheRepeat()
+    {
+        await AddScheduleAsync("Orders API", AmazonReportType.OrdersApi);
+        var now = _clock.GetUtcNow();
+        FinishedBackfill(AmazonReportType.OrdersApi, now.AddDays(-100), now);
+
+        var result = await CreateService().BackfillAllAsync(new BackfillWindow(now.AddDays(-60), now), "ops", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Single(_channel.Enqueued);
+        Assert.Equal(1, result.Value.TotalAlreadyCovered);
+    }
+
+    [Theory]
+    [InlineData(-5, -6)]   // End before start.
+    [InlineData(-1, 1)]    // Ends tomorrow.
+    public async Task BackfillAllAsync_InvalidRange_Fails(int startDays, int endDays)
+    {
+        await AddScheduleAsync("Orders API", AmazonReportType.OrdersApi);
+        var now = _clock.GetUtcNow();
+
+        var result = await CreateService().BackfillAllAsync(new BackfillWindow(now.AddDays(startDays), now.AddDays(endDays)), "ops", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(_channel.Enqueued);
+    }
+
+    [Fact]
+    public async Task SyncAllAsync_QueuesEveryEnabledScheduleOnceAndSkipsOnesWaitingOnAmazon()
+    {
+        var orders = await AddScheduleAsync("Orders API", AmazonReportType.OrdersApi);
+        var waiting = await AddScheduleAsync("Restock", AmazonReportType.RestockRecommendations);
+        await AddScheduleAsync("Off", AmazonReportType.Orders, enabled: false);
+        _runs.Stored[1] = new SyncRun
+        {
+            Id = 1, SyncScheduleId = waiting, ReportType = AmazonReportType.RestockRecommendations, MarketplaceId = MarketplaceIds.UnitedStates,
+            TriggeredBy = "scheduler", Status = SyncRunStatus.Running, PendingReportId = "R1", NextCheckAt = _clock.GetUtcNow(),
+        };
+
+        var result = await CreateService().SyncAllAsync("ops", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(["Orders API"], result.Value.Queued);
+        Assert.Equal(["Restock"], result.Value.Skipped);
+        Assert.Equal(new ManualRunRequest(orders, "ops"), Assert.Single(_channel.Enqueued));
+    }
+
+    [Fact]
+    public async Task SyncAllAsync_NothingSwitchedOn_Fails()
+    {
+        await AddScheduleAsync("Off", AmazonReportType.Orders, enabled: false);
+
+        var result = await CreateService().SyncAllAsync("ops", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(_channel.Enqueued);
+    }
+
+    [Fact]
+    public async Task SyncAllAsync_NotConnected_Fails()
+    {
+        await AddScheduleAsync("Orders API", AmazonReportType.OrdersApi);
+
+        var result = await CreateService(canRun: false).SyncAllAsync("ops", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(_channel.Enqueued);
+    }
+
+    [Fact]
+    public async Task BackfillAllAsync_Settlements_StartAtTheNinetyDayLimitWithANote_WhileTheOrdersApiKeepsTheWholeRange()
+    {
+        var ordersApi = await AddScheduleAsync("Orders API", AmazonReportType.OrdersApi);
+        await AddScheduleAsync("Settlements", AmazonReportType.Settlements);
+        var now = _clock.GetUtcNow();
+        var window = new BackfillWindow(now.AddDays(-283), now);
+
+        var result = await CreateService().BackfillAllAsync(window, "ops", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var settlements = Assert.Single(result.Value.Schedules, s => s.ReportType == AmazonReportType.Settlements);
+        Assert.Equal(3, settlements.Runs); // 89 days is three 30-day windows.
+        Assert.Contains("90 days", settlements.Note, StringComparison.Ordinal);
+        var firstSettlementRun = _channel.Enqueued.First(q => q.ScheduleId != ordersApi);
+        Assert.Equal(now - ReportIngestionService.MaxListingAge, firstSettlementRun.Backfill!.Start);
+        Assert.Equal(new ManualRunRequest(ordersApi, "ops", window), _channel.Enqueued[^1]);
+        Assert.Null(Assert.Single(result.Value.Schedules, s => s.ReportType == AmazonReportType.OrdersApi).Note);
+    }
+
+    [Fact]
+    public async Task BackfillAllAsync_OnlySettlementsAndTheWholeRangeIsTooOld_FailsAndExplains()
+    {
+        await AddScheduleAsync("Settlements", AmazonReportType.Settlements);
+        var now = _clock.GetUtcNow();
+
+        var result = await CreateService().BackfillAllAsync(new BackfillWindow(now.AddDays(-250), now.AddDays(-120)), "ops", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Refresh from blobs", result.Error, StringComparison.Ordinal);
+        Assert.Empty(_channel.Enqueued);
+    }
+
+    [Fact]
+    public async Task BackfillAsync_SettlementsRangeEntirelyOlderThanAmazonLists_FailsWithTheWayOut()
+    {
+        var id = await AddScheduleAsync("Settlements", AmazonReportType.Settlements);
+        var now = _clock.GetUtcNow();
+
+        var result = await CreateService().BackfillAsync(id, new BackfillWindow(now.AddDays(-150), now.AddDays(-120)), "ops", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Refresh from blobs", result.Error, StringComparison.Ordinal);
+        Assert.Empty(_channel.Enqueued);
+    }
+
+    [Fact]
+    public async Task BackfillAsync_SettlementsRangePartlyOlderThanAmazonLists_IsQueuedAndShortenedByTheRun()
+    {
+        var id = await AddScheduleAsync("Settlements", AmazonReportType.Settlements);
+        var now = _clock.GetUtcNow();
+        var window = new BackfillWindow(now.AddDays(-100), now.AddDays(-80));
+
+        var result = await CreateService().BackfillAsync(id, window, "ops", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(window, Assert.Single(_channel.Enqueued).Backfill);
+    }
+
+    [Fact]
+    public async Task BackfillAsync_OrdersApi_AcceptsARangeLongerThanThirtyDays()
+    {
+        var id = (await CreateService().CreateAsync(Input() with { ReportType = AmazonReportType.OrdersApi }, "ops", CancellationToken.None)).Value;
+        var window = BackfillWindow.LastDays(283, _clock.GetUtcNow());
+
+        var result = await CreateService().BackfillAsync(id, window, "ops", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
         Assert.Equal(window, Assert.Single(_channel.Enqueued).Backfill);
     }
 
