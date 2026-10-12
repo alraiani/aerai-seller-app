@@ -24,6 +24,12 @@ public sealed class StgSettlementLine : StagingRow
     /// <summary><c>order-id</c>.</summary>
     public string? OrderId { get; set; }
 
+    /// <summary><c>order-item-code</c>: identifies the order item the line belongs to.</summary>
+    public string? OrderItemCode { get; set; }
+
+    /// <summary><c>quantity-purchased</c>: units on the order item (present on its price lines only).</summary>
+    public string? QuantityPurchased { get; set; }
+
     /// <summary><c>sku</c>.</summary>
     public string? Sku { get; set; }
 

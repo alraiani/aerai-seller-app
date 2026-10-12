@@ -36,7 +36,10 @@ public sealed class SettlementLineDetail
     /// <summary>Amount description, e.g. Principal, Commission.</summary>
     public string? AmountDescription { get; set; }
 
-    /// <summary>Principal price of the line's order item; matches <see cref="SettlementSkuSummary.SalePrice"/>.</summary>
+    /// <summary>Units on the order item, shown on its price line only; zero elsewhere.</summary>
+    public int Units { get; set; }
+
+    /// <summary>Price per item of the line's order item; matches <see cref="SettlementSkuSummary.SalePrice"/>.</summary>
     public decimal? SalePrice { get; set; }
 
     /// <summary>Signed amount.</summary>

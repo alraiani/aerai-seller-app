@@ -30,8 +30,11 @@ public sealed class SettlementSkuSummary
     /// <summary>Product title from the catalog, when known.</summary>
     public string? Title { get; set; }
 
-    /// <summary>Principal price the order line sold or was refunded for; <see langword="null"/> when it has none.</summary>
+    /// <summary>Price per item: the Principal divided by the units on the order item (the whole Principal when the units are unknown); <see langword="null"/> when the row has none.</summary>
     public decimal? SalePrice { get; set; }
+
+    /// <summary>Units sold at this price (quantity on the order price lines; refunds do not reduce it).</summary>
+    public int Units { get; set; }
 
     /// <summary>Distinct orders in the group.</summary>
     public int OrderCount { get; set; }

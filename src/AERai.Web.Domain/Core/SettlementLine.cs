@@ -24,6 +24,12 @@ public sealed class SettlementLine
     /// <summary>Related Amazon order, if any.</summary>
     public string? AmazonOrderId { get; set; }
 
+    /// <summary>Amazon's order-item code: ties the price, fee, and tax lines of one order item together.</summary>
+    public string? OrderItemCode { get; set; }
+
+    /// <summary>Units on the order item; Amazon reports it on the item's price lines only, so it is null on other lines and on lines imported before it was kept.</summary>
+    public int? Quantity { get; set; }
+
     /// <summary>Related SKU, if any.</summary>
     public string? Sku { get; set; }
 

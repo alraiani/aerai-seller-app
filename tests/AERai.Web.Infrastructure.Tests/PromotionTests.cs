@@ -135,18 +135,18 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     }
 
     [SqlFact]
-    public async Task Settlements_SkuSummaryGroupsBySkuAndSalePrice_AndLinesExplainEachGroup()
+    public async Task Settlements_SkuSummaryGroupsByPricePerItem_AndLinesExplainEachGroup()
     {
         const string tsv =
-            "settlement-id\tsettlement-start-date\tsettlement-end-date\ttransaction-type\torder-id\tsku\tamount-type\tamount-description\tamount\tcurrency\n" +
-            "T-SET-2\t2026-09-04 07:00:00 UTC\t2026-09-18 07:00:00 UTC\t\t\t\t\t\t\tUSD\n" +
-            "T-SET-2\t\t\tOrder\tT-O-1\tT-SKU-A\tItemPrice\tPrincipal\t10.00\t\n" +
-            "T-SET-2\t\t\tOrder\tT-O-1\tT-SKU-A\tItemFees\tCommission\t-1.50\t\n" +
-            "T-SET-2\t\t\tOrder\tT-O-2\tT-SKU-A\tItemPrice\tPrincipal\t10.00\t\n" +
-            "T-SET-2\t\t\tOrder\tT-O-2\tT-SKU-A\tItemFees\tCommission\t-1.50\t\n" +
-            "T-SET-2\t\t\tOrder\tT-O-3\tT-SKU-A\tItemPrice\tPrincipal\t12.00\t\n" +
-            "T-SET-2\t\t\tRefund\tT-O-4\tT-SKU-A\tItemPrice\tPrincipal\t-10.00\t\n" +
-            "T-SET-2\t\t\tServiceFee\t\t\tother-transaction\tSubscription\t-39.99\t\n";
+            "settlement-id\tsettlement-start-date\tsettlement-end-date\ttransaction-type\torder-id\torder-item-code\tsku\tquantity-purchased\tamount-type\tamount-description\tamount\tcurrency\n" +
+            "T-SET-2\t2026-09-04 07:00:00 UTC\t2026-09-18 07:00:00 UTC\t\t\t\t\t\t\t\t\tUSD\n" +
+            "T-SET-2\t\t\tOrder\tT-O-1\tI1\tT-SKU-A\t1\tItemPrice\tPrincipal\t10.00\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-1\tI1\tT-SKU-A\t\tItemFees\tCommission\t-1.50\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-2\tI2\tT-SKU-A\t2\tItemPrice\tPrincipal\t20.00\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-2\tI2\tT-SKU-A\t\tItemFees\tCommission\t-3.00\t\n" +
+            "T-SET-2\t\t\tOrder\tT-O-3\tI3\tT-SKU-A\t1\tItemPrice\tPrincipal\t12.00\t\n" +
+            "T-SET-2\t\t\tRefund\tT-O-4\tI4\tT-SKU-A\t\tItemPrice\tPrincipal\t-10.00\t\n" +
+            "T-SET-2\t\t\tServiceFee\t\t\t\t\tother-transaction\tSubscription\t-39.99\t\n";
 
         var batchId = await StageAsync(ImportSource.Settlements, "settlement-sku.tsv", tsv);
         await PromoteAsync(batchId);
@@ -157,22 +157,24 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
 
         var rows = await reporting.GetSettlementSkuSummaryAsync(marketplaceId, "T-SET-2", new PageRequest(), CancellationToken.None);
 
-        // Two sales and a refund at 10.00 share one row (the refund in its own column); the 12.00 sale
-        // and the SKU-less fee are separate rows.
+        // A 2-unit order of 20.00 is 10.00 each, so it shares a row with the 1-unit 10.00 order and the 10.00 refund
+        // (the refund in its own column, with no quantity of its own); the 12.00 sale and the SKU-less fee are separate rows.
         Assert.Equal(3, rows.TotalCount);
         var tenDollar = rows.Items.Single(r => r.Sku == "T-SKU-A" && r.SalePrice == 10.00m);
-        Assert.Equal((3, 20.00m, -3.00m, -10.00m, 7.00m), (tenDollar.OrderCount, tenDollar.Sales, tenDollar.Fees, tenDollar.Refunds, tenDollar.Net));
-        Assert.Equal(12.00m, rows.Items.Single(r => r.SalePrice == 12.00m).Sales);
-        Assert.Equal(-39.99m, rows.Items.Single(r => r.Sku is null).Net);
+        Assert.Equal((3, 3, 30.00m, -4.50m, -10.00m, 15.50m), (tenDollar.Units, tenDollar.OrderCount, tenDollar.Sales, tenDollar.Fees, tenDollar.Refunds, tenDollar.Net));
+        Assert.Equal((1, 12.00m), (rows.Items.Single(r => r.SalePrice == 12.00m).Units, rows.Items.Single(r => r.SalePrice == 12.00m).Sales));
+        Assert.Equal((0, -39.99m), (rows.Items.Single(r => r.Sku is null).Units, rows.Items.Single(r => r.Sku is null).Net));
 
         // The settlement total is the sum of its rows.
         var settlement = await reporting.GetSettlementAsync(marketplaceId, "T-SET-2", CancellationToken.None);
         Assert.Equal(rows.Items.Sum(r => r.Net), settlement!.Net);
+        Assert.Equal(4, settlement.Units);
 
         // The drill-down lists every line of the group, with amounts in the bucket columns, and adds up to the row.
         var lines = await reporting.GetSettlementLinesAsync(marketplaceId, "T-SET-2", "T-SKU-A", 10.00m, new PageRequest(), CancellationToken.None);
         Assert.Equal(tenDollar.LineCount, lines.TotalCount);
         Assert.Equal(tenDollar.Net, lines.Items.Sum(l => l.Amount));
+        Assert.Equal(tenDollar.Units, lines.Items.Sum(l => l.Units));
         Assert.All(lines.Items.Where(l => l.AmountType == "ItemFees"), l => Assert.Equal(l.Amount, l.Fees));
     }
 

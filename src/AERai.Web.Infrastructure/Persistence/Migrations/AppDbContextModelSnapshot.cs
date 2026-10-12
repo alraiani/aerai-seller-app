@@ -821,8 +821,15 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<string>("OrderItemCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<DateTimeOffset?>("PostedDate")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("Quantity")
+                        .HasColumnType("int");
 
                     b.Property<string>("SettlementId")
                         .IsRequired()
@@ -1375,6 +1382,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("Units")
+                        .HasColumnType("int");
+
                     b.ToTable((string)null);
 
                     b.ToView("vw_SettlementLine", "rpt");
@@ -1439,6 +1449,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<string>("Title")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("Units")
+                        .HasColumnType("int");
+
                     b.ToTable((string)null);
 
                     b.ToView("vw_SettlementSkuSummary", "rpt");
@@ -1483,6 +1496,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<string>("SettlementId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Units")
+                        .HasColumnType("int");
 
                     b.ToTable((string)null);
 
@@ -1907,7 +1923,15 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasMaxLength(400)
                         .HasColumnType("nvarchar(400)");
 
+                    b.Property<string>("OrderItemCode")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
                     b.Property<string>("PostedDate")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("QuantityPurchased")
                         .HasMaxLength(400)
                         .HasColumnType("nvarchar(400)");
 

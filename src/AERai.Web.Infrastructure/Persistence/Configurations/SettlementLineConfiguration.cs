@@ -14,6 +14,7 @@ internal sealed class SettlementLineConfiguration : IEntityTypeConfiguration<Set
         builder.HasKey(l => l.Id);
         builder.Property(l => l.TransactionType).HasMaxLength(64);
         builder.Property(l => l.AmazonOrderId).HasMaxLength(32);
+        builder.Property(l => l.OrderItemCode).HasMaxLength(64);
 
         // No FK to Product: settlement amounts can reference SKUs that were never imported via orders.
         builder.Property(l => l.Sku).HasMaxLength(64);

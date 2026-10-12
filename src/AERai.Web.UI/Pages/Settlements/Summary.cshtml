@@ -8,7 +8,7 @@
 <div class="card-toolbar">
     <p class="text-body-secondary mb-0">
         Period @s.PeriodStart?.ToString("yyyy-MM-dd") – @s.PeriodEnd?.ToString("yyyy-MM-dd"). Net payout <strong>@s.Net.ToString("N2") @s.Currency</strong>.
-        One row per SKU and sale price; select a row to see the lines behind it.
+        One row per SKU and price each, with the units sold at that price; select a row to see the lines behind it.
     </p>
     <a asp-page="Index" class="btn btn-outline-secondary btn-sm">All settlements</a>
 </div>
@@ -18,7 +18,7 @@
         <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
             <thead>
-                <tr><th>SKU</th><th>ASIN</th><th class="text-end">Sale price</th><th>Currency</th><th class="text-end">Orders</th><th class="text-end">Sales</th><th class="text-end">Fees</th><th class="text-end">Refunds</th><th class="text-end">Other</th><th class="text-end">Net</th></tr>
+                <tr><th>SKU</th><th>ASIN</th><th class="text-end">Price each</th><th>Currency</th><th class="text-end">Units</th><th class="text-end">Orders</th><th class="text-end">Sales</th><th class="text-end">Fees</th><th class="text-end">Refunds</th><th class="text-end">Other</th><th class="text-end">Net</th></tr>
             </thead>
             <tbody>
             @foreach (var r in Model.Rows.Items)
@@ -34,6 +34,7 @@
                     <td>@r.Asin</td>
                     <td class="text-end">@r.SalePrice?.ToString("N2")</td>
                     <td>@r.Currency</td>
+                    <td class="text-end">@r.Units.ToString("N0")</td>
                     <td class="text-end">@r.OrderCount</td>
                     <td class="text-end">@r.Sales.ToString("N2")</td>
                     <td class="text-end">@r.Fees.ToString("N2")</td>
@@ -44,12 +45,14 @@
             }
             @if (Model.Rows.Items.Count == 0)
             {
-                <tr><td colspan="10" class="text-body-secondary p-3">Nothing to show for this settlement.</td></tr>
+                <tr><td colspan="11" class="text-body-secondary p-3">Nothing to show for this settlement.</td></tr>
             }
             </tbody>
             <tfoot>
                 <tr class="fw-semibold">
-                    <td colspan="5">Settlement total</td>
+                    <td colspan="4">Settlement total</td>
+                    <td class="text-end">@s.Units.ToString("N0")</td>
+                    <td></td>
                     <td class="text-end">@s.Sales.ToString("N2")</td>
                     <td class="text-end">@s.Fees.ToString("N2")</td>
                     <td class="text-end">@s.Refunds.ToString("N2")</td>
