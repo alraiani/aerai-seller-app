@@ -1,72 +1,158 @@
 @page "{id}"
+@using System.Globalization
+@using AERai.Web.Application.Settlements
 @model AERai.Web.UI.Pages.Settlements.LinesModel
 @{
     var g = Model.Group;
-    ViewData["Title"] = $"Settlement {g.SettlementId} – {g.Sku ?? "no SKU"}";
+    var groups = Model.Groups.Items;
+    var label = g.Sku ?? "No SKU";
+    ViewData["Title"] = $"{label} · settlement {g.SettlementId}";
 }
-<div class="card-toolbar">
-    <p class="text-body-secondary mb-0">
-        Settlement @g.SettlementId · <strong>@(g.Sku ?? "(no SKU)")</strong>
-        @if (g.Asin is not null)
+
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">Settlements</a>
+    <span aria-hidden="true">/</span>
+    <a asp-page="Summary" asp-route-id="@g.SettlementId">@g.SettlementId</a>
+    <span aria-hidden="true">/</span>
+    <span>@label@(g.SalePrice is { } each ? $" at {SettlementFormat.Money(each, g.Currency)}" : "")</span>
+</nav>
+
+@* ---------- Search, bucket filter, sort ---------- *@
+<div class="list-toolbar mb-3">
+    <form method="get" class="filters" data-autosubmit-form role="search">
+        <input type="hidden" name="sku" value="@Model.Sku" />
+        <input type="hidden" name="price" value="@Model.Price" />
+        @if (Model.Descending)
         {
-            <span>· ASIN @g.Asin</span>
+            <input type="hidden" name="desc" value="true" />
         }
-        @if (g.SalePrice is not null)
-        {
-            <span>· @g.SalePrice.Value.ToString("N2") @g.Currency each</span>
-        }
-        <span>· every line behind this summary row, not grouped.</span>
-    </p>
-    <a asp-page="Summary" asp-route-id="@g.SettlementId" class="btn btn-outline-secondary btn-sm">Back to summary</a>
-</div>
-<form method="get" class="d-flex gap-2 mb-3" role="search">
-    <input type="hidden" name="sku" value="@Model.Sku" />
-    <input type="hidden" name="price" value="@Model.Price" />
-    <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm search-input" placeholder="Search order id…" aria-label="Search" />
-    <button type="submit" class="btn btn-sm btn-outline-primary">Search</button>
-</form>
-<div class="card">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
-            <thead>
-                <tr><th>Posted (UTC)</th><th>Order</th><th>Transaction</th><th>Amount type</th><th>Description</th><th class="text-end">Units</th><th class="text-end">Sales</th><th class="text-end">Fees</th><th class="text-end">Refunds</th><th class="text-end">Other</th><th class="text-end">Net</th></tr>
-            </thead>
-            <tbody>
-            @foreach (var l in Model.Lines.Items)
-            {
-                <tr>
-                    <td class="text-nowrap">@l.PostedDate?.ToUniversalTime().ToString("yyyy-MM-dd HH:mm")</td>
-                    <td>@l.AmazonOrderId</td>
-                    <td>@l.TransactionType</td>
-                    <td>@l.AmountType</td>
-                    <td>@l.AmountDescription</td>
-                    <td class="text-end">@(l.Units == 0 ? "" : l.Units.ToString("N0"))</td>
-                    <td class="text-end">@l.Sales.ToString("N2")</td>
-                    <td class="text-end">@l.Fees.ToString("N2")</td>
-                    <td class="text-end">@l.Refunds.ToString("N2")</td>
-                    <td class="text-end">@l.Other.ToString("N2")</td>
-                    <td class="text-end fw-semibold">@l.Amount.ToString("N2")</td>
-                </tr>
-            }
-            @if (Model.Lines.Items.Count == 0)
-            {
-                <tr><td colspan="11" class="text-body-secondary p-3">No lines found.</td></tr>
-            }
-            </tbody>
-            <tfoot>
-                <tr class="fw-semibold">
-                    <td colspan="5">Total of all @g.LineCount.ToString("N0") lines (matches the summary row)</td>
-                    <td class="text-end">@g.Units.ToString("N0")</td>
-                    <td class="text-end">@g.Sales.ToString("N2")</td>
-                    <td class="text-end">@g.Fees.ToString("N2")</td>
-                    <td class="text-end">@g.Refunds.ToString("N2")</td>
-                    <td class="text-end">@g.Other.ToString("N2")</td>
-                    <td class="text-end">@g.Net.ToString("N2")</td>
-                </tr>
-            </tfoot>
-        </table>
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search order, type, description…" aria-label="Search lines" />
         </div>
-    </div>
+        <select name="bucket" class="form-select form-select-sm" aria-label="Amounts">
+            @foreach (var (bucket, text) in SettlementFormat.BucketFilters)
+            {
+                <option value="@(bucket?.ToString() ?? "")" selected="@(Model.Bucket == bucket)">@text</option>
+            }
+        </select>
+        <select name="sort" class="form-select form-select-sm" aria-label="Sort by">
+            @foreach (var (sort, text) in SettlementFormat.GroupSorts)
+            {
+                <option value="@(sort == SettlementGroupSort.Posted ? "" : sort.ToString())" selected="@(Model.Sort == sort)">@text</option>
+            }
+        </select>
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
+        @if (Model.IsFiltered)
+        {
+            <a href="@Model.ClearLink()" class="btn btn-sm btn-link">Clear filters</a>
+        }
+    </form>
 </div>
-<partial name="_Pager" model="Model.Lines.ToPager(Model.Search, Model.PagerFilters())" />
+
+<div class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@Model.Groups.TotalCount.ToString("N0", CultureInfo.InvariantCulture) group@(Model.Groups.TotalCount == 1 ? "" : "s")</span>
+            <span class="text-muted-token fw-normal">@(g.Title ?? (g.Sku is null ? "amounts that belong to no product" : g.Asin))</span>
+            <partial name="_Tip" model='"Every settlement line behind the summary row, one group per order (lines without an order are grouped by type). Expand a group to see its lines; the total row matches the summary row."' />
+        </span>
+        @if (groups.Count > 0)
+        {
+            <div class="card-toolbar-group expand-controls">
+                <button type="button" class="btn btn-sm btn-soft" data-expand-all="true">Expand all</button>
+                <button type="button" class="btn btn-sm btn-soft" data-expand-all="false">Collapse all</button>
+            </div>
+        }
+    </div>
+    @if (groups.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-title">No lines match</div>
+            <div class="empty-detail">Try a different search or show all amounts.</div>
+            <a href="@Model.ClearLink()" class="btn btn-sm btn-soft">Clear filters</a>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table data-table group-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="toggle-col"><span class="visually-hidden">Expand</span></th>
+                        <th><a href="@Model.SortLink(SettlementGroupSort.Order)" class="sort-link">Order @Model.SortArrow(SettlementGroupSort.Order)</a></th>
+                        <th>Transaction</th>
+                        <th><a href="@Model.SortLink(SettlementGroupSort.Posted)" class="sort-link">Posted (UTC) @Model.SortArrow(SettlementGroupSort.Posted)</a></th>
+                        <th class="text-end">Units</th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementGroupSort.Amount)" class="sort-link">Amount @Model.SortArrow(SettlementGroupSort.Amount)</a></th>
+                    </tr>
+                </thead>
+                @* The totals of the whole summary row (every page, whatever the filter), so it always matches the Summary page. *@
+                <tbody class="totals-group">
+                    <tr class="totals-row">
+                        <td></td>
+                        <td colspan="3">
+                            <div class="fw-semibold">Total · @g.LineCount.ToString("N0", CultureInfo.InvariantCulture) line@(g.LineCount == 1 ? "" : "s")@(g.OrderCount > 0 ? $" in {g.OrderCount:N0} order{(g.OrderCount == 1 ? "" : "s")}" : "")</div>
+                            <partial name="_SettlementBreakdown" model="(g.Sales, g.Fees, g.Refunds, g.Other, g.Net, g.Currency)" />
+                        </td>
+                        <td class="text-end money fw-semibold">@g.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
+                        <td class="text-end money fw-semibold @SettlementFormat.AmountClass(g.Net)">@SettlementFormat.Money(g.Net, g.Currency)</td>
+                    </tr>
+                </tbody>
+                @for (var i = 0; i < groups.Count; i++)
+                {
+                    var group = groups[i];
+                    var groupId = $"group-{i}";
+                    <tbody class="order-group" id="@groupId">
+                        <tr class="group-row">
+                            <td class="toggle-col">
+                                <button type="button" class="btn btn-sm btn-icon group-toggle" data-expand-row aria-expanded="false" aria-controls="@groupId"
+                                        aria-label="Show the @group.Lines.Count lines of @(group.AmazonOrderId ?? group.TransactionType)">
+                                    <partial name="_Icon" model='"chevron-down"' />
+                                </button>
+                            </td>
+                            <td>
+                                <div class="fw-semibold text-nowrap">@(group.AmazonOrderId ?? group.TransactionType)</div>
+                                <div class="cell-sub">@group.Lines.Count line@(group.Lines.Count == 1 ? "" : "s")@(group.IsOrder ? "" : " without an order")</div>
+                            </td>
+                            <td>
+                                @foreach (var type in group.TransactionTypes)
+                                {
+                                    <span class="type-tag">@type</span>
+                                }
+                            </td>
+                            <td class="text-nowrap">@SettlementFormat.Posted(group.FirstPosted)</td>
+                            <td class="text-end money">@(group.Units == 0 ? "" : group.Units.ToString("N0", CultureInfo.InvariantCulture))</td>
+                            <td class="text-end money fw-semibold @SettlementFormat.AmountClass(group.Amount)">@SettlementFormat.Money(group.Amount, g.Currency)</td>
+                        </tr>
+                        @foreach (var line in group.Lines)
+                        {
+                            var bucket = SettlementFormat.BucketOf(line);
+                            <tr class="group-child">
+                                <td></td>
+                                <td>
+                                    <div class="child-desc">
+                                        @if (bucket is { } b)
+                                        {
+                                            <span class="@SettlementFormat.BucketPill(b)">@SettlementFormat.BucketLabel(b)</span>
+                                        }
+                                        <span>@line.AmountDescription</span>
+                                    </div>
+                                    @if (line.AmountType is not null)
+                                    {
+                                        <div class="cell-sub">@line.AmountType</div>
+                                    }
+                                </td>
+                                <td class="text-muted-token">@line.TransactionType</td>
+                                <td class="text-nowrap text-muted-token">@SettlementFormat.Posted(line.PostedDate)</td>
+                                <td class="text-end money">@(line.Units == 0 ? "" : line.Units.ToString("N0", CultureInfo.InvariantCulture))</td>
+                                <td class="text-end money @SettlementFormat.AmountClass(line.Amount)">@SettlementFormat.Money(line.Amount, g.Currency)</td>
+                            </tr>
+                        }
+                    </tbody>
+                }
+            </table>
+        </div>
+    }
+</div>
+<partial name="_Pager" model="Model.Groups.ToPager(Model.Search, Model.CurrentFilters())" />

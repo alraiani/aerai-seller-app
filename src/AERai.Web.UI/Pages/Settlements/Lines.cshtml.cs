@@ -2,6 +2,7 @@ using System.Globalization;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Marketplaces;
+using AERai.Web.Application.Settlements;
 using AERai.Web.Domain.Reporting;
 using AERai.Web.UI.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -9,8 +10,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace AERai.Web.UI.Pages.Settlements;
 
 /// <summary>
-/// The ungrouped settlement lines (from <c>rpt.vw_SettlementLine</c>) behind one summary row, with
-/// plusses and minuses in the Sales/Fees/Refunds/Other columns, so they explain the summary's totals.
+/// The settlement lines (from <c>rpt.vw_SettlementLine</c>) behind one summary row, grouped by order:
+/// a totals row that matches the summary row, then one collapsible row per order (lines without an
+/// order grouped by transaction type) that expands into its lines, each with one signed amount.
 /// </summary>
 /// <param name="reporting">Reporting queries.</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
@@ -24,13 +26,28 @@ public sealed class LinesModel(IReportingQueries reporting, ICurrentMarketplace 
     [BindProperty(SupportsGet = true, Name = "price")]
     public string? Price { get; set; }
 
-    /// <summary>The summary row being explained (its totals are the footer to match).</summary>
+    /// <summary>Only groups with an amount in this column, from <c>?bucket=</c>.</summary>
+    [BindProperty(SupportsGet = true, Name = "bucket")]
+    public SettlementBucket? Bucket { get; set; }
+
+    /// <summary>Sort from <c>?sort=</c>.</summary>
+    [BindProperty(SupportsGet = true, Name = "sort")]
+    public SettlementGroupSort Sort { get; set; }
+
+    /// <summary>Reverse the sort, from <c>?desc=true</c>.</summary>
+    [BindProperty(SupportsGet = true, Name = "desc")]
+    public bool Descending { get; set; }
+
+    /// <summary>The summary row being explained (its totals are the totals row).</summary>
     public SettlementSkuSummary Group { get; private set; } = default!;
 
-    /// <summary>The current page of lines.</summary>
-    public PagedResult<SettlementLineDetail> Lines { get; private set; } = default!;
+    /// <summary>The current page of order groups.</summary>
+    public PagedResult<SettlementOrderGroup> Groups { get; private set; } = default!;
 
-    /// <summary>Loads the summary row and the requested page of its lines.</summary>
+    /// <summary>Whether a search or bucket filter is applied.</summary>
+    public bool IsFiltered => !string.IsNullOrWhiteSpace(Search) || Bucket is not null;
+
+    /// <summary>Loads the summary row and the requested page of its groups.</summary>
     /// <param name="id">Settlement id from the route.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The page, or 404 when the row does not exist in the current marketplace.</returns>
@@ -56,15 +73,23 @@ public sealed class LinesModel(IReportingQueries reporting, ICurrentMarketplace 
         }
 
         Group = group;
-        Lines = await reporting.GetSettlementLinesAsync(marketplace.MarketplaceId, id, sku, price, ToPageRequest(), cancellationToken);
+        Groups = await reporting.GetSettlementOrderGroupsAsync(
+            marketplace.MarketplaceId, id, sku, price, ToPageRequest(), new SettlementLineFilter(Bucket, Sort, Descending), cancellationToken);
         return Page();
     }
 
-    /// <summary>The filters to keep when paging.</summary>
-    /// <returns>The row's SKU and price, as they appeared in the request.</returns>
-    public IReadOnlyDictionary<string, string> PagerFilters() => new Dictionary<string, string>
-    {
-        ["sku"] = Sku ?? string.Empty,
-        ["price"] = Price ?? string.Empty,
-    };
+    /// <summary>A link back to this summary row with only its SKU and price (no search, filter, or sort).</summary>
+    /// <returns>A relative URL.</returns>
+    public string ClearLink() => LinkWith(("q", null), ("bucket", null), ("sort", null), ("desc", null));
+
+    /// <summary>Link for a sortable column header: toggles direction when it's already the sort.</summary>
+    /// <param name="column">Sort.</param>
+    /// <returns>A relative URL.</returns>
+    public string SortLink(SettlementGroupSort column) =>
+        LinkWith(("sort", column == SettlementGroupSort.Posted ? null : column.ToString()), ("desc", Sort == column && !Descending ? "true" : null));
+
+    /// <summary>Arrow for a sortable column header.</summary>
+    /// <param name="column">Sort.</param>
+    /// <returns>"↑", "↓", or empty.</returns>
+    public string SortArrow(SettlementGroupSort column) => SettlementFormat.Arrow(Sort == column, Sort.IsDescendingByDefault() != Descending);
 }

@@ -2,6 +2,7 @@ using System.Text;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Imports;
+using AERai.Web.Application.Settlements;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Staging;
 using AERai.Web.Infrastructure.Persistence;
@@ -155,7 +156,7 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         var reporting = scope.ServiceProvider.GetRequiredService<IReportingQueries>();
         var marketplaceId = (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Settlements.SingleAsync(s => s.SettlementId == "T-SET-2")).MarketplaceId;
 
-        var rows = await reporting.GetSettlementSkuSummaryAsync(marketplaceId, "T-SET-2", new PageRequest(), CancellationToken.None);
+        var rows = await reporting.GetSettlementSkuSummaryAsync(marketplaceId, "T-SET-2", new PageRequest(), null, CancellationToken.None);
 
         // A 2-unit order of 20.00 is 10.00 each, so it shares a row with the 1-unit 10.00 order and the 10.00 refund
         // (the refund in its own column, with no quantity of its own); the 12.00 sale and the SKU-less fee are separate rows.
@@ -170,12 +171,85 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         Assert.Equal(rows.Items.Sum(r => r.Net), settlement!.Net);
         Assert.Equal(4, settlement.Units);
 
-        // The drill-down lists every line of the group, with amounts in the bucket columns, and adds up to the row.
-        var lines = await reporting.GetSettlementLinesAsync(marketplaceId, "T-SET-2", "T-SKU-A", 10.00m, new PageRequest(), CancellationToken.None);
-        Assert.Equal(tenDollar.LineCount, lines.TotalCount);
-        Assert.Equal(tenDollar.Net, lines.Items.Sum(l => l.Amount));
-        Assert.Equal(tenDollar.Units, lines.Items.Sum(l => l.Units));
-        Assert.All(lines.Items.Where(l => l.AmountType == "ItemFees"), l => Assert.Equal(l.Amount, l.Fees));
+        // The drill-down groups every line of the row by order, with amounts in the bucket columns, and adds up to the row.
+        var groups = await reporting.GetSettlementOrderGroupsAsync(marketplaceId, "T-SET-2", "T-SKU-A", 10.00m, new PageRequest(), null, CancellationToken.None);
+        var lines = groups.Items.SelectMany(g => g.Lines).ToList();
+        Assert.Equal(["T-O-1", "T-O-2", "T-O-4"], groups.Items.Select(g => g.AmazonOrderId).Order());
+        Assert.Equal(tenDollar.LineCount, lines.Count);
+        Assert.Equal(tenDollar.Net, groups.Items.Sum(g => g.Amount));
+        Assert.Equal(tenDollar.Units, groups.Items.Sum(g => g.Units));
+        Assert.All(groups.Items, g => Assert.Equal(g.Amount, g.Lines.Sum(l => l.Amount)));
+        Assert.All(lines.Where(l => l.AmountType == "ItemFees"), l => Assert.Equal(l.Amount, l.Fees));
+    }
+
+    [SqlFact]
+    public async Task SettlementQueries_SearchFilterAndSort_SelectAndOrderTheRightRows()
+    {
+        const string header =
+            "settlement-id\tsettlement-start-date\tsettlement-end-date\ttransaction-type\torder-id\torder-item-code\tsku\tquantity-purchased\tamount-type\tamount-description\tamount\tcurrency\n";
+        const string early =
+            "T-SET-5\t2026-07-01 07:00:00 UTC\t2026-07-15 07:00:00 UTC\t\t\t\t\t\t\t\t\tUSD\n" +
+            "T-SET-5\t\t\tOrder\tT-O-50\tI50\tT-SKU-E\t1\tItemPrice\tPrincipal\t100.00\t\n" +
+            "T-SET-5\t\t\tOrder\tT-O-50\tI50\tT-SKU-E\t\tItemFees\tCommission\t-15.00\t\n";
+        const string late =
+            "T-SET-6\t2026-08-01 07:00:00 UTC\t2026-08-15 07:00:00 UTC\t\t\t\t\t\t\t\t\tUSD\n" +
+            "T-SET-6\t\t\tOrder\tT-O-60\tI60\tT-SKU-F\t1\tItemPrice\tPrincipal\t10.00\t\n" +
+            "T-SET-6\t\t\tOrder\tT-O-60\tI60\tT-SKU-F\t\tItemFees\tCommission\t-1.50\t\n" +
+            "T-SET-6\t\t\tRefund\tT-O-60\tI60\tT-SKU-F\t\tItemPrice\tPrincipal\t-10.00\t\n" +
+            "T-SET-6\t\t\tOrder\tT-O-61\tI61\tT-SKU-F\t1\tItemPrice\tPrincipal\t10.00\t\n" +
+            "T-SET-6\t\t\tServiceFee\t\t\t\t\tother-transaction\tSubscription\t-39.99\t\n" +
+            "T-SET-6\t\t\tServiceFee\t\t\t\t\tother-transaction\tStorage Fee\t-5.00\t\n";
+
+        await PromoteAsync(await StageAsync(ImportSource.Settlements, "settlement-early.tsv", header + early));
+        await PromoteAsync(await StageAsync(ImportSource.Settlements, "settlement-late.tsv", header + late));
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var reporting = scope.ServiceProvider.GetRequiredService<IReportingQueries>();
+        var marketplaceId = (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Settlements.SingleAsync(s => s.SettlementId == "T-SET-6")).MarketplaceId;
+        var ct = CancellationToken.None;
+
+        // Search finds a settlement by an order id or SKU inside it, not only by its own id.
+        var byOrder = await reporting.GetSettlementsAsync(marketplaceId, new PageRequest(Search: "T-O-50"), null, ct);
+        Assert.Equal("T-SET-5", Assert.Single(byOrder.Items).SettlementId);
+        var bySku = await reporting.GetSettlementsAsync(marketplaceId, new PageRequest(Search: "T-SKU-F"), null, ct);
+        Assert.Equal("T-SET-6", Assert.Single(bySku.Items).SettlementId);
+
+        // The period range filters on the period end; totals cover what the filter selects.
+        var august = new SettlementListFilter(PeriodEndFrom: new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero), PeriodEndBefore: new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero));
+        var inAugust = await reporting.GetSettlementsAsync(marketplaceId, new PageRequest(Search: "T-SET-"), august, ct);
+        Assert.Equal("T-SET-6", Assert.Single(inAugust.Items).SettlementId);
+        var totals = Assert.Single(await reporting.GetSettlementTotalsAsync(marketplaceId, new PageRequest(Search: "T-SET-"), august, ct));
+        Assert.Equal(("USD", 1, inAugust.Items[0].Net), (totals.Currency, totals.Count, totals.Net));
+
+        // Sorting by net puts the larger payout first, and reversing flips it.
+        var ours = new PageRequest(Search: "T-SET-");
+        var byNet = await reporting.GetSettlementsAsync(marketplaceId, ours, new SettlementListFilter(Sort: SettlementSort.Net), ct);
+        Assert.Equal(["T-SET-5", "T-SET-6"], byNet.Items.Where(s => s.SettlementId is "T-SET-5" or "T-SET-6").Select(s => s.SettlementId));
+        var byNetReversed = await reporting.GetSettlementsAsync(marketplaceId, ours, new SettlementListFilter(Sort: SettlementSort.Net, Descending: true), ct);
+        Assert.Equal(["T-SET-6", "T-SET-5"], byNetReversed.Items.Where(s => s.SettlementId is "T-SET-5" or "T-SET-6").Select(s => s.SettlementId));
+
+        // Summary kinds: the refunded row, and the row without a SKU.
+        var refunded = await reporting.GetSettlementSkuSummaryAsync(marketplaceId, "T-SET-6", new PageRequest(), new SettlementSkuFilter(SettlementRowKind.WithRefunds), ct);
+        Assert.Equal("T-SKU-F", Assert.Single(refunded.Items).Sku);
+        var noSku = await reporting.GetSettlementSkuSummaryAsync(marketplaceId, "T-SET-6", new PageRequest(), new SettlementSkuFilter(SettlementRowKind.NoSku), ct);
+        Assert.Null(Assert.Single(noSku.Items).Sku);
+
+        // Lines without an order are grouped by transaction type.
+        var fees = await reporting.GetSettlementOrderGroupsAsync(marketplaceId, "T-SET-6", null, null, new PageRequest(), null, ct);
+        var serviceFees = Assert.Single(fees.Items);
+        Assert.Equal(("ServiceFee", false, 2, -44.99m), (serviceFees.TransactionType, serviceFees.IsOrder, serviceFees.Lines.Count, serviceFees.Amount));
+
+        // The refund bucket and a search both pick whole groups: the refunded order keeps its sale and fee lines.
+        var price = refunded.Items[0].SalePrice;
+        var withRefund = await reporting.GetSettlementOrderGroupsAsync(marketplaceId, "T-SET-6", "T-SKU-F", price, new PageRequest(), new SettlementLineFilter(SettlementBucket.Refunds), ct);
+        var refundedOrder = Assert.Single(withRefund.Items);
+        Assert.Equal(("T-O-60", 3, -1.50m), (refundedOrder.AmazonOrderId, refundedOrder.Lines.Count, refundedOrder.Amount));
+        var searched = await reporting.GetSettlementOrderGroupsAsync(marketplaceId, "T-SET-6", "T-SKU-F", price, new PageRequest(Search: "Commission"), null, ct);
+        Assert.Equal("T-O-60", Assert.Single(searched.Items).AmazonOrderId);
+
+        // Sorting groups by amount puts the larger first.
+        var byAmount = await reporting.GetSettlementOrderGroupsAsync(marketplaceId, "T-SET-6", "T-SKU-F", price, new PageRequest(), new SettlementLineFilter(Sort: SettlementGroupSort.Amount), ct);
+        Assert.Equal(["T-O-61", "T-O-60"], byAmount.Items.Select(g => g.AmazonOrderId));
     }
 
     [SqlFact]
