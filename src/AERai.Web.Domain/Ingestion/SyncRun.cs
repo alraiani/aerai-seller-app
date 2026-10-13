@@ -57,8 +57,16 @@ public sealed class SyncRun
     /// </remarks>
     public string? PendingReportId { get; set; }
 
-    /// <summary>When to next ask Amazon about <see cref="PendingReportId"/>.</summary>
+    /// <summary>
+    /// When to next ask Amazon about <see cref="PendingReportId"/>, or, while that is still
+    /// <see langword="null"/>, when to ask Amazon for the report (a request held back by the report's
+    /// <see cref="AmazonReportTypeExtensions.RequestCooldown"/>). Set exactly while the run is waiting.
+    /// </summary>
     public DateTimeOffset? NextCheckAt { get; set; }
+
+    /// <summary>When Amazon was asked to generate this run's report; <see langword="null"/> until then.</summary>
+    /// <remarks>Drives the request cooldown and the <c>ReportMaxWait</c> timeout, which both count from the request, not the run's start.</remarks>
+    public DateTimeOffset? ReportRequestedAt { get; set; }
 
     /// <summary>Status checks so far that found the report still being generated (drives the backoff).</summary>
     public int PollAttempts { get; set; }

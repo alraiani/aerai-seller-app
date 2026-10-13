@@ -35,13 +35,13 @@ public interface ISyncRunRepository
     /// <returns>A task that completes when saved.</returns>
     Task SaveProgressAsync(SyncRun run, CancellationToken cancellationToken);
 
-    /// <summary>Gets runs waiting for an Amazon report whose next check is due.</summary>
+    /// <summary>Gets waiting runs (for an Amazon report, or to request one) whose next check is due.</summary>
     /// <param name="now">Current time.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>Due waiting runs, earliest first.</returns>
     Task<IReadOnlyList<SyncRun>> GetPendingDueAsync(DateTimeOffset now, CancellationToken cancellationToken);
 
-    /// <summary>Gets the earliest next check of any run waiting for an Amazon report.</summary>
+    /// <summary>Gets the earliest next check of any waiting run.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The earliest <see cref="SyncRun.NextCheckAt"/>, or <see langword="null"/> when nothing is waiting.</returns>
     Task<DateTimeOffset?> GetNextPendingCheckAtAsync(CancellationToken cancellationToken);
@@ -70,15 +70,34 @@ public interface ISyncRunRepository
     /// <returns>The run (succeeded or found no data), or <see langword="null"/> when none covers the range.</returns>
     Task<SyncRun?> FindCoveringBackfillAsync(AmazonReportType reportType, string marketplaceId, DateTimeOffset start, DateTimeOffset end, CancellationToken cancellationToken);
 
-    /// <summary>Whether a schedule has a run still waiting for an Amazon report.</summary>
+    /// <summary>Whether a schedule has a run still waiting (for an Amazon report, or to request one).</summary>
     /// <param name="scheduleId">Schedule id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns><see langword="true"/> when one is waiting.</returns>
     Task<bool> HasPendingAsync(int scheduleId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Gets when Amazon was last asked for a report type in a marketplace, by any run.
+    /// </summary>
+    /// <param name="reportType">Report type.</param>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The latest <see cref="SyncRun.ReportRequestedAt"/>, or <see langword="null"/> when never requested.</returns>
+    Task<DateTimeOffset?> GetLastReportRequestAsync(AmazonReportType reportType, string marketplaceId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether another run of the schedule is waiting to request its report (held back by the report's
+    /// request cooldown and not yet sent to Amazon).
+    /// </summary>
+    /// <param name="scheduleId">Schedule id.</param>
+    /// <param name="exceptRunId">The asking run, which is not counted.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns><see langword="true"/> when one is waiting.</returns>
+    Task<bool> HasWaitingRequestAsync(int scheduleId, long exceptRunId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Fails runs left running by a process that stopped without finishing them: still running, not
-    /// waiting for an Amazon report, and started before <paramref name="startedBefore"/>.
+    /// waiting, and started before <paramref name="startedBefore"/>.
     /// </summary>
     /// <param name="startedBefore">Only runs started before this are considered abandoned.</param>
     /// <param name="message">Failure message to record.</param>

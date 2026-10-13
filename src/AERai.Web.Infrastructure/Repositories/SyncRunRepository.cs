@@ -59,6 +59,7 @@ internal sealed class SyncRunRepository(AppDbContext dbContext) : ISyncRunReposi
                 .SetProperty(r => r.AmazonReportIds, run.AmazonReportIds)
                 .SetProperty(r => r.PendingReportId, run.PendingReportId)
                 .SetProperty(r => r.NextCheckAt, run.NextCheckAt)
+                .SetProperty(r => r.ReportRequestedAt, run.ReportRequestedAt)
                 .SetProperty(r => r.PollAttempts, run.PollAttempts),
                 cancellationToken);
     }
@@ -67,7 +68,7 @@ internal sealed class SyncRunRepository(AppDbContext dbContext) : ISyncRunReposi
     public async Task<IReadOnlyList<SyncRun>> GetPendingDueAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
         await dbContext.SyncRuns
             .AsNoTracking()
-            .Where(r => r.Status == SyncRunStatus.Running && r.PendingReportId != null && r.NextCheckAt <= now)
+            .Where(r => r.Status == SyncRunStatus.Running && r.NextCheckAt != null && r.NextCheckAt <= now)
             .OrderBy(r => r.NextCheckAt)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -75,7 +76,7 @@ internal sealed class SyncRunRepository(AppDbContext dbContext) : ISyncRunReposi
     /// <inheritdoc/>
     public Task<DateTimeOffset?> GetNextPendingCheckAtAsync(CancellationToken cancellationToken) =>
         dbContext.SyncRuns
-            .Where(r => r.Status == SyncRunStatus.Running && r.PendingReportId != null)
+            .Where(r => r.Status == SyncRunStatus.Running && r.NextCheckAt != null)
             .MinAsync(r => r.NextCheckAt, cancellationToken);
 
     /// <inheritdoc/>
@@ -100,12 +101,24 @@ internal sealed class SyncRunRepository(AppDbContext dbContext) : ISyncRunReposi
 
     /// <inheritdoc/>
     public Task<bool> HasPendingAsync(int scheduleId, CancellationToken cancellationToken) =>
-        dbContext.SyncRuns.AnyAsync(r => r.SyncScheduleId == scheduleId && r.Status == SyncRunStatus.Running && r.PendingReportId != null, cancellationToken);
+        dbContext.SyncRuns.AnyAsync(r => r.SyncScheduleId == scheduleId && r.Status == SyncRunStatus.Running && r.NextCheckAt != null, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<DateTimeOffset?> GetLastReportRequestAsync(AmazonReportType reportType, string marketplaceId, CancellationToken cancellationToken) =>
+        dbContext.SyncRuns
+            .Where(r => r.ReportType == reportType && r.MarketplaceId == marketplaceId)
+            .MaxAsync(r => r.ReportRequestedAt, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<bool> HasWaitingRequestAsync(int scheduleId, long exceptRunId, CancellationToken cancellationToken) =>
+        dbContext.SyncRuns.AnyAsync(
+            r => r.SyncScheduleId == scheduleId && r.Id != exceptRunId && r.Status == SyncRunStatus.Running && r.NextCheckAt != null && r.PendingReportId == null,
+            cancellationToken);
 
     /// <inheritdoc/>
     public Task<int> FailAbandonedAsync(DateTimeOffset startedBefore, string message, DateTimeOffset completedAt, CancellationToken cancellationToken) =>
         dbContext.SyncRuns
-            .Where(r => r.Status == SyncRunStatus.Running && r.PendingReportId == null && r.StartedAt < startedBefore)
+            .Where(r => r.Status == SyncRunStatus.Running && r.NextCheckAt == null && r.StartedAt < startedBefore)
             .ExecuteUpdateAsync(set => set
                 .SetProperty(r => r.Status, SyncRunStatus.Failed)
                 .SetProperty(r => r.Message, message)

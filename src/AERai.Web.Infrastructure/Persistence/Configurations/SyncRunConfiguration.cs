@@ -26,7 +26,10 @@ internal sealed class SyncRunConfiguration : IEntityTypeConfiguration<SyncRun>
         builder.Property(r => r.PendingReportId).HasMaxLength(64);
 
         // The scheduler looks up waiting runs on every wake; only a handful ever match.
-        builder.HasIndex(r => r.NextCheckAt).HasFilter("[PendingReportId] IS NOT NULL");
+        builder.HasIndex(r => r.NextCheckAt).HasFilter("[NextCheckAt] IS NOT NULL");
+
+        // The request cooldown looks up the latest request per report type and marketplace.
+        builder.HasIndex(r => new { r.ReportType, r.MarketplaceId, r.ReportRequestedAt }).HasFilter("[ReportRequestedAt] IS NOT NULL");
         builder.HasOne<SyncSchedule>().WithMany().HasForeignKey(r => r.SyncScheduleId).OnDelete(DeleteBehavior.Cascade);
     }
 }

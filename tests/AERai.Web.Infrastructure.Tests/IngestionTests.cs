@@ -202,6 +202,36 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     }
 
     [SqlFact]
+    public async Task HeldBackRun_IsWaitingDueAndNotAbandoned_AndRequestsAreTrackedPerMarketplace()
+    {
+        var id = await AddScheduleAsync(AmazonReportType.FbaInventory, "held-back-run");
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ISyncRunRepository>();
+        var now = new DateTimeOffset(2026, 10, 7, 12, 0, 0, TimeSpan.Zero);
+
+        SyncRun Run() => new() { SyncScheduleId = id, ReportType = AmazonReportType.FbaInventory, MarketplaceId = MarketplaceIds.UnitedStates, TriggeredBy = "tests", StartedAt = now.AddHours(-2) };
+        var requested = Run();
+        requested.Id = await repo.StartAsync(requested, CancellationToken.None);
+        requested.PendingReportId = "REQUESTED-1";
+        requested.ReportRequestedAt = now.AddMinutes(-10);
+        requested.NextCheckAt = now.AddMinutes(5);
+        await repo.SaveProgressAsync(requested, CancellationToken.None);
+        var held = Run();
+        held.Id = await repo.StartAsync(held, CancellationToken.None);
+        held.NextCheckAt = now.AddMinutes(21);
+        await repo.SaveProgressAsync(held, CancellationToken.None);
+
+        await repo.FailAbandonedAsync(now.AddHours(-1), "Interrupted", now, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Running, (await repo.GetAsync(held.Id, CancellationToken.None))!.Status);
+        Assert.Contains(await repo.GetPendingDueAsync(now.AddMinutes(21), CancellationToken.None), r => r.Id == held.Id);
+        Assert.True(await repo.HasWaitingRequestAsync(id, exceptRunId: requested.Id, CancellationToken.None));
+        Assert.False(await repo.HasWaitingRequestAsync(id, exceptRunId: held.Id, CancellationToken.None));
+        Assert.Equal(now.AddMinutes(-10), await repo.GetLastReportRequestAsync(AmazonReportType.FbaInventory, MarketplaceIds.UnitedStates, CancellationToken.None));
+        Assert.Null(await repo.GetLastReportRequestAsync(AmazonReportType.FbaInventory, MarketplaceIds.Canada, CancellationToken.None));
+    }
+
+    [SqlFact]
     public async Task RecordSuccess_OlderWindow_NeverMovesMarkerBackwards()
     {
         var id = await AddScheduleAsync(AmazonReportType.Orders, "marker-forward-only");

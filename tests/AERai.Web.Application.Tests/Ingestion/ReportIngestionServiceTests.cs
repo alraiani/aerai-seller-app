@@ -500,6 +500,123 @@ public sealed class ReportIngestionServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_ReportFatalWithErrorDocument_RecordsAmazonsReason()
+    {
+        AddSchedule(AmazonReportType.FbaInventory);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.Fatal, "ERR1"));
+        _gateway.Documents["ERR1"] = """{"errorDetails":"Report was requested too often."}""";
+
+        var summary = await RunToEndAsync(SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Failed, summary.Status);
+        Assert.Equal("Amazon could not generate report R1 (status Fatal): Report was requested too often.", summary.Message);
+        Assert.Empty(_rawFiles.Files);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReportFatalErrorDocumentUnreadable_FailsWithThePlainMessage()
+    {
+        AddSchedule(AmazonReportType.FbaInventory);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.Fatal, "MISSING"));
+
+        var summary = await RunToEndAsync(SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Failed, summary.Status);
+        Assert.Equal("Amazon could not generate report R1 (status Fatal).", summary.Message);
+    }
+
+    [Fact]
+    public async Task RunAsync_FbaInventoryInsideCooldown_WaitsAndRequestsWhenItEnds()
+    {
+        AddSchedule(AmazonReportType.FbaInventory);
+        ScriptDoneReport("sku\tafn-fulfillable-quantity\n");
+        var service = CreateService(Polling);
+        var first = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(10));
+
+        var second = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        // Held back until 30 minutes (plus a minute's margin) after the first request, without asking Amazon.
+        Assert.Equal(SyncRunStatus.Running, second.Status);
+        var waiting = _runs.Stored[second.RunId];
+        Assert.Null(waiting.PendingReportId);
+        Assert.Equal(Now.AddMinutes(31), waiting.NextCheckAt);
+        Assert.Single(_gateway.Requests);
+
+        _clock.SetUtcNow(waiting.NextCheckAt!.Value);
+        var continued = await service.ContinueAsync(second.RunId, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Running, continued.Status);
+        Assert.Equal(2, _gateway.Requests.Count);
+        Assert.Equal("R2", _runs.Stored[second.RunId].PendingReportId);
+        Assert.Equal(Now.AddMinutes(31), _runs.Stored[second.RunId].ReportRequestedAt);
+        Assert.Equal(SyncRunStatus.Running, _runs.Stored[first.RunId].Status);
+    }
+
+    [Fact]
+    public async Task RunAsync_FbaInventoryInsideCooldownWithARunAlreadyWaiting_EndsWithoutRequesting()
+    {
+        AddSchedule(AmazonReportType.FbaInventory);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
+        var service = CreateService(Polling);
+        await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+        var held = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        var third = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Running, held.Status);
+        Assert.Equal(SyncRunStatus.NoData, third.Status);
+        Assert.Contains("Not requested", third.Message, StringComparison.Ordinal);
+        Assert.Single(_gateway.Requests);
+        Assert.Null(_schedules.Schedules[1].LastSuccessfulDataEnd);
+    }
+
+    [Fact]
+    public async Task RunAsync_FbaInventoryAfterCooldown_RequestsStraightAway()
+    {
+        AddSchedule(AmazonReportType.FbaInventory);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
+        var service = CreateService(Polling);
+        await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(31));
+
+        var summary = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal("R2", _runs.Stored[summary.RunId].PendingReportId);
+    }
+
+    [Fact]
+    public async Task RunAsync_RestockSoonAfterAnotherRequest_RequestsStraightAway()
+    {
+        AddSchedule(AmazonReportType.RestockRecommendations);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
+        var service = CreateService(Polling);
+        await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        var summary = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal("R2", _runs.Stored[summary.RunId].PendingReportId);
+    }
+
+    [Fact]
+    public async Task ContinueAsync_MaxWaitCountsFromTheRequestNotTheRunsStart()
+    {
+        AddSchedule(AmazonReportType.FbaInventory);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
+        var service = CreateService(Polling);
+        await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+        var held = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+        _clock.SetUtcNow(_runs.Stored[held.RunId].NextCheckAt!.Value);
+        await service.ContinueAsync(held.RunId, CancellationToken.None);
+
+        // 50 minutes after the run started, but only 19 after its report was requested.
+        _clock.SetUtcNow(Now.AddMinutes(50));
+        var summary = await service.ContinueAsync(held.RunId, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Running, summary.Status);
+    }
+
+    [Fact]
     public async Task RunAsync_GatewayThrows_RecordsFailedRunInsteadOfThrowing()
     {
         AddSchedule(AmazonReportType.Orders);
