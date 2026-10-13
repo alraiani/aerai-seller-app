@@ -1,4 +1,5 @@
 using AERai.Web.Application.Common;
+using AERai.Web.Application.Settlements;
 using AERai.Web.Domain.Reporting;
 
 namespace AERai.Web.Application.Abstractions;
@@ -15,12 +16,21 @@ public interface IReportingQueries
     /// <param name="cancellationToken">Cancels the operation.</param>
     Task<PagedResult<OrderSummary>> GetOrdersAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken);
 
-    /// <summary>Lists settlements, newest period first.</summary>
+    /// <summary>Lists settlements, newest period first unless the filter sorts otherwise.</summary>
     /// <param name="marketplaceId">Marketplace to report on.</param>
-    /// <param name="request">Paging; search matches settlement id.</param>
-    /// <returns>One page of settlements.</returns>
+    /// <param name="request">Paging; search matches the settlement id, or any SKU, ASIN, title, or order id in the settlement.</param>
+    /// <param name="filter">Period range and sort; <see langword="null"/> for <see cref="SettlementListFilter.Default"/>.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    Task<PagedResult<SettlementSummary>> GetSettlementsAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken);
+    /// <returns>One page of settlements.</returns>
+    Task<PagedResult<SettlementSummary>> GetSettlementsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken);
+
+    /// <summary>Totals over every settlement the same search and filter select, across all pages.</summary>
+    /// <param name="marketplaceId">Marketplace to report on.</param>
+    /// <param name="request">Search as for <see cref="GetSettlementsAsync"/>; paging is ignored.</param>
+    /// <param name="filter">Period range; the sort is ignored.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The totals, <see cref="SettlementTotals.Empty"/> when nothing matches.</returns>
+    Task<SettlementTotals> GetSettlementTotalsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken);
 
     /// <summary>Gets one settlement's totals.</summary>
     /// <param name="marketplaceId">Marketplace to report on.</param>
@@ -33,9 +43,10 @@ public interface IReportingQueries
     /// <param name="marketplaceId">Marketplace to report on.</param>
     /// <param name="settlementId">Amazon settlement identifier.</param>
     /// <param name="request">Paging; search matches SKU, ASIN, or title.</param>
+    /// <param name="filter">Which rows and their order; <see langword="null"/> for <see cref="SettlementSkuFilter.Default"/> (largest sales first).</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>One page of summary rows, largest sales first.</returns>
-    Task<PagedResult<SettlementSkuSummary>> GetSettlementSkuSummaryAsync(string marketplaceId, string settlementId, PageRequest request, CancellationToken cancellationToken);
+    /// <returns>One page of summary rows.</returns>
+    Task<PagedResult<SettlementSkuSummary>> GetSettlementSkuSummaryAsync(string marketplaceId, string settlementId, PageRequest request, SettlementSkuFilter? filter, CancellationToken cancellationToken);
 
     /// <summary>Gets one row of the per-SKU settlement summary.</summary>
     /// <param name="marketplaceId">Marketplace to report on.</param>
@@ -46,13 +57,17 @@ public interface IReportingQueries
     /// <returns>The row, or <see langword="null"/> when no such group exists.</returns>
     Task<SettlementSkuSummary?> GetSettlementSkuGroupAsync(string marketplaceId, string settlementId, string? sku, decimal? salePrice, CancellationToken cancellationToken);
 
-    /// <summary>Lists the individual settlement lines behind one per-SKU summary row.</summary>
+    /// <summary>
+    /// Lists the settlement lines behind one per-SKU summary row, grouped by order (lines without an
+    /// order are grouped by transaction type). Pages count groups, so an order's lines are never split.
+    /// </summary>
     /// <param name="marketplaceId">Marketplace to report on.</param>
     /// <param name="settlementId">Amazon settlement identifier.</param>
     /// <param name="sku">The row's SKU; <see langword="null"/> for amounts that belong to no SKU.</param>
     /// <param name="salePrice">The row's sale price; <see langword="null"/> when it has none.</param>
-    /// <param name="request">Paging; search matches order id.</param>
+    /// <param name="request">Paging; search matches order id, transaction type, amount type, or description. A group matches when any of its lines does, and is then listed whole.</param>
+    /// <param name="filter">Bucket and order; <see langword="null"/> for <see cref="SettlementLineFilter.Default"/> (earliest posted first).</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>One page of lines, oldest posted first.</returns>
-    Task<PagedResult<SettlementLineDetail>> GetSettlementLinesAsync(string marketplaceId, string settlementId, string? sku, decimal? salePrice, PageRequest request, CancellationToken cancellationToken);
+    /// <returns>One page of groups, each with all its lines.</returns>
+    Task<PagedResult<SettlementOrderGroup>> GetSettlementOrderGroupsAsync(string marketplaceId, string settlementId, string? sku, decimal? salePrice, PageRequest request, SettlementLineFilter? filter, CancellationToken cancellationToken);
 }

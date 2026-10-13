@@ -817,3 +817,40 @@ th .tip { text-transform: none; }
     .worksheet-table tr { break-inside: avoid; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------- Settlements ---------- */
+.money { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.amount-neg { color: var(--negative); }
+.amount-zero { color: var(--muted); }
+.filters .filter-label { margin: 0 0 0 0.25rem; font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+.settlement-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); background: var(--surface-2); }
+
+/* The payout at a glance: the net on the left, its four parts beside it. */
+.settlement-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 2rem; padding: 1.1rem 1.25rem; }
+.amount-breakdown { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; }
+.amount-breakdown > div { display: flex; flex-direction: column; padding: 0.35rem 0.75rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--surface-2); min-width: 6.5rem; }
+.amount-breakdown dt { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.amount-breakdown dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.amount-breakdown .amount-breakdown-total { border-color: var(--brand); background: var(--brand-soft); }
+.totals-row .amount-breakdown { margin-top: 0.4rem; }
+.totals-row .amount-breakdown > div { padding: 0.2rem 0.6rem; min-width: 0; }
+.totals-row .amount-breakdown dd { font-size: 0.8rem; }
+
+/* Order groups: a parent row per order that expands into its lines. Lines show without script;
+   with it (html.js) they hide until the group is expanded. */
+.group-table .toggle-col { width: 2.75rem; padding-right: 0; }
+.group-table .totals-row > td { background: var(--surface-2); border-bottom: 2px solid var(--border); }
+.group-table tbody.order-group { border-top: 0; }
+.group-table .group-row > td { border-bottom-color: var(--border); }
+.group-table .group-toggle { color: var(--muted); border: 0; line-height: 1; }
+.group-table .group-toggle:hover { color: var(--brand); background: var(--brand-soft); }
+.group-table .group-toggle .icon { transition: transform 0.15s; transform: rotate(-90deg); }
+.group-table .group-toggle[aria-expanded="true"] .icon { transform: none; }
+:root:not(.js) .group-table .group-toggle, :root:not(.js) .expand-controls { display: none; }
+.js .group-table tbody.order-group:not(.is-expanded) .group-child { display: none; }
+.group-table .group-child > td { background: var(--surface-2); padding-top: 0.45rem; padding-bottom: 0.45rem; font-size: 0.82rem; }
+.group-table .group-child > td:nth-child(2) { padding-left: 1.5rem; }
+.group-table tbody.order-group.is-expanded .group-row > td { background: var(--brand-soft); }
+.child-desc { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.type-tag { display: inline-block; margin: 0 0.25rem 0.15rem 0; padding: 0.05rem 0.45rem; border: 1px solid var(--border); border-radius: 0.4rem; font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+.js .group-table .group-row { cursor: pointer; }
