@@ -57,6 +57,35 @@ public sealed class PendingModel(IPendingSendService pending, IInventoryItemServ
     public Task<IActionResult> OnPostShipmentIdAsync(long id, string? shipmentId, string? back, CancellationToken cancellationToken) =>
         ActAsync(back, (m, user) => pending.SetShipmentIdAsync(m, id, shipmentId, user, cancellationToken), "Shipment id added; an inventory sync is on its way to check it.", cancellationToken);
 
+    /// <summary>Adds one FBA shipment id to every ticked send logged without one.</summary>
+    /// <param name="ids">The ticked sends' ledger entry ids.</param>
+    /// <param name="shipmentId">The FBA shipment id.</param>
+    /// <param name="back"><c>worksheet</c> to return to the Worksheet; otherwise this page.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back.</returns>
+    public async Task<IActionResult> OnPostShipmentIdsAsync(long[]? ids, string? shipmentId, string? back, CancellationToken cancellationToken)
+    {
+        if (!CanEdit)
+        {
+            return Forbid();
+        }
+
+        Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        var result = await pending.SetShipmentIdsAsync(Marketplace.MarketplaceId, ids ?? [], shipmentId, User.Identity!.Name!, cancellationToken); // Non-null: the page requires an authenticated user.
+        if (result.IsFailure)
+        {
+            TempData[StatusMessage.Error] = result.Error;
+        }
+        else
+        {
+            var (added, skipped) = result.Value;
+            TempData[StatusMessage.Success] = $"Shipment id added to {added:N0} send{(added == 1 ? "" : "s")}; an inventory sync is on its way to check {(added == 1 ? "it" : "them")}."
+                + (skipped > 0 ? $" {skipped:N0} skipped: no longer pending or already had a reference." : string.Empty);
+        }
+
+        return Back(back);
+    }
+
     /// <summary>Closes a send by hand.</summary>
     /// <param name="id">The send's ledger entry id.</param>
     /// <param name="back"><c>worksheet</c> to return to the Worksheet; otherwise this page.</param>
@@ -83,8 +112,10 @@ public sealed class PendingModel(IPendingSendService pending, IInventoryItemServ
         Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
         var result = await action(Marketplace.MarketplaceId, User.Identity!.Name!); // Non-null: the page requires an authenticated user.
         TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? success : result.Error;
-        return back == "worksheet"
-            ? RedirectToPage("/Inventory/Worksheet", new { family = FamilyId })
-            : RedirectToPage(new { family = FamilyId });
+        return Back(back);
     }
+
+    private RedirectToPageResult Back(string? back) => back == "worksheet"
+        ? RedirectToPage("/Inventory/Worksheet", new { family = FamilyId })
+        : RedirectToPage(new { family = FamilyId });
 }

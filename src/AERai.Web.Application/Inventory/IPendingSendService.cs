@@ -48,4 +48,16 @@ public interface IPendingSendService
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>Success, or why it couldn't be added.</returns>
     Task<Result> SetShipmentIdAsync(string marketplaceId, long id, string? shipmentId, string user, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Adds one FBA shipment id to several open sends logged without one (a shipment usually holds several
+    /// SKUs), and queues one inventory sync. Sends that are closed or already have a reference are skipped.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="ids">The sends' ledger entry ids.</param>
+    /// <param name="shipmentId">The FBA shipment id.</param>
+    /// <param name="user">Email of the user adding it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>How many sends got the id and how many were skipped, or why nothing was saved.</returns>
+    Task<Result<(int Added, int Skipped)>> SetShipmentIdsAsync(string marketplaceId, IReadOnlyCollection<long> ids, string? shipmentId, string user, CancellationToken cancellationToken);
 }

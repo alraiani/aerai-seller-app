@@ -4,6 +4,9 @@
    Pending sends page; every form posts to /Inventory/HomeStock/Pending and returns to where it came from. *@
 @{
     var en = CultureInfo.GetCultureInfo("en-US");
+
+    // Only sends without a reference can take a shipment id, so only they can be ticked.
+    var bulk = Model.CanEdit && Model.Items.Any(i => i.Send.Reference is null);
 }
 @if (Model.Items.Count == 0)
 {
@@ -13,10 +16,26 @@
     </div>
     return;
 }
+@if (bulk)
+{
+    @* One shipment usually holds several SKUs: tick their sends (the boxes belong to this form through
+       form="pending-bulk-form") and add the id once. *@
+    <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="ShipmentIds" asp-route-back="@Model.Back" asp-route-family="@Model.FamilyId"
+          id="pending-bulk-form" class="bulk-bar bulk-bar-row" data-bulk-bar data-bulk-noun="send">
+        <span class="bulk-count" data-bulk-count>Tick the sends in one FBA shipment to add its id to all of them.</span>
+        <input type="text" name="shipmentId" class="form-control form-control-sm bulk-input shipment-ref" placeholder="FBA shipment id" maxlength="100" required
+               autocomplete="off" aria-label="FBA shipment id for the ticked sends" data-bulk-button />
+        <button type="submit" class="btn btn-sm btn-soft" data-bulk-button><partial name="_Icon" model='"check"' /> Add to ticked</button>
+    </form>
+}
 <div class="table-responsive">
     <table class="table data-table pending-table align-middle mb-0">
         <thead>
             <tr>
+                @if (bulk)
+                {
+                    <th class="select-col"><input type="checkbox" class="form-check-input" data-select-all aria-label="Select every send without a shipment id" /></th>
+                }
                 <th>Sent</th>
                 <th class="sku-cell">SKU</th>
                 <th class="text-end">Awaiting <partial name="_Tip" model='"Units of the send that Amazon’s numbers don’t show yet, out of the units sent. They count as Amazon stock for the suggested send until then."' /></th>
@@ -32,6 +51,15 @@
             {
                 var s = item.Send;
                 <tr class="@(item.Overdue ? "pending-overdue" : "")">
+                    @if (bulk)
+                    {
+                        <td class="select-col">
+                            @if (s.Reference is null)
+                            {
+                                <input type="checkbox" class="form-check-input" name="ids" value="@s.Id" form="pending-bulk-form" data-select-row aria-label="Select the @s.Sku send" />
+                            }
+                        </td>
+                    }
                     <td>
                         <div class="text-nowrap">@Model.Local(s.OccurredAt).ToString("MMM d, h:mm tt", en)</div>
                         @if (item.Overdue)

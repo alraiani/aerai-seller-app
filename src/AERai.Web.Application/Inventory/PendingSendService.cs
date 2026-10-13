@@ -25,6 +25,9 @@ public sealed partial class PendingSendService(
     TimeProvider clock,
     ILogger<PendingSendService> logger) : IPendingSendService
 {
+    /// <summary>Most sends given a shipment id in one request (well above the SKUs one shipment holds).</summary>
+    public const int MaxShipmentIdSends = 500;
+
     /// <inheritdoc/>
     public async Task<IReadOnlyList<PendingSendItem>> ListAsync(string marketplaceId, int? familyId, CancellationToken cancellationToken)
     {
@@ -137,32 +140,53 @@ public sealed partial class PendingSendService(
     /// <inheritdoc/>
     public async Task<Result> SetShipmentIdAsync(string marketplaceId, long id, string? shipmentId, string user, CancellationToken cancellationToken)
     {
+        var result = await SetShipmentIdsAsync(marketplaceId, [id], shipmentId, user, cancellationToken).ConfigureAwait(false);
+        return result.IsFailure ? Result.Failure(result.Error)
+            : result.Value.Added == 0 ? Result.Failure("That send is no longer pending, or already has a reference.")
+            : Result.Success();
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result<(int Added, int Skipped)>> SetShipmentIdsAsync(string marketplaceId, IReadOnlyCollection<long> ids, string? shipmentId, string user, CancellationToken cancellationToken)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(ids);
         ArgumentException.ThrowIfNullOrWhiteSpace(user);
 
         var reference = shipmentId?.Trim();
         if (string.IsNullOrEmpty(reference))
         {
-            return Result.Failure("Enter the FBA shipment id.");
+            return Result.Failure<(int, int)>("Enter the FBA shipment id.");
         }
 
+        var unique = ids.Distinct().ToList();
         string? error =
-            reference.Length > HomeStockLedgerService.MaxReferenceLength ? $"The shipment id can be at most {HomeStockLedgerService.MaxReferenceLength} characters."
+            unique.Count == 0 ? "Tick the sends that went out in this shipment."
+            : unique.Count > MaxShipmentIdSends ? $"Add a shipment id to at most {MaxShipmentIdSends:N0} sends at a time."
+            : reference.Length > HomeStockLedgerService.MaxReferenceLength ? $"The shipment id can be at most {HomeStockLedgerService.MaxReferenceLength} characters."
             : !PendingSend.IsShipmentId(reference) ? "FBA shipment ids start with FBA (for example FBA15K7Y3ZQX)."
             : null;
         if (error is not null)
         {
-            return Result.Failure(error);
+            return Result.Failure<(int, int)>(error);
         }
 
-        if (!await repository.SetReferenceAsync(marketplaceId, id, reference, cancellationToken).ConfigureAwait(false))
+        var added = 0;
+        foreach (var id in unique)
         {
-            return Result.Failure("That send is no longer pending, or already has a reference.");
+            if (await repository.SetReferenceAsync(marketplaceId, id, reference, cancellationToken).ConfigureAwait(false))
+            {
+                added++;
+            }
         }
 
-        LogReferenceSet(id, reference, user, marketplaceId);
-        await refresh.RequestAsync(marketplaceId, user, cancellationToken).ConfigureAwait(false);
-        return Result.Success();
+        LogReferenceSet(added, reference, user, marketplaceId);
+        if (added > 0)
+        {
+            await refresh.RequestAsync(marketplaceId, user, cancellationToken).ConfigureAwait(false);
+        }
+
+        return Result.Success((added, unique.Count - added));
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Reconciled pending sends in {MarketplaceId}: {Updated} updated, {Closed} closed")]
@@ -171,6 +195,6 @@ public sealed partial class PendingSendService(
     [LoggerMessage(Level = LogLevel.Information, Message = "Send {Id} ({Sku}, {Pending} pending) marked reconciled by {User} in {MarketplaceId}")]
     private partial void LogMarked(long id, string sku, int pending, string user, string marketplaceId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Shipment id {Reference} added to send {Id} by {User} in {MarketplaceId}")]
-    private partial void LogReferenceSet(long id, string reference, string user, string marketplaceId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Shipment id {Reference} added to {Added} sends by {User} in {MarketplaceId}")]
+    private partial void LogReferenceSet(int added, string reference, string user, string marketplaceId);
 }

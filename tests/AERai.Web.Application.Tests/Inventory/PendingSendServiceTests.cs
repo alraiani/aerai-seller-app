@@ -125,4 +125,36 @@ public sealed class PendingSendServiceTests
         Assert.Equal("FBA15K7Y3ZQX", _repository.Sends[0].Reference);
         Assert.Equal([Us], _refresh.Requests);
     }
+
+    [Fact]
+    public async Task SetShipmentIdsAsync_AddsTheIdToEveryTickedSendWithoutOneAndQueuesOneSync()
+    {
+        _repository.Sends.Add(Send(1, 24, Now.AddDays(-1)));
+        _repository.Sends.Add(Send(2, 10, Now.AddDays(-1)));
+        _repository.Sends.Add(Send(3, 5, Now.AddDays(-1), reference: "FBA00OTHER"));
+        _repository.Sends.Add(Send(4, 7, Now.AddDays(-1)));
+
+        var result = await CreateService().SetShipmentIdsAsync(Us, [1, 2, 3, 2], " FBA15K7Y3ZQX ", User, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal((2, 1), result.Value);
+        Assert.Equal(["FBA15K7Y3ZQX", "FBA15K7Y3ZQX", "FBA00OTHER", null], _repository.Sends.Select(s => s.Reference));
+        Assert.Equal([Us], _refresh.Requests);
+    }
+
+    [Fact]
+    public async Task SetShipmentIdsAsync_NothingTickedOrABadId_SavesNothing()
+    {
+        _repository.Sends.Add(Send(1, 24, Now.AddDays(-1)));
+
+        var none = await CreateService().SetShipmentIdsAsync(Us, [], "FBA15K7Y3ZQX", User, CancellationToken.None);
+        var bad = await CreateService().SetShipmentIdsAsync(Us, [1], "PO-1234", User, CancellationToken.None);
+        var tooMany = await CreateService().SetShipmentIdsAsync(Us, Enumerable.Range(1, PendingSendService.MaxShipmentIdSends + 1).Select(i => (long)i).ToList(), "FBA15K7Y3ZQX", User, CancellationToken.None);
+
+        Assert.True(none.IsFailure);
+        Assert.True(bad.IsFailure);
+        Assert.True(tooMany.IsFailure);
+        Assert.Null(_repository.Sends[0].Reference);
+        Assert.Empty(_refresh.Requests);
+    }
 }
