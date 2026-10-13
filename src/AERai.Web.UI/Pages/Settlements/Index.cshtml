@@ -165,7 +165,7 @@
                                 <a asp-page="Summary" asp-route-id="@s.SettlementId" class="fw-semibold">@s.SettlementId</a>
                                 @if (foreign)
                                 {
-                                    <span class="pill pill-info ms-1" title="Paid in @s.Currency">@SettlementOrigin.FromCurrency(s.Currency)</span>
+                                    <span class="@SettlementFormat.OriginPill(SettlementOrigin.FromCurrency(s.Currency)) ms-1" title="Paid in @s.Currency">@SettlementOrigin.FromCurrency(s.Currency)</span>
                                 }
                             </td>
                             <td class="text-nowrap">@SettlementFormat.Period(s.PeriodStart, s.PeriodEnd)</td>

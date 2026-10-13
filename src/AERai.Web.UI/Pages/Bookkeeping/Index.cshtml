@@ -23,7 +23,7 @@
                         @s.SettlementId
                         @if (s.Currency is not null && s.Currency != s.HomeCurrency)
                         {
-                            <span class="pill pill-info ms-1" title="Paid in @s.Currency; exported in @s.HomeCurrency">@AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)</span>
+                            <span class="@AERai.Web.UI.Models.SettlementFormat.OriginPill(AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)) ms-1" title="Paid in @s.Currency; exported in @s.HomeCurrency">@AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)</span>
                         }
                     </td>
                     <td>@s.PeriodStart?.ToString("yyyy-MM-dd") – @s.PeriodEnd?.ToString("yyyy-MM-dd")</td>

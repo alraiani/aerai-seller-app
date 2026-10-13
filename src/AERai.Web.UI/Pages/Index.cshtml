@@ -329,7 +329,7 @@
                         @(pay.PeriodStart?.ToString("MMM d", en)) – @(pay.PeriodEnd?.ToString("MMM d", en))
                         @if (pay.Origin is { } origin)
                         {
-                            <span class="pill pill-info ms-1" title="Paid in another currency; shown converted into @c">@origin</span>
+                            <span class="@SettlementFormat.OriginPill(origin) ms-1" title="Paid in another currency; shown converted into @c">@origin</span>
                         }
                     </div>
                     <div class="stat-row"><span class="label">Sales</span><span>@DashboardFormat.Money(pay.Sales, c)</span></div>

@@ -37,6 +37,16 @@ public static class SettlementFormat
     public static string Money(decimal amount, string? currency) =>
         string.IsNullOrEmpty(currency) ? amount.ToString("N2", Culture) : DashboardFormat.Price(amount, currency);
 
+    /// <summary>The pill classes for a settlement's origin tag (CA red, MX green, others the info color).</summary>
+    /// <param name="origin">The origin code from <see cref="SettlementOrigin.FromCurrency"/>, e.g. <c>CA</c>.</param>
+    /// <returns>A CSS class list.</returns>
+    public static string OriginPill(string? origin) => origin switch
+    {
+        "CA" => "pill pill-origin pill-origin-ca",
+        "MX" => "pill pill-origin pill-origin-mx",
+        _ => "pill pill-origin",
+    };
+
     /// <summary>An exchange rate, to six significant decimals.</summary>
     /// <param name="rate">One unit of the paid currency in the marketplace's.</param>
     /// <returns>e.g. "0.7312" or "0.054540".</returns>

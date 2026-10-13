@@ -13,7 +13,7 @@
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
                 <div>
                     <div class="mb-1">
-                        <span class="pill pill-info">@origin</span>
+                        <span class="@SettlementFormat.OriginPill(origin)">@origin</span>
                         Paid in <strong>@s.Currency</strong>: <strong>@SettlementFormat.Money(s.Net, s.Currency)</strong>
                         @if (s.ExchangeRate is { } effective && s.HomeNet is { } homeNet)
                         {

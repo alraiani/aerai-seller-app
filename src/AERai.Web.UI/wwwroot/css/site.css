@@ -461,6 +461,13 @@ html:not(.js) .nav-rail-toggle { display: none; }
 .pill-running::before { animation: pulse 1.4s ease-in-out infinite; }
 a.pill:hover { filter: brightness(0.95); }
 
+/* Where a settlement paid in another currency came from (CA, MX): a bordered, stronger tint than the
+   status pills so a converted payout stands out in a list of USD ones. Colors are the palette tokens,
+   which have light and dark values. */
+.pill-origin { --origin: var(--info); color: var(--origin); background: color-mix(in srgb, var(--origin) 18%, transparent); border: 1px solid color-mix(in srgb, var(--origin) 55%, transparent); letter-spacing: 0.03em; }
+.pill-origin-ca { --origin: var(--c-red); }
+.pill-origin-mx { --origin: var(--c-green); }
+
 .tag { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 0.35rem; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.01em; }
 .tag-orders { color: var(--brand); background: var(--brand-soft); }
 .tag-inventory { color: var(--violet); background: var(--violet-soft); }
