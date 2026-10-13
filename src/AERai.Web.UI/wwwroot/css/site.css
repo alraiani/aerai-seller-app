@@ -173,17 +173,17 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
 .sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0 0 0.75rem; }
 .app-brand { display: inline-flex; align-items: center; gap: 0.55rem; color: var(--sidebar-strong); font-weight: 700; font-size: 1.15rem; text-decoration: none; padding: 0.25rem 0.25rem; min-width: 0; }
 .app-brand:hover { color: var(--sidebar-strong); }
-.brand-text { white-space: nowrap; font-weight: 300; font-size: 1.35rem; line-height: 1; }
+.brand-text { white-space: nowrap; }
+.brand-text span { font-weight: 300; }
 /* The logo file is black ink on transparent; used as a mask so its color comes from a theme token
-   (white on the sidebar, body text on the sign-in card) instead of being baked into the image. */
-.brand-logo, .login-logo {
+   (body text on the sign-in card) instead of being baked into the image. */
+.login-logo {
     display: block; flex-shrink: 0; aspect-ratio: 459 / 209; background-color: currentColor;
     -webkit-mask: url("../img/aerai-logo.png") center / contain no-repeat;
     mask: url("../img/aerai-logo.png") center / contain no-repeat;
 }
-.brand-logo { height: 2.4rem; }
 .brand-mark {
-    display: none; align-items: center; justify-content: center; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
     width: 1.85rem; height: 1.85rem; border-radius: 0.5rem;
     background: var(--sidebar-active); color: var(--sidebar-strong); font-size: 1rem; font-weight: 700;
 }
@@ -280,8 +280,6 @@ html:not(.js) .nav-rail-toggle { display: none; }
 @media (min-width: 769px) {
     :root[data-nav="rail"] .app-sidebar { width: 4.25rem; padding-left: 0.6rem; padding-right: 0.6rem; }
     :root[data-nav="rail"] .sidebar-head { flex-direction: column; align-items: center; }
-    :root[data-nav="rail"] .brand-logo { display: none; }
-    :root[data-nav="rail"] .brand-mark { display: inline-flex; }
     :root[data-nav="rail"] .brand-text,
     :root[data-nav="rail"] .nav-label {
         position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
