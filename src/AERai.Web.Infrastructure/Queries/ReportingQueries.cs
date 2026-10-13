@@ -31,12 +31,12 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
     }
 
     /// <inheritdoc/>
-    public Task<PagedResult<SettlementSummary>> GetSettlementsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken)
+    public async Task<PagedResult<SettlementSummary>> GetSettlementsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         filter ??= SettlementListFilter.Default;
 
-        var query = FilterSettlements(marketplaceId, request, filter);
+        var query = await FilterSettlementsAsync(marketplaceId, request, filter, cancellationToken).ConfigureAwait(false);
         var descending = filter.Sort.IsDescendingByDefault() != filter.Descending;
         var ordered = filter.Sort switch
         {
@@ -47,27 +47,29 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
             _ => query.OrderBy(s => s.PeriodEnd, descending),
         };
 
-        return ordered
+        return await ordered
             .ThenByDescending(s => s.PeriodEnd)
             .ThenBy(s => s.SettlementId)
-            .ToPagedResultAsync(request, cancellationToken);
+            .ToPagedResultAsync(request, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public async Task<SettlementTotals> GetSettlementTotalsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SettlementTotals>> GetSettlementTotalsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var totals = await FilterSettlements(marketplaceId, request, filter ?? SettlementListFilter.Default)
-            .GroupBy(_ => 1)
-            .Select(g => new SettlementTotals(g.Count(), g.Sum(s => s.Sales), g.Sum(s => s.Fees), g.Sum(s => s.Refunds), g.Sum(s => s.Other), g.Sum(s => s.Net)))
-            .FirstOrDefaultAsync(cancellationToken)
+        var query = await FilterSettlementsAsync(marketplaceId, request, filter ?? SettlementListFilter.Default, cancellationToken).ConfigureAwait(false);
+        var totals = await query
+            .GroupBy(s => s.Currency)
+            .Select(g => new SettlementTotals(g.Key, g.Count(), g.Sum(s => s.Sales), g.Sum(s => s.Fees), g.Sum(s => s.Refunds), g.Sum(s => s.Other), g.Sum(s => s.Net)))
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        return totals ?? SettlementTotals.Empty;
+        return totals.OrderByDescending(t => t.Count).ThenBy(t => t.Currency, StringComparer.Ordinal).ToList();
     }
 
-    /// <summary>The settlements a list search and period range select, unordered.</summary>
-    private IQueryable<SettlementSummary> FilterSettlements(string marketplaceId, PageRequest request, SettlementListFilter filter)
+    /// <summary>The settlements a list search, period range, and currency select, unordered.</summary>
+    private async Task<IQueryable<SettlementSummary>> FilterSettlementsAsync(string marketplaceId, PageRequest request, SettlementListFilter filter, CancellationToken cancellationToken)
     {
         var query = dbContext.SettlementSummaries.AsNoTracking().Where(v => v.MarketplaceId == marketplaceId);
         if (filter.PeriodEndFrom is { } from)
@@ -80,19 +82,46 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
             query = query.Where(s => s.PeriodEnd < before);
         }
 
+        if (filter.Currency is { } currency)
+        {
+            query = query.Where(s => s.Currency == currency);
+        }
+
         if (request.SafeSearch is { } search)
         {
-            // People look a payout up by what they know: the settlement id from the bank, an order id
-            // from a customer, or a product. Orders and SKUs come from the lines, ASINs and titles from
-            // the per-SKU summary (which joins the catalog).
-            query = query.Where(s => s.SettlementId.Contains(search)
-                || dbContext.SettlementLineDetails.Any(l => l.MarketplaceId == s.MarketplaceId && l.SettlementId == s.SettlementId
-                    && ((l.AmazonOrderId != null && l.AmazonOrderId.Contains(search)) || (l.Sku != null && l.Sku.Contains(search))))
-                || dbContext.SettlementSkuSummaries.Any(r => r.MarketplaceId == s.MarketplaceId && r.SettlementId == s.SettlementId
-                    && ((r.Asin != null && r.Asin.Contains(search)) || (r.Title != null && r.Title.Contains(search)))));
+            var ids = await MatchingSettlementIdsAsync(marketplaceId, search, cancellationToken).ConfigureAwait(false);
+            query = query.Where(s => ids.Contains(s.SettlementId));
         }
 
         return query;
+    }
+
+    /// <summary>
+    /// The settlements a search term finds: by settlement id, or by an order id or product (SKU, ASIN,
+    /// or title) on any of their lines — what people know when they look a payout up.
+    /// </summary>
+    /// <remarks>
+    /// Run on its own against the core tables, then handed to the view as a short id list. Folding the
+    /// same test into the view query made SQL Server recompute every line's price and bucket while
+    /// scanning (seconds per query, and the list page runs three).
+    /// </remarks>
+    private async Task<List<string>> MatchingSettlementIdsAsync(string marketplaceId, string search, CancellationToken cancellationToken)
+    {
+        var products = dbContext.Products.AsNoTracking()
+            .Where(p => p.Sku.Contains(search) || (p.Asin != null && p.Asin.Contains(search)) || (p.Title != null && p.Title.Contains(search)))
+            .Select(p => p.Sku);
+        // The navigation is a SQL join here, never a null dereference, so the "!" only quiets the compiler.
+        var byLine = dbContext.SettlementLines.AsNoTracking()
+            .Where(l => l.Settlement!.MarketplaceId == marketplaceId
+                && ((l.AmazonOrderId != null && l.AmazonOrderId.Contains(search))
+                    || (l.Sku != null && (l.Sku.Contains(search) || products.Contains(l.Sku)))))
+            .Select(l => l.SettlementId);
+        return await dbContext.Settlements.AsNoTracking()
+            .Where(s => s.MarketplaceId == marketplaceId && s.SettlementId.Contains(search))
+            .Select(s => s.SettlementId)
+            .Union(byLine)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

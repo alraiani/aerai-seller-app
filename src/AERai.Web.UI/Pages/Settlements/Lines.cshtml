@@ -112,7 +112,7 @@
                                 </button>
                             </td>
                             <td>
-                                <div class="fw-semibold">@(group.AmazonOrderId ?? group.TransactionType)</div>
+                                <div class="fw-semibold text-nowrap">@(group.AmazonOrderId ?? group.TransactionType)</div>
                                 <div class="cell-sub">@group.Lines.Count line@(group.Lines.Count == 1 ? "" : "s")@(group.IsOrder ? "" : " without an order")</div>
                             </td>
                             <td>

@@ -24,13 +24,17 @@ public interface IReportingQueries
     /// <returns>One page of settlements.</returns>
     Task<PagedResult<SettlementSummary>> GetSettlementsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken);
 
-    /// <summary>Totals over every settlement the same search and filter select, across all pages.</summary>
+    /// <summary>
+    /// Totals over every settlement the same search and filter select, across all pages, one entry
+    /// per currency: a marketplace's settlements can include payouts in another currency (Amazon's
+    /// North America listing), and those are never added together.
+    /// </summary>
     /// <param name="marketplaceId">Marketplace to report on.</param>
     /// <param name="request">Search as for <see cref="GetSettlementsAsync"/>; paging is ignored.</param>
-    /// <param name="filter">Period range; the sort is ignored.</param>
+    /// <param name="filter">Period range and currency; the sort is ignored.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The totals, <see cref="SettlementTotals.Empty"/> when nothing matches.</returns>
-    Task<SettlementTotals> GetSettlementTotalsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken);
+    /// <returns>The totals per currency, most settlements first; empty when nothing matches.</returns>
+    Task<IReadOnlyList<SettlementTotals>> GetSettlementTotalsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken);
 
     /// <summary>Gets one settlement's totals.</summary>
     /// <param name="marketplaceId">Marketplace to report on.</param>

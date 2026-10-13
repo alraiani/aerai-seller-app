@@ -218,8 +218,8 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         var august = new SettlementListFilter(PeriodEndFrom: new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero), PeriodEndBefore: new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero));
         var inAugust = await reporting.GetSettlementsAsync(marketplaceId, new PageRequest(Search: "T-SET-"), august, ct);
         Assert.Equal("T-SET-6", Assert.Single(inAugust.Items).SettlementId);
-        var totals = await reporting.GetSettlementTotalsAsync(marketplaceId, new PageRequest(Search: "T-SET-"), august, ct);
-        Assert.Equal((1, inAugust.Items[0].Net), (totals.Count, totals.Net));
+        var totals = Assert.Single(await reporting.GetSettlementTotalsAsync(marketplaceId, new PageRequest(Search: "T-SET-"), august, ct));
+        Assert.Equal(("USD", 1, inAugust.Items[0].Net), (totals.Currency, totals.Count, totals.Net));
 
         // Sorting by net puts the larger payout first, and reversing flips it.
         var ours = new PageRequest(Search: "T-SET-");

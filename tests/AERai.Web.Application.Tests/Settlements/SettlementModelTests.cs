@@ -8,7 +8,7 @@ public sealed class SettlementModelTests
     [Fact]
     public void FeeRate_WithSales_IsFeesAsAPositiveShareOfSales()
     {
-        var totals = new SettlementTotals(2, Sales: 200m, Fees: -30m, Refunds: -10m, Other: 0m, Net: 160m);
+        var totals = new SettlementTotals("USD", 2, Sales: 200m, Fees: -30m, Refunds: -10m, Other: 0m, Net: 160m);
 
         Assert.Equal(0.15m, totals.FeeRate);
         Assert.Equal(0.05m, totals.RefundRate);
@@ -17,7 +17,7 @@ public sealed class SettlementModelTests
     [Fact]
     public void FeeRate_WithoutSales_IsUnknown()
     {
-        var totals = new SettlementTotals(1, Sales: 0m, Fees: -39.99m, Refunds: 0m, Other: 0m, Net: -39.99m);
+        var totals = new SettlementTotals("USD", 1, Sales: 0m, Fees: -39.99m, Refunds: 0m, Other: 0m, Net: -39.99m);
 
         Assert.Null(totals.FeeRate);
         Assert.Null(totals.RefundRate);

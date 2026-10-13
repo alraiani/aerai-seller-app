@@ -5,7 +5,7 @@
 @{
     ViewData["Title"] = "Settlements";
     var t = Model.Totals;
-    var currency = Model.Marketplace.Currency;
+    var currency = t.Currency ?? Model.Marketplace.Currency;
     var rows = Model.Settlements.Items;
 }
 
@@ -16,7 +16,7 @@
             <div class="kpi">
                 <div class="kpi-label">Net payouts <partial name="_Tip" model='"What Amazon paid out for the settlements listed (every page): sales, less fees and refunds, plus everything else. Click to sort by payout."' /></div>
                 <div class="kpi-value">@DashboardFormat.Money(t.Net, currency)</div>
-                <div class="kpi-foot">@t.Count.ToString("N0", CultureInfo.InvariantCulture) settlement@(t.Count == 1 ? "" : "s")@(Model.IsFiltered ? " matching" : "")</div>
+                <div class="kpi-foot">@t.Count.ToString("N0", CultureInfo.InvariantCulture) settlement@(t.Count == 1 ? "" : "s") in @currency</div>
             </div>
         </a>
     </div>
@@ -49,7 +49,20 @@
     </div>
 </div>
 
-@* ---------- Search + period filter ---------- *@
+@if (Model.OtherCurrencies.Count > 0)
+{
+    <p class="page-footnote mt-n2 mb-3">
+        Totals are in @currency only.
+        @foreach (var other in Model.OtherCurrencies)
+        {
+            <a href="@Model.LinkWith(("currency", other.Currency))">@other.Count.ToString("N0", CultureInfo.InvariantCulture) in @(other.Currency ?? "no currency")</a>
+            <span>(@SettlementFormat.Money(other.Net, other.Currency) net)</span>
+        }
+        @(Model.OtherCurrencies.Count == 1 ? "is" : "are") listed but not added in.
+    </p>
+}
+
+@* ---------- Search + period + currency filters ---------- *@
 <div class="list-toolbar mb-3">
     <form method="get" class="filters" data-autosubmit-form role="search">
         @if (Model.Sort != SettlementSort.PeriodEnd)
@@ -68,6 +81,16 @@
         <input type="date" id="settlement-from" name="from" value="@Model.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" class="form-control form-control-sm date-filter" aria-label="Period ends on or after" data-autosubmit />
         <span class="text-muted-token" aria-hidden="true">–</span>
         <input type="date" name="to" value="@Model.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" class="form-control form-control-sm date-filter" aria-label="Period ends on or before" data-autosubmit />
+        @if (Model.Currencies.Count > 1 || Model.Currency is not null)
+        {
+            <select name="currency" class="form-select form-select-sm" aria-label="Currency">
+                <option value="">All currencies</option>
+                @foreach (var c in Model.Currencies)
+                {
+                    <option value="@c" selected="@(Model.Currency == c)">@c</option>
+                }
+            </select>
+        }
         <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
         @if (Model.IsFiltered)
         {
@@ -81,7 +104,7 @@
     <div class="card-toolbar">
         <span class="card-toolbar-title list-count">
             <span class="text-nowrap">@Model.Settlements.TotalCount.ToString("N0", CultureInfo.InvariantCulture) settlement@(Model.Settlements.TotalCount == 1 ? "" : "s")</span>
-            <span class="text-muted-token fw-normal">in @Model.Marketplace.Name · @currency</span>
+            <span class="text-muted-token fw-normal">in @Model.Marketplace.Name@(Model.Currency is null ? "" : " · " + Model.Currency)</span>
             <partial name="_Tip" model='"One row per Amazon payout. Open one to see it by SKU and price, then the orders behind each row."' />
         </span>
     </div>

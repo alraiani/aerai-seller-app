@@ -25,6 +25,10 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
     [BindProperty(SupportsGet = true, Name = "to")]
     public DateOnly? To { get; set; }
 
+    /// <summary>Only settlements paid in this currency, from <c>?currency=</c>.</summary>
+    [BindProperty(SupportsGet = true, Name = "currency")]
+    public string? Currency { get; set; }
+
     /// <summary>Sort from <c>?sort=</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "sort")]
     public SettlementSort Sort { get; set; }
@@ -39,11 +43,20 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
     /// <summary>The current page of settlements.</summary>
     public PagedResult<SettlementSummary> Settlements { get; private set; } = default!;
 
-    /// <summary>Totals over every settlement the search and filters select.</summary>
-    public SettlementTotals Totals { get; private set; } = SettlementTotals.Empty;
+    /// <summary>
+    /// Totals for the tiles: the selected currency's, else the marketplace's own currency's, over every
+    /// settlement the search and filters select.
+    /// </summary>
+    public SettlementTotals Totals { get; private set; } = SettlementTotals.Empty(null);
 
-    /// <summary>Whether a search or date filter is applied.</summary>
-    public bool IsFiltered => !string.IsNullOrWhiteSpace(Search) || From is not null || To is not null;
+    /// <summary>Totals of the matching settlements paid in other currencies, which the tiles leave out.</summary>
+    public IReadOnlyList<SettlementTotals> OtherCurrencies { get; private set; } = [];
+
+    /// <summary>Every currency with matching settlements, ignoring the currency filter (for its choices).</summary>
+    public IReadOnlyList<string> Currencies { get; private set; } = [];
+
+    /// <summary>Whether a search, date, or currency filter is applied.</summary>
+    public bool IsFiltered => !string.IsNullOrWhiteSpace(Search) || From is not null || To is not null || Currency is not null;
 
     /// <summary>Loads the totals and the requested page.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
@@ -57,10 +70,19 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
         var filter = new SettlementListFilter(
             From is { } from ? LocalTime.StartOfDay(from, zone) : null,
             To is { } to ? LocalTime.StartOfDay(to.AddDays(1), zone) : null,
+            string.IsNullOrWhiteSpace(Currency) ? null : Currency.Trim(),
             Sort,
             Descending);
         var request = ToPageRequest();
-        Totals = await reporting.GetSettlementTotalsAsync(Marketplace.MarketplaceId, request, filter, cancellationToken);
+
+        // Totals come per currency (a marketplace's listing can hold payouts in another currency) and
+        // are never added together: the tiles show one currency and name the others.
+        var totals = await reporting.GetSettlementTotalsAsync(Marketplace.MarketplaceId, request, filter with { Currency = null }, cancellationToken);
+        Currencies = totals.Select(t => t.Currency).OfType<string>().ToList();
+        var shown = filter.Currency ?? Marketplace.Currency;
+        Totals = totals.FirstOrDefault(t => t.Currency == shown) ?? SettlementTotals.Empty(shown);
+        OtherCurrencies = filter.Currency is null ? totals.Where(t => t.Currency != shown).ToList() : [];
+
         Settlements = await reporting.GetSettlementsAsync(Marketplace.MarketplaceId, request, filter, cancellationToken);
     }
 
