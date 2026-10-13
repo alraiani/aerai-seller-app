@@ -978,6 +978,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<int>("PollAttempts")
                         .HasColumnType("int");
 
+                    b.Property<DateTimeOffset?>("ReportRequestedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("ReportType")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1009,9 +1012,12 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.HasIndex("MarketplaceId");
 
                     b.HasIndex("NextCheckAt")
-                        .HasFilter("[PendingReportId] IS NOT NULL");
+                        .HasFilter("[NextCheckAt] IS NOT NULL");
 
                     b.HasIndex("SyncScheduleId", "StartedAt");
+
+                    b.HasIndex("ReportType", "MarketplaceId", "ReportRequestedAt")
+                        .HasFilter("[ReportRequestedAt] IS NOT NULL");
 
                     b.ToTable("SyncRun", "ops");
                 });

@@ -21,4 +21,13 @@ public static class AmazonReportTypeExtensions
     /// <returns><see langword="false"/> for <see cref="AmazonReportType.AwdInventory"/> and <see cref="AmazonReportType.OrdersApi"/>.</returns>
     public static bool IsReport(this AmazonReportType reportType) =>
         reportType is not (AmazonReportType.AwdInventory or AmazonReportType.OrdersApi);
+
+    /// <summary>
+    /// The shortest time Amazon allows between two requests for the report in one marketplace. Amazon
+    /// accepts a request made sooner but then fails it as <c>FATAL</c>, so the request is held back instead.
+    /// </summary>
+    /// <param name="reportType">The report type.</param>
+    /// <returns>30 minutes for <see cref="AmazonReportType.FbaInventory"/>; <see cref="TimeSpan.Zero"/> (no limit) otherwise.</returns>
+    public static TimeSpan RequestCooldown(this AmazonReportType reportType) =>
+        reportType == AmazonReportType.FbaInventory ? TimeSpan.FromMinutes(30) : TimeSpan.Zero;
 }

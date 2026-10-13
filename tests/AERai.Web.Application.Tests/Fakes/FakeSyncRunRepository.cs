@@ -47,6 +47,7 @@ internal sealed class FakeSyncRunRepository : ISyncRunRepository
         stored.AmazonReportIds = run.AmazonReportIds;
         stored.PendingReportId = run.PendingReportId;
         stored.NextCheckAt = run.NextCheckAt;
+        stored.ReportRequestedAt = run.ReportRequestedAt;
         stored.PollAttempts = run.PollAttempts;
         return Task.CompletedTask;
     }
@@ -79,9 +80,15 @@ internal sealed class FakeSyncRunRepository : ISyncRunRepository
     public Task<bool> HasPendingAsync(int scheduleId, CancellationToken cancellationToken) =>
         Task.FromResult(Pending.Any(r => r.SyncScheduleId == scheduleId));
 
+    public Task<DateTimeOffset?> GetLastReportRequestAsync(AmazonReportType reportType, string marketplaceId, CancellationToken cancellationToken) =>
+        Task.FromResult(Stored.Values.Where(r => r.ReportType == reportType && r.MarketplaceId == marketplaceId).Max(r => r.ReportRequestedAt));
+
+    public Task<bool> HasWaitingRequestAsync(int scheduleId, long exceptRunId, CancellationToken cancellationToken) =>
+        Task.FromResult(Pending.Any(r => r.SyncScheduleId == scheduleId && r.Id != exceptRunId && r.PendingReportId is null));
+
     public Task<int> FailAbandonedAsync(DateTimeOffset startedBefore, string message, DateTimeOffset completedAt, CancellationToken cancellationToken)
     {
-        var abandoned = Stored.Values.Where(r => r.Status == SyncRunStatus.Running && r.PendingReportId is null && r.StartedAt < startedBefore).ToList();
+        var abandoned = Stored.Values.Where(r => r.Status == SyncRunStatus.Running && r.NextCheckAt is null && r.StartedAt < startedBefore).ToList();
         foreach (var run in abandoned)
         {
             run.Status = SyncRunStatus.Failed;
@@ -105,7 +112,7 @@ internal sealed class FakeSyncRunRepository : ISyncRunRepository
 
     public Task<IReadOnlyDictionary<int, SyncRun>> GetLatestByScheduleAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    private IEnumerable<SyncRun> Pending => Stored.Values.Where(r => r.Status == SyncRunStatus.Running && r.PendingReportId is not null);
+    private IEnumerable<SyncRun> Pending => Stored.Values.Where(r => r.Status == SyncRunStatus.Running && r.NextCheckAt is not null);
 
     private static SyncRun Copy(SyncRun run) => new()
     {
@@ -125,6 +132,7 @@ internal sealed class FakeSyncRunRepository : ISyncRunRepository
         Message = run.Message,
         PendingReportId = run.PendingReportId,
         NextCheckAt = run.NextCheckAt,
+        ReportRequestedAt = run.ReportRequestedAt,
         PollAttempts = run.PollAttempts,
         BackfillStart = run.BackfillStart,
         BackfillEnd = run.BackfillEnd,
