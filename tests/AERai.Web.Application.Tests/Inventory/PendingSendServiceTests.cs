@@ -38,11 +38,32 @@ public sealed class PendingSendServiceTests
         _repository.Sends.Add(Send(1, 24, Now.AddDays(-8), familyId: 3));
         _repository.Sends.Add(Send(2, 10, Now.AddDays(-1), familyId: 4));
 
-        var all = await CreateService().ListAsync(Us, null, CancellationToken.None);
-        var family = await CreateService().ListAsync(Us, 4, CancellationToken.None);
+        var all = await CreateService().ListAsync(Us, new PendingSendFilter(), CancellationToken.None);
+        var family = await CreateService().ListAsync(Us, PendingSendFilter.ForFamily(4), CancellationToken.None);
 
-        Assert.Equal([(1L, 8, true), (2L, 1, false)], all.Select(i => (i.Send.Id, i.AgeDays, i.Overdue)));
-        Assert.Equal([2L], family.Select(i => i.Send.Id));
+        Assert.Equal([(1L, 8, true), (2L, 1, false)], all.Items.Select(i => (i.Send.Id, i.AgeDays, i.Overdue)));
+        Assert.Equal([2L], family.Items.Select(i => i.Send.Id));
+    }
+
+    [Fact]
+    public async Task ListAsync_SearchesSkuTitleAndReferenceAndCountsEachView()
+    {
+        _repository.Sends.Add(Send(1, 24, Now.AddDays(-8)) with { Sku = "HK-WHT", Title = "Handkerchief - White" });
+        _repository.Sends.Add(Send(2, 10, Now.AddDays(-1), reference: "FBA15K7Y3ZQX") with { Sku = "HK-BLU", Title = "Handkerchief - Blue" });
+        _repository.Sends.Add(Send(3, 5, Now.AddDays(-1)) with { Sku = "MAT-BLK", Title = "Yoga mat" });
+        var service = CreateService();
+
+        var handkerchiefs = await service.ListAsync(Us, new PendingSendFilter(Search: "handkerchief"), CancellationToken.None);
+        var byShipment = await service.ListAsync(Us, new PendingSendFilter(Search: "fba15k"), CancellationToken.None);
+        var needsId = await service.ListAsync(Us, new PendingSendFilter(View: PendingSendView.NeedsShipmentId), CancellationToken.None);
+        var overdue = await service.ListAsync(Us, new PendingSendFilter(View: PendingSendView.Overdue), CancellationToken.None);
+
+        Assert.Equal([1L, 2L], handkerchiefs.Items.Select(i => i.Send.Id));
+        Assert.Equal((2, 1, 1), (handkerchiefs.Total, handkerchiefs.NeedsShipmentId, handkerchiefs.Overdue));
+        Assert.Equal([2L], byShipment.Items.Select(i => i.Send.Id));
+        Assert.Equal([1L, 3L], needsId.Items.Select(i => i.Send.Id));
+        Assert.Equal(3, needsId.Total);
+        Assert.Equal([1L], overdue.Items.Select(i => i.Send.Id));
     }
 
     [Fact]

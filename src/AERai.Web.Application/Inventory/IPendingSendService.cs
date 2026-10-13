@@ -8,12 +8,12 @@ namespace AERai.Web.Application.Inventory;
 /// </summary>
 public interface IPendingSendService
 {
-    /// <summary>A marketplace's open sends, oldest first.</summary>
+    /// <summary>A marketplace's open sends matching a filter, oldest first, with counts per view.</summary>
     /// <param name="marketplaceId">Marketplace.</param>
-    /// <param name="familyId">Only this family's SKUs, or all when <see langword="null"/>.</param>
+    /// <param name="filter">Family, search text, and view.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The open sends.</returns>
-    Task<IReadOnlyList<PendingSendItem>> ListAsync(string marketplaceId, int? familyId, CancellationToken cancellationToken);
+    /// <returns>The matching sends and the counts.</returns>
+    Task<PendingSendList> ListAsync(string marketplaceId, PendingSendFilter filter, CancellationToken cancellationToken);
 
     /// <summary>Matches a marketplace's open sends against its latest FBA snapshots (see <see cref="PendingReconciliation"/>).</summary>
     /// <param name="marketplaceId">Marketplace.</param>

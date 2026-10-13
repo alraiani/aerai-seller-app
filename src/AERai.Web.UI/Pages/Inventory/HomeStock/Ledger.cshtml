@@ -8,16 +8,7 @@
     var rows = Model.Entries.Items;
 }
 
-<nav class="crumbs" aria-label="Breadcrumb">
-    <a asp-page="../Index">Inventory</a>
-    <span aria-hidden="true">/</span>
-    @if (Model.FamilyId is not null)
-    {
-        <a asp-page="../Worksheet" asp-route-family="@Model.FamilyId">Worksheet</a>
-        <span aria-hidden="true">/</span>
-    }
-    <span>Home-stock ledger</span>
-</nav>
+<partial name="_InventoryNav" model="new AERai.Web.UI.Models.InventoryNavModel(AERai.Web.UI.Models.InventorySection.Ledger, Model.FamilyId)" />
 
 @* ---------- Filters ---------- *@
 <div class="list-toolbar mb-3">
@@ -63,13 +54,12 @@
             </span>
             <partial name="_Tip" model='"Every unit that came into or went out of home stock. Each SKU’s entries add up to its home stock; Balance is the SKU’s count right after the entry. Edits on the Worksheet, Edit page, bulk page, and uploads appear as count corrections. Mistakes are reversed, never deleted."' />
         </span>
-        <div class="card-toolbar-group">
-            <a asp-page="Pending" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"><partial name="_Icon" model='"truck"' /> Pending sends</a>
-            @if (Model.CanEdit)
-            {
+        @if (Model.CanEdit)
+        {
+            <div class="card-toolbar-group">
                 <a asp-route-log="true" asp-route-sku="@Model.Sku" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#log-dialog"><partial name="_Icon" model='"plus"' /> Log movement</a>
-            }
-        </div>
+            </div>
+        }
     </div>
 
     @if (rows.Count == 0)

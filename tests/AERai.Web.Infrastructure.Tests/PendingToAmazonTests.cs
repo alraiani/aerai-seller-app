@@ -130,8 +130,8 @@ public sealed class PendingToAmazonTests(SqlDatabaseFixture fixture) : IClassFix
         Assert.True(cancelled.IsSuccess, cancelled.Error);
         var position = await PositionAsync("T-PND-3");
         Assert.Equal((0, 20), (position.PendingToAmazon, position.HomeStock));
-        var open = await scope.ServiceProvider.GetRequiredService<IPendingSendService>().ListAsync(MarketplaceIds.UnitedStates, null, CancellationToken.None);
-        Assert.DoesNotContain(open, i => i.Send.Sku == "T-PND-3");
+        var open = await scope.ServiceProvider.GetRequiredService<IPendingSendService>().ListAsync(MarketplaceIds.UnitedStates, new PendingSendFilter(), CancellationToken.None);
+        Assert.DoesNotContain(open.Items, i => i.Send.Sku == "T-PND-3");
     }
 
     [SqlFact]

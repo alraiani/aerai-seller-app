@@ -8,11 +8,7 @@
     var row = 0;
 }
 
-<nav class="crumbs" aria-label="Breadcrumb">
-    <a asp-page="Index">Inventory</a>
-    <span aria-hidden="true">/</span>
-    <span>Worksheet</span>
-</nav>
+<partial name="_InventoryNav" model="new AERai.Web.UI.Models.InventoryNavModel(AERai.Web.UI.Models.InventorySection.Worksheet, Model.FamilyId)" />
 
 @if (Model.Family is null)
 {
@@ -50,11 +46,6 @@
         </form>
     }
     <div class="card-toolbar-group">
-        <a asp-page="HomeStock/Ledger" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"><partial name="_Icon" model='"list"' /> Home-stock ledger</a>
-        @if (Model.Pending is { Items.Count: > 0 } pendingLink)
-        {
-            <a href="#pending-sends" class="btn btn-sm @(pendingLink.OverdueCount > 0 ? "btn-soft-bad" : "btn-soft")"><partial name="_Icon" model='"truck"' /> @pendingLink.Units.ToString("N0", en) awaiting Amazon</a>
-        }
         @if (Model.CanEdit)
         {
             <a asp-page="HomeStock/Upload" asp-page-handler="Template" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"
@@ -278,7 +269,7 @@
                 <partial name="_Tip" model='$"Units sent from home that Amazon’s numbers don’t show yet. They clear on their own after an inventory sync shows them; add the FBA shipment id to match a send by its shipment. After {pendingPanel.ExpiryDays} days a send is flagged for someone to check."' />
             </span>
             <div class="card-toolbar-group">
-                <a asp-page="HomeStock/Pending" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft">All pending sends</a>
+                <a asp-page="HomeStock/Pending" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"><partial name="_Icon" model='"search"' /> Search &amp; filter</a>
             </div>
         </div>
         <partial name="_PendingSends" model="pendingPanel" />

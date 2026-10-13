@@ -30,8 +30,22 @@ public sealed class PendingModel(IPendingSendService pending, IInventoryItemServ
     [BindProperty(SupportsGet = true, Name = "family")]
     public int? FamilyId { get; set; }
 
-    /// <summary>The open sends.</summary>
+    /// <summary>Search text (SKU, title, or shipment id), from <c>?q=</c>.</summary>
+    [BindProperty(SupportsGet = true, Name = "q")]
+    public string? Search { get; set; }
+
+    /// <summary>Which sends to show, from <c>?view=</c>.</summary>
+    [BindProperty(SupportsGet = true, Name = "view")]
+    public PendingSendView View { get; set; }
+
+    /// <summary>The matching sends and the counts for the view switch.</summary>
+    public PendingSendList List { get; private set; } = default!;
+
+    /// <summary>The open sends, as the shared panel shows them.</summary>
     public PendingSendsPanel Panel { get; private set; } = default!;
+
+    /// <summary>Whether a search or view narrows the list.</summary>
+    public bool IsFiltered => !string.IsNullOrWhiteSpace(Search) || View != PendingSendView.All;
 
     /// <summary>Whether the user can change pending sends.</summary>
     public bool CanEdit => User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator);
@@ -44,8 +58,9 @@ public sealed class PendingModel(IPendingSendService pending, IInventoryItemServ
         Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
         Families = await items.ListFamiliesAsync(cancellationToken);
         var zone = TimeZoneInfo.FindSystemTimeZoneById(Marketplace.TimeZoneId);
-        var list = await pending.ListAsync(Marketplace.MarketplaceId, FamilyId, cancellationToken);
-        Panel = new PendingSendsPanel(list, CanEdit, zone, options.Value.PendingSendExpiryDays, null, FamilyId);
+        var filter = new PendingSendFilter(FamilyId, Search, View);
+        List = await pending.ListAsync(Marketplace.MarketplaceId, filter, cancellationToken);
+        Panel = new PendingSendsPanel(List.Items, CanEdit, zone, options.Value.PendingSendExpiryDays, null, FamilyId, IsFiltered, filter);
     }
 
     /// <summary>Adds the FBA shipment id to a send logged without one.</summary>
@@ -117,5 +132,5 @@ public sealed class PendingModel(IPendingSendService pending, IInventoryItemServ
 
     private RedirectToPageResult Back(string? back) => back == "worksheet"
         ? RedirectToPage("/Inventory/Worksheet", new { family = FamilyId })
-        : RedirectToPage(new { family = FamilyId });
+        : RedirectToPage(new { family = FamilyId, q = Search, view = View == PendingSendView.All ? null : View.ToString() });
 }

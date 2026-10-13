@@ -182,8 +182,8 @@ public sealed class WorksheetModel(IInventoryService inventory, IInventoryItemSe
         if (Family is not null)
         {
             Sheet = await inventory.GetWorksheetAsync(Marketplace, Family.Id, cancellationToken);
-            var sends = await pending.ListAsync(Marketplace.MarketplaceId, Family.Id, cancellationToken);
-            Pending = new PendingSendsPanel(sends, CanEdit, TimeZoneInfo.FindSystemTimeZoneById(Marketplace.TimeZoneId), PendingExpiryDays, "worksheet", Family.Id);
+            var sends = await pending.ListAsync(Marketplace.MarketplaceId, PendingSendFilter.ForFamily(Family.Id), cancellationToken);
+            Pending = new PendingSendsPanel(sends.Items, CanEdit, TimeZoneInfo.FindSystemTimeZoneById(Marketplace.TimeZoneId), PendingExpiryDays, "worksheet", Family.Id);
         }
     }
 

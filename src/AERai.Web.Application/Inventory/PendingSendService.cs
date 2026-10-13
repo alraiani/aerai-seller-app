@@ -29,16 +29,29 @@ public sealed partial class PendingSendService(
     public const int MaxShipmentIdSends = 500;
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<PendingSendItem>> ListAsync(string marketplaceId, int? familyId, CancellationToken cancellationToken)
+    public async Task<PendingSendList> ListAsync(string marketplaceId, PendingSendFilter filter, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(filter);
 
         var now = clock.GetUtcNow();
         var expiry = TimeSpan.FromDays(options.Value.PendingSendExpiryDays);
-        return (await repository.ListOpenAsync(marketplaceId, cancellationToken).ConfigureAwait(false))
-            .Where(s => familyId is null || s.FamilyId == familyId)
+        var search = filter.Search?.Trim();
+
+        // Open sends are a handful per SKU at most, so filtering in memory keeps the counts simple.
+        var scoped = (await repository.ListOpenAsync(marketplaceId, cancellationToken).ConfigureAwait(false))
+            .Where(s => filter.FamilyId is null || s.FamilyId == filter.FamilyId)
+            .Where(s => string.IsNullOrEmpty(search) || Matches(s, search))
             .Select(s => new PendingSendItem(s, (int)(now - s.CreatedAt).TotalDays, now - s.CreatedAt > expiry))
             .ToList();
+
+        var shown = filter.View switch
+        {
+            PendingSendView.NeedsShipmentId => scoped.Where(i => i.Send.Reference is null).ToList(),
+            PendingSendView.Overdue => scoped.Where(i => i.Overdue).ToList(),
+            _ => scoped,
+        };
+        return new PendingSendList(shown, scoped.Count, scoped.Count(i => i.Send.Reference is null), scoped.Count(i => i.Overdue));
     }
 
     /// <inheritdoc/>
@@ -188,6 +201,11 @@ public sealed partial class PendingSendService(
 
         return Result.Success((added, unique.Count - added));
     }
+
+    private static bool Matches(PendingSend send, string search) =>
+        send.Sku.Contains(search, StringComparison.OrdinalIgnoreCase)
+        || (send.Title?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+        || (send.Reference?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Reconciled pending sends in {MarketplaceId}: {Updated} updated, {Closed} closed")]
     private partial void LogReconciled(int updated, int closed, string marketplaceId);

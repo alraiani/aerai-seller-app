@@ -346,6 +346,10 @@ html:not(.js) .nav-rail-toggle { display: none; }
 .segmented a { padding: 0.35rem 0.9rem; border-radius: 0.45rem; color: var(--muted); text-decoration: none; font-size: 0.875rem; font-weight: 500; }
 .segmented a:hover { color: var(--text); }
 .segmented a.active { background: var(--brand-soft); color: var(--brand); }
+.segmented-sm a { padding: 0.25rem 0.7rem; font-size: 0.8rem; }
+.segmented-count { margin-left: 0.3rem; padding: 0 0.35rem; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 0.72rem; font-weight: 600; }
+.segmented a.active .segmented-count { background: var(--surface); color: var(--brand); }
+.segmented a.has-warn .segmented-count { background: var(--warning-soft); color: var(--warning); }
 
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 .dot-ok { background: var(--positive); }
@@ -464,8 +468,24 @@ a.pill:hover { filter: brightness(0.95); }
 
 .cell-sub { font-size: 0.78rem; color: var(--muted); }
 .cell-sub.text-warn { color: var(--warning); }
-.crumbs { display: flex; flex-wrap: wrap; gap: 0.4rem; font-size: 0.85rem; color: var(--muted); margin-bottom: 1rem; }
-.crumbs a { text-decoration: none; }
+/* Section tab bar: the pages of one area (Inventory) as tabs under the page title. Scrolls sideways
+   on narrow screens instead of wrapping, so the active tab keeps its place. */
+.section-tabs { display: flex; gap: 0.25rem; margin: -0.25rem 0 1.25rem; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.section-tabs::-webkit-scrollbar { display: none; }
+.section-tab { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.55rem 0.8rem 0.6rem; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--muted); font-size: 0.875rem; font-weight: 500; text-decoration: none; white-space: nowrap; }
+.section-tab:hover { color: var(--text); }
+.section-tab.active { color: var(--brand); border-bottom-color: var(--brand); }
+.section-tab .icon { width: 1rem; height: 1rem; }
+.section-tab-count { min-width: 1.25rem; padding: 0 0.4rem; border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-size: 0.72rem; font-weight: 700; line-height: 1.25rem; text-align: center; }
+.section-tab-count.is-warn { background: var(--warning-soft); color: var(--warning); }
+
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--muted); margin-bottom: 1rem; }
+.crumbs a { text-decoration: none; color: var(--muted); padding: 0.1rem 0.45rem; margin: 0 -0.15rem; border-radius: 0.4rem; }
+.crumbs a:hover { color: var(--brand); background: var(--brand-soft); }
+.crumbs > span:last-child { color: var(--text); font-weight: 500; }
+/* The "/" separators stay in the markup for screen readers' sake (hidden), drawn as a chevron. */
+.crumbs > span[aria-hidden="true"] { font-size: 0; }
+.crumbs > span[aria-hidden="true"]::before { content: "›"; font-size: 1rem; line-height: 1; color: var(--muted); opacity: 0.6; }
 .page-footnote { font-size: 0.8rem; color: var(--muted); margin: 0.75rem 0 0; }
 .quick-picks { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 
