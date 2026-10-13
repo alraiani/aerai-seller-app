@@ -52,7 +52,8 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
         ArgumentNullException.ThrowIfNull(marketplace);
 
         var zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
-        var today = LocalTime.DateOf(clock.GetUtcNow(), zone);
+        var now = clock.GetUtcNow();
+        var today = LocalTime.DateOf(now, zone);
         var windowStart = today.AddDays(-(VelocityWindowDays - 1));
         var recentStart = today.AddDays(-(RecentSalesDays - 1));
 
@@ -74,11 +75,12 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
                 var units30 = sales.Where(s => s.Day >= recentStart).Sum(s => s.Quantity);
                 var velocity = Velocity(sales.Select(s => s.Day).DefaultIfEmpty().Min(), units90, today);
                 var times = settings.Resolve(leadTimes.GetValueOrDefault(p.Sku));
-                var plan = RestockPlanner.Plan(today, velocity, p.SellThroughStock, p.HomeStock, times, AmazonRecommendation.From(p.AmazonRecommendedQuantity, p.AmazonRecommendedShipDate));
+                var plan = RestockPlanner.Plan(today, velocity, p.SellThroughStock, p.HomeStock, times, AmazonRecommendation.From(p.AmazonRecommendedQuantity, p.AmazonRecommendedShipDate), p.PendingToAmazon);
                 var status = StatusOf(p, units30, velocity, plan, settings.AlertLeadDays);
                 var average30 = AveragePerDay(sales.Where(s => s.Day >= recentStart).Select(s => (s.Day, s.Quantity)), RecentSalesDays, today);
                 var average90 = AveragePerDay(sales.Select(s => (s.Day, s.Quantity)), VelocityWindowDays, today);
-                return new InventoryItem(p, units30, units90, velocity, DaysOfInventory(p, velocity), times, plan, status, average30, average90);
+                var pendingOverdue = p.OldestPendingAt is { } oldest && now - oldest > TimeSpan.FromDays(settings.PendingSendExpiryDays);
+                return new InventoryItem(p, units30, units90, velocity, DaysOfInventory(p, velocity), times, plan, status, average30, average90, pendingOverdue);
             })
             .OrderBy(i => i.Status)
             .ThenBy(i => i.Restock is null)
@@ -209,8 +211,9 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
         return Math.Round((decimal)units / days, 1);
     }
 
+    /// <summary>Days the stock lasts; units sent but not yet showing at Amazon count, as they do for the plan.</summary>
     private static decimal? DaysOfInventory(InventoryPosition position, decimal? velocity) =>
-        velocity is { } perDay and > 0 ? Math.Round(position.SellThroughStock / perDay, 1) : null;
+        velocity is { } perDay and > 0 ? Math.Round((position.SellThroughStock + position.PendingToAmazon) / perDay, 1) : null;
 
     private static bool Matches(InventoryPosition p, string search) =>
         p.Sku.Contains(search, StringComparison.OrdinalIgnoreCase)
@@ -227,6 +230,7 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
         HomeStock: items.Sum(i => i.Position.HomeStock),
         AwdOnHand: items.Sum(i => i.Position.AwdOnHand),
         AwdInbound: items.Sum(i => i.Position.AwdInbound),
+        PendingToAmazon: items.Sum(i => i.Position.PendingToAmazon),
         OutOfStock: items.Count(i => i.Status == StockStatus.OutOfStock),
         RestockOverdue: items.Count(i => i.Status == StockStatus.RestockOverdue),
         RestockSoon: items.Count(i => i.Status == StockStatus.RestockSoon),

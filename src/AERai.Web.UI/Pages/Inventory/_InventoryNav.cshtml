@@ -1,0 +1,39 @@
+@using AERai.Web.Application.Inventory
+@using AERai.Web.Application.Marketplaces
+@using AERai.Web.UI.Models
+@model InventoryNavModel
+@inject ICurrentMarketplace CurrentMarketplace
+@inject IPendingSendService PendingSends
+@* The inventory pages as one tab bar, so moving between them never needs a toolbar button. The family
+   in view travels with the tabs that filter by family. Rendered on the server (no script, CSP). *@
+@{
+    var marketplace = (await CurrentMarketplace.GetAsync(Context.RequestAborted)).Current;
+    var pending = await PendingSends.ListAsync(marketplace.MarketplaceId, new PendingSendFilter(), Context.RequestAborted);
+    var family = Model.FamilyId;
+
+    (InventorySection Section, string Page, string Icon, string Label, object? Route)[] tabs =
+    [
+        (InventorySection.Overview, "/Inventory/Index", "box", "Overview", new { family }),
+        (InventorySection.Worksheet, "/Inventory/Worksheet", "grid", "Worksheet", new { family }),
+        (InventorySection.AwaitingAmazon, "/Inventory/HomeStock/Pending", "truck", "Awaiting Amazon", new { family }),
+        (InventorySection.Ledger, "/Inventory/HomeStock/Ledger", "list", "Ledger", new { family }),
+        (InventorySection.Pictures, "/Inventory/Pictures", "image", "Pictures", null),
+    ];
+}
+<nav class="section-tabs no-print" aria-label="Inventory pages">
+    @foreach (var tab in tabs)
+    {
+        var active = tab.Section == Model.Current;
+        <a href="@Url.Page(tab.Page, tab.Route)" class="section-tab @(active ? "active" : null)" aria-current="@(active ? "page" : null)">
+            <partial name="_Icon" model="@tab.Icon" />
+            <span>@tab.Label</span>
+            @if (tab.Section == InventorySection.AwaitingAmazon && pending.Total > 0)
+            {
+                var title = pending.Overdue > 0
+                    ? $"{pending.Total} sends awaiting Amazon in {marketplace.Name}, {pending.Overdue} to check"
+                    : $"{pending.Total} send{(pending.Total == 1 ? "" : "s")} awaiting Amazon in {marketplace.Name}";
+                <span class="section-tab-count @(pending.Overdue > 0 ? "is-warn" : null)" title="@title">@pending.Total</span>
+            }
+        </a>
+    }
+</nav>

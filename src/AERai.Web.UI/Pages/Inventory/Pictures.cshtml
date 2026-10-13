@@ -6,11 +6,7 @@
     var en = System.Globalization.CultureInfo.GetCultureInfo("en-US");
     var c = Model.Coverage;
 }
-<nav class="crumbs" aria-label="Breadcrumb">
-    <a asp-page="Index">Inventory</a>
-    <span aria-hidden="true">/</span>
-    <span>Pictures</span>
-</nav>
+<partial name="_InventoryNav" model="new AERai.Web.UI.Models.InventoryNavModel(AERai.Web.UI.Models.InventorySection.Pictures)" />
 
 <div class="row g-3 mb-3">
     <div class="col-6 col-xl-3">

@@ -61,7 +61,7 @@ internal sealed class FakeHomeStockLedgerRepository : IHomeStockLedgerRepository
     }
 
     public Task<(IReadOnlyList<HomeStockCountChange> Applied, IReadOnlyList<string> Stale)> ApplyCountsAsync(
-        string marketplaceId, IReadOnlyList<HomeStockCountChange> changes, HomeStockMovementType increaseType, HomeStockMovementType decreaseType, HomeStockLedgerWrite template, CancellationToken cancellationToken)
+        string marketplaceId, IReadOnlyList<HomeStockCountChange> changes, HomeStockMovementType increaseType, HomeStockMovementType decreaseType, HomeStockLedgerWrite template, IReadOnlyDictionary<string, AmazonBaseline> amazonBaselines, CancellationToken cancellationToken)
     {
         var applied = new List<HomeStockCountChange>();
         var stale = new List<string>();
@@ -73,7 +73,9 @@ internal sealed class FakeHomeStockLedgerRepository : IHomeStockLedgerRepository
                 continue;
             }
 
-            Entries.Add(template with { Sku = change.Sku, Type = change.Difference > 0 ? increaseType : decreaseType, Units = change.Difference });
+            var type = change.Difference > 0 ? increaseType : decreaseType;
+            var baseline = type == HomeStockMovementType.ShippedToAmazon ? amazonBaselines.GetValueOrDefault(change.Sku) ?? AmazonBaseline.Of(null) : null;
+            Entries.Add(template with { Sku = change.Sku, Type = type, Units = change.Difference, AmazonBaseline = baseline });
             applied.Add(change);
         }
 

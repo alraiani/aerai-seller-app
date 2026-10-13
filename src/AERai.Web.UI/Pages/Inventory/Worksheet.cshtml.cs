@@ -43,6 +43,9 @@ public sealed class WorksheetModel(IInventoryService inventory, IInventoryItemSe
     /// <summary>The worksheet, or <see langword="null"/> when there is no family to show.</summary>
     public InventoryWorksheet? Sheet { get; private set; }
 
+    /// <summary>A send still awaiting Amazon after this many days is flagged.</summary>
+    public int PendingExpiryDays => options.Value.PendingSendExpiryDays;
+
     /// <summary>Restock actions due within this many days are highlighted.</summary>
     public int SoonDays => options.Value.AlertLeadDays;
 
@@ -147,7 +150,7 @@ public sealed class WorksheetModel(IInventoryService inventory, IInventoryItemSe
         var done = new List<string>();
         if (shipped is { Applied: > 0 })
         {
-            done.Add($"Logged {shipped.UnitsOut:N0} unit{(shipped.UnitsOut == 1 ? "" : "s")} sent to Amazon for {shipped.Applied:N0} SKU{(shipped.Applied == 1 ? "" : "s")}.");
+            done.Add($"Logged {shipped.UnitsOut:N0} unit{(shipped.UnitsOut == 1 ? "" : "s")} sent to Amazon for {shipped.Applied:N0} SKU{(shipped.Applied == 1 ? "" : "s")}; they count as awaiting Amazon until its numbers show them.");
         }
 
         if (counts.Count > 0)

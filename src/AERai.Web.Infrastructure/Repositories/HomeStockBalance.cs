@@ -33,6 +33,8 @@ internal static class HomeStockBalance
             ReversesId = write.ReversesId,
             CreatedAt = write.CreatedAt,
             CreatedBy = write.CreatedBy,
+            AmazonBaselineUnits = write.AmazonBaseline?.Units,
+            AmazonBaselineAt = write.AmazonBaseline?.ReceivedAt,
         };
         db.HomeStockMovements.Add(movement);
 

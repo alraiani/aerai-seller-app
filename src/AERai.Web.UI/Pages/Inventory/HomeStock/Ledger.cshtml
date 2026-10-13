@@ -8,16 +8,7 @@
     var rows = Model.Entries.Items;
 }
 
-<nav class="crumbs" aria-label="Breadcrumb">
-    <a asp-page="../Index">Inventory</a>
-    <span aria-hidden="true">/</span>
-    @if (Model.FamilyId is not null)
-    {
-        <a asp-page="../Worksheet" asp-route-family="@Model.FamilyId">Worksheet</a>
-        <span aria-hidden="true">/</span>
-    }
-    <span>Home-stock ledger</span>
-</nav>
+<partial name="_InventoryNav" model="new AERai.Web.UI.Models.InventoryNavModel(AERai.Web.UI.Models.InventorySection.Ledger, Model.FamilyId)" />
 
 @* ---------- Filters ---------- *@
 <div class="list-toolbar mb-3">
