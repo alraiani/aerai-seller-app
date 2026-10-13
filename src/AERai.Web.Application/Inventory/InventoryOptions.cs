@@ -36,6 +36,13 @@ public sealed class InventoryOptions
     public int AlertLeadDays { get; set; } = 7;
 
     /// <summary>
+    /// A send from home stock that Amazon still doesn't show after this many days is flagged for
+    /// someone to check (it is never dropped on its own; an Operator marks it reconciled or cancels it).
+    /// </summary>
+    [Range(1, 90)]
+    public int PendingSendExpiryDays { get; set; } = 7;
+
+    /// <summary>
     /// Longest gap between background re-evaluations of stock alerts. Alerts already refresh whenever
     /// their data changes; this only catches statuses that change with the passing of time, so a day
     /// is enough and lets the serverless database pause in between.

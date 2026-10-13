@@ -106,6 +106,7 @@ public sealed class HomeStockLedgerTests(SqlDatabaseFixture fixture) : IClassFix
             HomeStockMovementType.ReceivedFromSupplier,
             HomeStockMovementType.ShippedToAmazon,
             Write(string.Empty, HomeStockMovementType.CountCorrection, 0),
+            new Dictionary<string, AmazonBaseline> { ["T-CNT-DOWN"] = new(12, null) },
             CancellationToken.None);
 
         Assert.Equal(["T-CNT-UP", "T-CNT-DOWN"], applied.Select(a => a.Sku));

@@ -11,6 +11,9 @@ namespace AERai.Web.Application.Inventory;
 /// missed. Supplier orders are planned separately from <em>all</em> stock (Amazon + home): the
 /// reorder must land before everything runs out, so its deadline works back through supplier, prep,
 /// transit, and safety, and it orders enough to cover the target days once it arrives.
+/// Units already sent from home that Amazon's numbers don't show yet ("pending to Amazon") count as
+/// Amazon stock, and come off Amazon's recommendation too (it was made before the send), so a send
+/// isn't suggested again while Amazon and our sync catch up.
 /// </remarks>
 public static class RestockPlanner
 {
@@ -21,8 +24,9 @@ public static class RestockPlanner
     /// <param name="homeStock">Units on hand outside Amazon.</param>
     /// <param name="leadTimes">The SKU's effective lead times.</param>
     /// <param name="amazon">Amazon's recommendation, if its restock report covers the SKU.</param>
+    /// <param name="pendingToAmazon">Units sent from home that Amazon's numbers don't show yet.</param>
     /// <returns>The plan, or <see langword="null"/> when the sales rate is unknown or zero.</returns>
-    public static RestockPlan? Plan(DateOnly today, decimal? dailyVelocity, int sellThroughStock, int homeStock, LeadTimes leadTimes, AmazonRecommendation? amazon = null)
+    public static RestockPlan? Plan(DateOnly today, decimal? dailyVelocity, int sellThroughStock, int homeStock, LeadTimes leadTimes, AmazonRecommendation? amazon = null, int pendingToAmazon = 0)
     {
         ArgumentNullException.ThrowIfNull(leadTimes);
 
@@ -31,13 +35,14 @@ public static class RestockPlanner
             return null;
         }
 
-        var atAmazon = Math.Max(0, sellThroughStock);
+        var pending = Math.Max(0, pendingToAmazon);
+        var atAmazon = Math.Max(0, sellThroughStock) + pending;
         var atHome = Math.Max(0, homeStock);
 
         var stockout = today.AddDays(DaysOfStock(atAmazon, perDay));
         var needed = Math.Max(0, Units(perDay * leadTimes.TargetStockDays) - atAmazon);
 
-        var amazonUnits = amazon?.Quantity ?? 0;
+        var amazonUnits = Math.Max(0, (amazon?.Quantity ?? 0) - pending);
         var wanted = Math.Max(needed, amazonUnits);
         var send = Math.Min(wanted, atHome);
         DateOnly? sendBy = null;

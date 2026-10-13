@@ -83,10 +83,12 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
         HomeStockMovementType increaseType,
         HomeStockMovementType decreaseType,
         HomeStockLedgerWrite template,
+        IReadOnlyDictionary<string, AmazonBaseline> amazonBaselines,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(changes);
         ArgumentNullException.ThrowIfNull(template);
+        ArgumentNullException.ThrowIfNull(amazonBaselines);
 
         var strategy = dbContext.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
@@ -121,7 +123,8 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
                 }
 
                 var type = change.Difference > 0 ? increaseType : decreaseType;
-                HomeStockBalance.Apply(dbContext, row, template with { Sku = change.Sku, Type = type, Units = change.Difference });
+                var baseline = type == HomeStockMovementType.ShippedToAmazon ? amazonBaselines.GetValueOrDefault(change.Sku) ?? AmazonBaseline.Of(null) : null;
+                HomeStockBalance.Apply(dbContext, row, template with { Sku = change.Sku, Type = type, Units = change.Difference, AmazonBaseline = baseline });
                 applied.Add(change);
             }
 

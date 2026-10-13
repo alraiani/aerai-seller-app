@@ -92,6 +92,21 @@ public sealed class InventoryPosition
     /// </summary>
     public int AwdReplenishment { get; set; }
 
+    /// <summary>
+    /// Units sent from home stock (logged as Shipped to Amazon) that Amazon's numbers don't show yet.
+    /// They count as Amazon stock for planning until reconciled, so a send isn't suggested twice.
+    /// </summary>
+    public int PendingToAmazon { get; set; }
+
+    /// <summary>When the oldest still-pending send was logged, or <see langword="null"/> when none is pending.</summary>
+    public DateTimeOffset? OldestPendingAt { get; set; }
+
+    /// <summary>
+    /// When the data behind the SKU's latest main snapshot was received, or <see langword="null"/> when it
+    /// has none; a send logged after this can't be in that snapshot yet.
+    /// </summary>
+    public DateTimeOffset? SnapshotReceivedAt { get; set; }
+
     /// <summary>All inbound units, whatever their stage.</summary>
     public int Inbound => InboundWorking + InboundShipped + InboundReceiving + InboundUnsplit;
 
@@ -110,8 +125,8 @@ public sealed class InventoryPosition
     /// <summary>Units in AWD or on their way into it (excludes <see cref="AwdReplenishment"/>).</summary>
     public int AwdTotal => AwdOnHand + AwdInbound;
 
-    /// <summary>Every unit the seller owns: FBA, AWD, and home stock.</summary>
-    public int OverallTotal => AmazonTotal + AwdTotal + HomeStock;
+    /// <summary>Every unit the seller owns: FBA, AWD, home stock, and units sent that Amazon doesn't show yet.</summary>
+    public int OverallTotal => AmazonTotal + AwdTotal + HomeStock + PendingToAmazon;
 
     /// <summary>
     /// Units that will become (or already are) sellable without action: available, inbound, and

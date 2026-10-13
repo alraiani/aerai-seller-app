@@ -24,10 +24,17 @@ internal sealed class HomeStockMovementConfiguration : IEntityTypeConfiguration<
         builder.Property(m => m.Reference).HasMaxLength(100);
         builder.Property(m => m.Note).HasMaxLength(500);
         builder.Property(m => m.CreatedBy).HasMaxLength(256);
+        builder.Property(m => m.ReconciledBy).HasMaxLength(256);
 
         // The ledger page lists a marketplace's entries newest first, optionally for one SKU.
         builder.HasIndex(m => new { m.MarketplaceId, m.Sku, m.Id });
         builder.HasIndex(m => new { m.MarketplaceId, m.OccurredAt });
+
+        // Sends still pending to Amazon: read by the inventory view on every page load and by the
+        // reconciler after every promotion, while closed sends pile up behind them.
+        builder.HasIndex(m => new { m.MarketplaceId, m.Sku })
+            .HasDatabaseName("IX_HomeStockMovement_PendingToAmazon")
+            .HasFilter("[Type] = N'ShippedToAmazon' AND [Units] < 0 AND [ReconciledAt] IS NULL");
 
         // One reversal per entry, so an entry can't be undone twice.
         builder.HasIndex(m => m.ReversesId).IsUnique().HasFilter("[ReversesId] IS NOT NULL");

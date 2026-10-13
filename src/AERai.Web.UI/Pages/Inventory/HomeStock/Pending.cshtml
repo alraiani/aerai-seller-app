@@ -1,0 +1,61 @@
+@page
+@using System.Globalization
+@using AERai.Web.Application.Inventory
+@model AERai.Web.UI.Pages.Inventory.HomeStock.PendingModel
+@{
+    ViewData["Title"] = "Awaiting Amazon";
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var panel = Model.Panel;
+    var list = Model.List;
+
+    // View links keep the family and search, so switching views never loses them.
+    string ViewLink(PendingSendView view) => Url.Page("Pending", new { family = Model.FamilyId, q = Model.Search, view = view == PendingSendView.All ? null : view.ToString() })!;
+}
+
+<partial name="_InventoryNav" model="new AERai.Web.UI.Models.InventoryNavModel(AERai.Web.UI.Models.InventorySection.AwaitingAmazon, Model.FamilyId)" />
+
+@* ---------- Search and filters ---------- *@
+<div class="list-toolbar mb-3">
+    <form method="get" class="filters" data-autosubmit-form role="search">
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search SKU, name, shipment id…" aria-label="Search sends awaiting Amazon" />
+        </div>
+        <select name="family" class="form-select form-select-sm" aria-label="Family">
+            <option value="">All families</option>
+            @foreach (var f in Model.Families)
+            {
+                <option value="@f.Id" selected="@(Model.FamilyId == f.Id)">@f.Name</option>
+            }
+        </select>
+        @if (Model.View != PendingSendView.All)
+        {
+            <input type="hidden" name="view" value="@Model.View" />
+        }
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
+        @if (Model.IsFiltered || Model.FamilyId is not null)
+        {
+            <a asp-page="Pending" class="btn btn-sm btn-link">Clear filters</a>
+        }
+    </form>
+    <div class="card-toolbar-group">
+        <a asp-page="Ledger" asp-route-family="@Model.FamilyId" asp-route-type="ShippedToAmazon" class="btn btn-sm btn-soft"
+           data-bs-toggle="tooltip" data-bs-title="Every send to Amazon, including ones Amazon already shows"><partial name="_Icon" model='"history"' /> Send history</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@panel.Items.Count.ToString("N0", en) send@(panel.Items.Count == 1 ? "" : "s")</span>
+            <span class="text-muted-token fw-normal">@panel.Units.ToString("N0", en) units in @Model.Marketplace.Name</span>
+            <partial name="_Tip" model='$"Units sent from home stock that Amazon’s numbers don’t show yet. They count as Amazon stock so the Worksheet doesn’t suggest sending them again, and clear on their own once an inventory sync shows them (a send with an FBA shipment id is matched by its inbound units). After {panel.ExpiryDays} days a send is flagged for someone to check."' />
+        </span>
+        <nav class="segmented segmented-sm" aria-label="Which sends">
+            <a href="@ViewLink(PendingSendView.All)" class="@(Model.View == PendingSendView.All ? "active" : "")">All <span class="segmented-count">@list.Total</span></a>
+            <a href="@ViewLink(PendingSendView.NeedsShipmentId)" class="@(Model.View == PendingSendView.NeedsShipmentId ? "active" : "")">Needs shipment id <span class="segmented-count">@list.NeedsShipmentId</span></a>
+            <a href="@ViewLink(PendingSendView.Overdue)" class="@(Model.View == PendingSendView.Overdue ? "active" : "") @(list.Overdue > 0 ? "has-warn" : "")">To check <span class="segmented-count">@list.Overdue</span></a>
+        </nav>
+    </div>
+    <partial name="_PendingSends" model="panel" />
+</div>

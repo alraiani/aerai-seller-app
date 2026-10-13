@@ -10,6 +10,11 @@
             && (except is null || !currentPath.StartsWith(except, StringComparison.OrdinalIgnoreCase));
 
     var operationsCurrent = IsActive("/Inventory") || IsActive("/Orders") || IsActive("/Products");
+
+    // Inventory's sub-pages have their own links (same order as the tab bar on those pages); every other
+    // inventory page (Edit, bulk home stock, uploads, families) keeps the Inventory link current.
+    string[] inventorySubPages = ["/Inventory/Worksheet", "/Inventory/HomeStock/Pending", "/Inventory/HomeStock/Ledger", "/Inventory/Pictures"];
+    var inventoryOverviewCurrent = IsActive("/Inventory") && !inventorySubPages.Any(p => IsActive(p));
     var bookkeepingCurrent = IsActive("/Settlements") || IsActive("/Bookkeeping");
 
     // The label stays in the markup in rail mode (only visually hidden) so screen readers still read it;
@@ -68,13 +73,16 @@
             <div class="nav-group-items">
                 @* Inventory keeps its own link; the chevron beside it folds its sub-pages away. *@
                 <div class="nav-subgroup">
-                    @{ await NavLink("/Inventory/Index", "box", "Inventory", IsActive("/Inventory", except: "/Inventory/Worksheet")); }
+                    @{ await NavLink("/Inventory/Index", "box", "Inventory", inventoryOverviewCurrent); }
                     <details data-nav-group="inventory" open>
                         <summary class="nav-sub-toggle" data-bs-title="Inventory pages">
                             <partial name="_Icon" model="@("chevron-down")" />
                             <span class="visually-hidden">Inventory pages</span>
                         </summary>
                         @{ await NavLink("/Inventory/Worksheet", "grid", "Worksheet", IsActive("/Inventory/Worksheet"), "nav-sub"); }
+                        @{ await NavLink("/Inventory/HomeStock/Pending", "truck", "Awaiting Amazon", IsActive("/Inventory/HomeStock/Pending"), "nav-sub"); }
+                        @{ await NavLink("/Inventory/HomeStock/Ledger", "list", "Ledger", IsActive("/Inventory/HomeStock/Ledger"), "nav-sub"); }
+                        @{ await NavLink("/Inventory/Pictures", "image", "Pictures", IsActive("/Inventory/Pictures"), "nav-sub"); }
                     </details>
                 </div>
                 @{ await NavLink("/Orders/Index", "cart", "Orders", IsActive("/Orders")); }

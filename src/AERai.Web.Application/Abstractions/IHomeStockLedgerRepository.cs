@@ -35,6 +35,10 @@ public interface IHomeStockLedgerRepository
     /// <param name="increaseType">Movement type for increases.</param>
     /// <param name="decreaseType">Movement type for decreases.</param>
     /// <param name="template">Reference, note, dates, and user applied to every entry (its SKU, type, and units are ignored).</param>
+    /// <param name="amazonBaselines">
+    /// Each SKU's FBA stock now, stored on decreases logged as <see cref="HomeStockMovementType.ShippedToAmazon"/>
+    /// (see <see cref="HomeStockMovement.AmazonBaselineUnits"/>); a SKU missing from it had nothing at Amazon.
+    /// </param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The changes applied, and the SKUs skipped as stale or unknown.</returns>
     Task<(IReadOnlyList<HomeStockCountChange> Applied, IReadOnlyList<string> Stale)> ApplyCountsAsync(
@@ -43,6 +47,7 @@ public interface IHomeStockLedgerRepository
         HomeStockMovementType increaseType,
         HomeStockMovementType decreaseType,
         HomeStockLedgerWrite template,
+        IReadOnlyDictionary<string, AmazonBaseline> amazonBaselines,
         CancellationToken cancellationToken);
 
     /// <summary>One page of a marketplace's entries, newest first.</summary>
