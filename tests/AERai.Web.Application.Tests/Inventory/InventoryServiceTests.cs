@@ -206,6 +206,36 @@ public sealed class InventoryServiceTests
         Assert.Equal((4, 1, 1, 1, 2), (overview.Totals.SkuCount, overview.Totals.OutOfStock, overview.Totals.RestockOverdue, overview.Totals.RestockSoon, overview.Totals.NeedsAction));
     }
 
+    [Fact]
+    public async Task GetOverviewAsync_AvailableTotalAddsFbaAvailableAndAwdOnHand()
+    {
+        var awdDate = new DateOnly(2026, 10, 4);
+        Stock("BOTH", available: 10, p => { p.AwdOnHand = 50; p.AwdInbound = 7; p.InboundWorking = 3; p.AwdSnapshotDate = awdDate; });
+        Stock("FBA-ONLY", available: 5, p => p.AwdSnapshotDate = awdDate);
+
+        var overview = await CreateService().GetOverviewAsync(Us, new PageRequest(), InventoryFilter.Default, CancellationToken.None);
+
+        var both = overview.Items.Items.Single(i => i.Sku == "BOTH");
+        Assert.Equal(60, both.Position.AvailableTotal);  // inbound to FBA or AWD is not available yet
+        Assert.Equal((15, 50, 65, awdDate), (overview.Totals.Available, overview.Totals.AwdOnHand, overview.Totals.AvailableTotal, overview.Totals.AwdSnapshotDate));
+    }
+
+    [Theory]
+    [InlineData(InventorySort.AwdOnHand, false, new[] { "AWD", "MIXED", "FBA" })]
+    [InlineData(InventorySort.AwdOnHand, true, new[] { "FBA", "MIXED", "AWD" })]
+    [InlineData(InventorySort.AvailableTotal, false, new[] { "MIXED", "AWD", "FBA" })]
+    [InlineData(InventorySort.AvailableTotal, true, new[] { "FBA", "AWD", "MIXED" })]
+    public async Task GetOverviewAsync_SortsByAwdAndTotalAvailable(InventorySort sort, bool descending, string[] expected)
+    {
+        Stock("FBA", available: 40);
+        Stock("AWD", available: 0, p => p.AwdOnHand = 60);
+        Stock("MIXED", available: 30, p => p.AwdOnHand = 50);
+
+        var overview = await CreateService().GetOverviewAsync(Us, new PageRequest(), new InventoryFilter(Sort: sort, Descending: descending), CancellationToken.None);
+
+        Assert.Equal(expected, overview.Items.Items.Select(i => i.Sku));
+    }
+
     [Theory]
     [InlineData(InventorySort.Sold30d, false, new[] { "FAST", "SLOW", "NONE" })]
     [InlineData(InventorySort.Sold30d, true, new[] { "NONE", "SLOW", "FAST" })]

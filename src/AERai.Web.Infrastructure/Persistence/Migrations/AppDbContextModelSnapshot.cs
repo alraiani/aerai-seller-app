@@ -1281,6 +1281,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<int>("AwdReplenishment")
                         .HasColumnType("int");
 
+                    b.Property<DateOnly?>("AwdSnapshotDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("Color")
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");

@@ -93,6 +93,12 @@ public sealed class InventoryPosition
     public int AwdReplenishment { get; set; }
 
     /// <summary>
+    /// Date of the marketplace's latest AWD snapshot, which the AWD columns come from (the same for every
+    /// SKU of the marketplace), or <see langword="null"/> when AWD has never been synced.
+    /// </summary>
+    public DateOnly? AwdSnapshotDate { get; set; }
+
+    /// <summary>
     /// Units sent from home stock (logged as Shipped to Amazon) that Amazon's numbers don't show yet.
     /// They count as Amazon stock for planning until reconciled, so a send isn't suggested twice.
     /// </summary>
@@ -121,6 +127,12 @@ public sealed class InventoryPosition
 
     /// <summary>Every unit Amazon reports in the FBA network for the SKU, in any state.</summary>
     public int AmazonTotal => Available + Inbound + Reserved + Unfulfillable;
+
+    /// <summary>
+    /// Units sitting at Amazon ready or stored: sellable in FBA plus everything on hand in AWD (including
+    /// units AWD has reserved). Inbound, reserved FBA, and unfulfillable units are not counted.
+    /// </summary>
+    public int AvailableTotal => Available + AwdOnHand;
 
     /// <summary>Units in AWD or on their way into it (excludes <see cref="AwdReplenishment"/>).</summary>
     public int AwdTotal => AwdOnHand + AwdInbound;

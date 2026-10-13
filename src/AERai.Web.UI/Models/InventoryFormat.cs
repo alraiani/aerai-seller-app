@@ -29,7 +29,9 @@ public static class InventoryFormat
         (InventorySort.DaysOfInventory, "Sort: Days of inventory"),
         (InventorySort.Sold30d, "Sort: Best sellers (30d)"),
         (InventorySort.Sold90d, "Sort: Best sellers (90d)"),
-        (InventorySort.Available, "Sort: Most available"),
+        (InventorySort.Available, "Sort: Most available in FBA"),
+        (InventorySort.AwdOnHand, "Sort: Most available in AWD"),
+        (InventorySort.AvailableTotal, "Sort: Most available in total"),
         (InventorySort.Sku, "Sort: SKU"),
     ];
 
