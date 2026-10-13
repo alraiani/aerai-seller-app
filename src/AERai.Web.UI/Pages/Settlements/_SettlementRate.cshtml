@@ -1,0 +1,83 @@
+@using System.Globalization
+@using AERai.Web.Application.Settlements
+@using AERai.Web.UI.Models
+@model SettlementRatePanel
+@* Conversion banner for a settlement paid in another currency: how it converts, the currency switch, and the Operator's adjust form. *@
+@if (Model.IsForeign)
+{
+    var s = Model.Settlement;
+    var origin = SettlementOrigin.FromCurrency(s.Currency);
+    var rate = Model.Rate?.Rate;
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
+                <div>
+                    <div class="mb-1">
+                        <span class="pill pill-info">@origin</span>
+                        Paid in <strong>@s.Currency</strong>: <strong>@SettlementFormat.Money(s.Net, s.Currency)</strong>
+                        @if (s.ExchangeRate is { } effective && s.HomeNet is { } homeNet)
+                        {
+                            <span>× @SettlementFormat.Rate(effective) = <strong>@SettlementFormat.Money(homeNet, s.HomeCurrency)</strong></span>
+                        }
+                    </div>
+                    <div class="small text-muted-token">
+                        @if (s.ExchangeRate is null)
+                        {
+                            <span class="pill pill-warn">No rate yet</span>
+                            <span>Amounts are shown as paid until the daily rate for the deposit date (@(s.DepositDate?.ToString("MMM d, yyyy", CultureInfo.InvariantCulture) ?? "unknown")) is fetched or a rate is entered.</span>
+                        }
+                        else if (s.RateSource == "Manual")
+                        {
+                            <span>Adjusted rate@(rate?.ManualHomeAmount is { } received ? $", from {SettlementFormat.Money(received, s.HomeCurrency)} received" : "")@(rate?.ManualBy is { } by ? $", set by {by}" : "")@(rate?.ManualAt is { } at ? $" on {at.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)}" : "").</span>
+                            @if (rate?.MarketRate is { } market)
+                            {
+                                <span>The daily rate was @SettlementFormat.Rate(market) (@rate.MarketSource, @rate.MarketRateDate?.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)).</span>
+                            }
+                        }
+                        else
+                        {
+                            <span>Daily rate@(rate is null ? "" : $" ({rate.MarketSource}, {rate.MarketRateDate?.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)})") for the deposit date @(s.DepositDate?.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)).</span>
+                        }
+                    </div>
+                </div>
+                @if (s.ExchangeRate is not null)
+                {
+                    <nav class="segmented" aria-label="Currency">
+                        <a href="@Model.HomeLink" class="@(Model.Amounts == SettlementAmounts.Home ? "active" : "")">In @s.HomeCurrency</a>
+                        <a href="@Model.OriginalLink" class="@(Model.Amounts == SettlementAmounts.Original ? "active" : "")">As paid (@s.Currency)</a>
+                    </nav>
+                }
+            </div>
+            @if (Model.CanEdit)
+            {
+                <details class="mt-2">
+                    <summary class="small">Adjust the rate to match the bank</summary>
+                    @if (Model.Rate?.IsExported == true)
+                    {
+                        <div class="small text-muted-token mt-1">This settlement was already exported to QuickBooks; export it again after changing the rate.</div>
+                    }
+                    <form method="post" asp-page="Rates" asp-page-handler="Set" asp-route-id="@s.SettlementId" class="row g-2 align-items-end mt-1">
+                        <div class="col-auto">
+                            <label class="form-label small mb-0" for="rate-received">@s.HomeCurrency received</label>
+                            <input id="rate-received" name="received" type="number" step="0.01" class="form-control form-control-sm" placeholder="@(s.HomeNet?.ToString("0.00", CultureInfo.InvariantCulture))" />
+                        </div>
+                        <div class="col-auto small text-muted-token pb-1">or</div>
+                        <div class="col-auto">
+                            <label class="form-label small mb-0" for="rate-value">Rate (1 @s.Currency in @s.HomeCurrency)</label>
+                            <input id="rate-value" name="rate" type="number" step="any" min="0" class="form-control form-control-sm" placeholder="@(s.ExchangeRate is { } current ? SettlementFormat.Rate(current) : "")" />
+                        </div>
+                        <div class="col-auto">
+                            <button type="submit" class="btn btn-sm btn-primary">Save rate</button>
+                        </div>
+                    </form>
+                    @if (s.RateSource == "Manual")
+                    {
+                        <form method="post" asp-page="Rates" asp-page-handler="Reset" asp-route-id="@s.SettlementId" class="mt-2" data-confirm="Go back to the daily rate for this settlement?">
+                            <button type="submit" class="btn btn-sm btn-link px-0">Reset to the daily rate</button>
+                        </form>
+                    }
+                </details>
+            }
+        </div>
+    </div>
+}

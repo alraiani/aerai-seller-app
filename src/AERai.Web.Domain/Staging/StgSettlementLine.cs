@@ -42,6 +42,9 @@ public sealed class StgSettlementLine : StagingRow
     /// <summary><c>amount</c> (signed; fees are negative).</summary>
     public string? Amount { get; set; }
 
+    /// <summary><c>deposit-date</c> (header row only).</summary>
+    public string? DepositDate { get; set; }
+
     /// <summary><c>currency</c>.</summary>
     public string? Currency { get; set; }
 }

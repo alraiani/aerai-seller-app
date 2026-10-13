@@ -661,12 +661,13 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     {
         var schedule = context.Schedule;
         var source = ToImportSource(schedule.ReportType);
+        var marketplaceId = StagingMarketplaceId(context);
         var displayName = string.Create(CultureInfo.InvariantCulture, $"{schedule.ReportType}-{reportId}.tsv");
         var path = RawFilePaths.Build(source, _clock.GetUtcNow(), Guid.NewGuid(), displayName);
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["source"] = source.ToString(),
-            ["marketplaceid"] = schedule.MarketplaceId,
+            ["marketplaceid"] = marketplaceId,
             ["amazonreportid"] = reportId,
             ["syncrunid"] = context.Run.Id.ToString(CultureInfo.InvariantCulture),
             ["uploadedby"] = context.Run.TriggeredBy,
@@ -680,7 +681,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         }
 
         var staged = await _staging.StageRawFileAsync(
-            new StageRawFileCommand(source, schedule.MarketplaceId, path, sha256, displayName, context.Run.TriggeredBy), cancellationToken).ConfigureAwait(false);
+            new StageRawFileCommand(source, marketplaceId, path, sha256, displayName, context.Run.TriggeredBy), cancellationToken).ConfigureAwait(false);
 
         if (staged.IsFailure)
         {
@@ -715,6 +716,21 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             ? $"Batch {batchId}: {promoted.Value.PromotedRowCount:N0} promoted, {promoted.Value.RejectedRowCount:N0} rejected{SkippedNote(promoted.Value)}."
             : $"Batch {batchId} staged but promotion failed: {promoted.Error}");
     }
+
+    /// <summary>
+    /// The marketplace a downloaded report is staged under: the schedule's, except that settlements go to
+    /// the marketplace that keeps the schedule marketplace's payouts.
+    /// </summary>
+    /// <remarks>
+    /// Amazon ignores the marketplace when listing settlement reports and returns every payout of the
+    /// region (USD, CAD, and MXN in North America) whichever marketplace asks. They are all kept under the
+    /// United States (Canada's <see cref="Marketplace.SettlementMarketplaceId"/>), so it never depends on
+    /// which schedule happened to list a report first; each is converted into USD for reporting.
+    /// </remarks>
+    private static string StagingMarketplaceId(RunContext context) =>
+        context.Schedule.ReportType == AmazonReportType.Settlements && context.Marketplace.SettlementMarketplaceId is { } settlementMarketplaceId
+            ? settlementMarketplaceId
+            : context.Schedule.MarketplaceId;
 
     /// <summary>Each report type lands in the staging table that matches its native layout.</summary>
     /// <summary>The schedule's marketplace, which must still exist and be active to be pulled.</summary>

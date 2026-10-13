@@ -38,12 +38,14 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
 
         var query = await FilterSettlementsAsync(marketplaceId, request, filter, cancellationToken).ConfigureAwait(false);
         var descending = filter.Sort.IsDescendingByDefault() != filter.Descending;
+        // The list shows converted amounts, so it sorts by them; a settlement without a rate yet sorts
+        // by what it was paid.
         var ordered = filter.Sort switch
         {
-            SettlementSort.Sales => query.OrderBy(s => s.Sales, descending),
-            SettlementSort.Fees => query.OrderBy(s => s.Fees, descending),
-            SettlementSort.Refunds => query.OrderBy(s => s.Refunds, descending),
-            SettlementSort.Net => query.OrderBy(s => s.Net, descending),
+            SettlementSort.Sales => query.OrderBy(s => s.HomeSales ?? s.Sales, descending),
+            SettlementSort.Fees => query.OrderBy(s => s.HomeFees ?? s.Fees, descending),
+            SettlementSort.Refunds => query.OrderBy(s => s.HomeRefunds ?? s.Refunds, descending),
+            SettlementSort.Net => query.OrderBy(s => s.HomeNet ?? s.Net, descending),
             _ => query.OrderBy(s => s.PeriodEnd, descending),
         };
 
@@ -55,17 +57,40 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<SettlementTotals>> GetSettlementTotalsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken)
+    public async Task<SettlementTotals?> GetSettlementTotalsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        // Every row of a marketplace has the same HomeCurrency, so this is one group (or none).
         var query = await FilterSettlementsAsync(marketplaceId, request, filter ?? SettlementListFilter.Default, cancellationToken).ConfigureAwait(false);
-        var totals = await query
+        return await query
+            .GroupBy(s => s.HomeCurrency)
+            .Select(g => new SettlementTotals(
+                g.Key,
+                g.Count(s => s.HomeNet != null),
+                g.Count(s => s.HomeNet == null),
+                g.Sum(s => s.HomeSales ?? 0),
+                g.Sum(s => s.HomeFees ?? 0),
+                g.Sum(s => s.HomeRefunds ?? 0),
+                g.Sum(s => s.HomeOther ?? 0),
+                g.Sum(s => s.HomeNet ?? 0)))
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<string>> GetSettlementCurrenciesAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var query = await FilterSettlementsAsync(marketplaceId, request, (filter ?? SettlementListFilter.Default) with { Currency = null }, cancellationToken).ConfigureAwait(false);
+        var currencies = await query
+            .Where(s => s.Currency != null)
             .GroupBy(s => s.Currency)
-            .Select(g => new SettlementTotals(g.Key, g.Count(), g.Sum(s => s.Sales), g.Sum(s => s.Fees), g.Sum(s => s.Refunds), g.Sum(s => s.Other), g.Sum(s => s.Net)))
+            .Select(g => new { Currency = g.Key!, Count = g.Count() })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        return totals.OrderByDescending(t => t.Count).ThenBy(t => t.Currency, StringComparer.Ordinal).ToList();
+        return currencies.OrderByDescending(c => c.Count).ThenBy(c => c.Currency, StringComparer.Ordinal).Select(c => c.Currency).ToList();
     }
 
     /// <summary>The settlements a list search, period range, and currency select, unordered.</summary>
@@ -151,16 +176,18 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
                 || (r.Title != null && r.Title.Contains(search)));
         }
 
+        // Converted columns are NULL only while the settlement has no rate, and then it is shown as paid.
+        var home = filter.Amounts == SettlementAmounts.Home;
         var descending = filter.Sort.IsDescendingByDefault() != filter.Descending;
         var ordered = filter.Sort switch
         {
             SettlementSkuSort.Sku => query.OrderBy(r => r.Sku, descending),
             SettlementSkuSort.Units => query.OrderBy(r => r.Units, descending),
             SettlementSkuSort.Orders => query.OrderBy(r => r.OrderCount, descending),
-            SettlementSkuSort.Fees => query.OrderBy(r => r.Fees, descending),
-            SettlementSkuSort.Refunds => query.OrderBy(r => r.Refunds, descending),
-            SettlementSkuSort.Net => query.OrderBy(r => r.Net, descending),
-            _ => query.OrderBy(r => r.Sales, descending),
+            SettlementSkuSort.Fees => query.OrderBy(r => home ? r.HomeFees ?? r.Fees : r.Fees, descending),
+            SettlementSkuSort.Refunds => query.OrderBy(r => home ? r.HomeRefunds ?? r.Refunds : r.Refunds, descending),
+            SettlementSkuSort.Net => query.OrderBy(r => home ? r.HomeNet ?? r.Net : r.Net, descending),
+            _ => query.OrderBy(r => home ? r.HomeSales ?? r.Sales : r.Sales, descending),
         };
 
         return ordered
@@ -190,6 +217,7 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
         // always add up to its total.
         var search = request.SafeSearch;
         var bucket = filter.Bucket;
+        var home = filter.Amounts == SettlementAmounts.Home;
         var groups = lines
             .GroupBy(l => new { l.AmazonOrderId, NoOrderType = l.AmazonOrderId == null ? l.TransactionType : null })
             .Select(g => new GroupRow
@@ -198,11 +226,11 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
                 TransactionType = g.Key.NoOrderType,
                 FirstPosted = g.Min(l => l.PostedDate),
                 Units = g.Sum(l => l.Units),
-                Amount = g.Sum(l => l.Amount),
-                Sales = g.Sum(l => l.Sales),
-                Fees = g.Sum(l => l.Fees),
-                Refunds = g.Sum(l => l.Refunds),
-                Other = g.Sum(l => l.Other),
+                Amount = g.Sum(l => home ? l.HomeAmount ?? l.Amount : l.Amount),
+                Sales = g.Sum(l => home ? l.HomeSales ?? l.Sales : l.Sales),
+                Fees = g.Sum(l => home ? l.HomeFees ?? l.Fees : l.Fees),
+                Refunds = g.Sum(l => home ? l.HomeRefunds ?? l.Refunds : l.Refunds),
+                Other = g.Sum(l => home ? l.HomeOther ?? l.Other : l.Other),
                 SearchHits = search == null ? 1 : g.Count(l => (l.AmazonOrderId != null && l.AmazonOrderId.Contains(search))
                     || l.TransactionType.Contains(search)
                     || (l.AmountType != null && l.AmountType.Contains(search))
@@ -245,6 +273,7 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
             .ConfigureAwait(false);
         var byOrder = pageLines.Where(l => l.AmazonOrderId != null).ToLookup(l => l.AmazonOrderId!, StringComparer.Ordinal);
         var byType = pageLines.Where(l => l.AmazonOrderId == null).ToLookup(l => l.TransactionType, StringComparer.Ordinal);
+        var currency = pageLines.Count == 0 ? null : SettlementMoney.AmountOf(pageLines[0], filter.Amounts).Currency;
 
         var items = page.Items
             .Select(g => new SettlementOrderGroup(
@@ -257,6 +286,7 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
                 g.Fees,
                 g.Refunds,
                 g.Other,
+                currency,
                 (g.AmazonOrderId is { } orderId ? byOrder[orderId] : byType[g.TransactionType ?? string.Empty]).ToList()))
             .ToList();
         return new PagedResult<SettlementOrderGroup>(items, page.TotalCount, page.Page, page.PageSize);

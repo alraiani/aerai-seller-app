@@ -8,7 +8,7 @@ public sealed class SettlementModelTests
     [Fact]
     public void FeeRate_WithSales_IsFeesAsAPositiveShareOfSales()
     {
-        var totals = new SettlementTotals("USD", 2, Sales: 200m, Fees: -30m, Refunds: -10m, Other: 0m, Net: 160m);
+        var totals = new SettlementTotals("USD", 2, AwaitingRate: 0, Sales: 200m, Fees: -30m, Refunds: -10m, Other: 0m, Net: 160m);
 
         Assert.Equal(0.15m, totals.FeeRate);
         Assert.Equal(0.05m, totals.RefundRate);
@@ -17,7 +17,7 @@ public sealed class SettlementModelTests
     [Fact]
     public void FeeRate_WithoutSales_IsUnknown()
     {
-        var totals = new SettlementTotals("USD", 1, Sales: 0m, Fees: -39.99m, Refunds: 0m, Other: 0m, Net: -39.99m);
+        var totals = new SettlementTotals("USD", 1, AwaitingRate: 0, Sales: 0m, Fees: -39.99m, Refunds: 0m, Other: 0m, Net: -39.99m);
 
         Assert.Null(totals.FeeRate);
         Assert.Null(totals.RefundRate);
@@ -46,7 +46,7 @@ public sealed class SettlementModelTests
     [Fact]
     public void TransactionTypes_ListsEachTypeOnceInFirstSeenOrder()
     {
-        var group = new SettlementOrderGroup("O-1", null, null, 1, -1.5m, 10m, -1.5m, -10m, 0m,
+        var group = new SettlementOrderGroup("O-1", null, null, 1, -1.5m, 10m, -1.5m, -10m, 0m, "USD",
             [Line("Order"), Line("Order"), Line("Refund"), Line("order")]);
 
         Assert.True(group.IsOrder);
@@ -56,11 +56,11 @@ public sealed class SettlementModelTests
     [Fact]
     public void IsOrder_GroupWithoutAnOrder_IsFalse()
     {
-        var group = new SettlementOrderGroup(null, "ServiceFee", null, 0, -39.99m, 0m, 0m, 0m, -39.99m, [Line("ServiceFee")]);
+        var group = new SettlementOrderGroup(null, "ServiceFee", null, 0, -39.99m, 0m, 0m, 0m, -39.99m, "USD", [Line("ServiceFee")]);
 
         Assert.False(group.IsOrder);
     }
 
     private static SettlementLineDetail Line(string transactionType) =>
-        new() { MarketplaceId = "M", SettlementId = "S", TransactionType = transactionType };
+        new() { MarketplaceId = "M", SettlementId = "S", TransactionType = transactionType, HomeCurrency = "USD" };
 }

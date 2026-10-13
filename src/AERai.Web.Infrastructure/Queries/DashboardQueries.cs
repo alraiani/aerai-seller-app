@@ -28,7 +28,7 @@ internal sealed class DashboardQueries(AppDbContext dbContext) : IDashboardQueri
     public Task<SettlementSummary?> GetLatestSettlementAsync(string marketplaceId, CancellationToken cancellationToken) =>
         dbContext.SettlementSummaries
             .AsNoTracking()
-            .Where(s => s.MarketplaceId == marketplaceId && s.PeriodEnd != null)
+            .Where(s => s.MarketplaceId == marketplaceId && s.PeriodEnd != null && s.HomeNet != null)
             .OrderByDescending(s => s.PeriodEnd)
             .FirstOrDefaultAsync(cancellationToken);
 

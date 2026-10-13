@@ -235,7 +235,7 @@ public sealed class DashboardServiceTests
     [Fact]
     public async Task LatestPayout_ComputesFeeRate()
     {
-        _queries.LatestSettlement = new SettlementSummary { MarketplaceId = MarketplaceIds.UnitedStates, SettlementId = "S", Currency = "USD", Sales = 1000m, Fees = -400m, Refunds = -10m, Net = 590m };
+        _queries.LatestSettlement = new SettlementSummary { MarketplaceId = MarketplaceIds.UnitedStates, SettlementId = "S", Currency = "USD", HomeCurrency = "USD", Sales = 1000m, Fees = -400m, Refunds = -10m, Net = 590m };
 
         var snapshot = await CreateService().GetSnapshotAsync(Us, DashboardPeriod.Last7Days, CancellationToken.None);
 

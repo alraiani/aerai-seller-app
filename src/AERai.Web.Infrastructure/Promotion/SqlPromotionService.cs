@@ -2,6 +2,7 @@ using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Imports;
 using AERai.Web.Application.Inventory;
+using AERai.Web.Application.Settlements;
 using AERai.Web.Domain.Staging;
 using AERai.Web.Infrastructure.Persistence;
 using Microsoft.Data.SqlClient;
@@ -21,8 +22,15 @@ namespace AERai.Web.Infrastructure.Promotion;
 /// <param name="batches">Used to confirm the batch exists and to read the outcome.</param>
 /// <param name="alerts">Asks for a stock-alert refresh once new data is in core.</param>
 /// <param name="pendingSends">Matches sends pending to Amazon once a new FBA snapshot is in core.</param>
+/// <param name="exchangeRates">Fetches the exchange rates of settlements paid in another currency once they are in core.</param>
 /// <param name="logger">Logger.</param>
-internal sealed partial class SqlPromotionService(AppDbContext dbContext, IImportBatchQueries batches, IStockAlertRefreshSignal alerts, IPendingSendService pendingSends, ILogger<SqlPromotionService> logger)
+internal sealed partial class SqlPromotionService(
+    AppDbContext dbContext,
+    IImportBatchQueries batches,
+    IStockAlertRefreshSignal alerts,
+    IPendingSendService pendingSends,
+    ISettlementExchangeRateService exchangeRates,
+    ILogger<SqlPromotionService> logger)
     : IPromotionService
 {
     /// <summary>Sources that write FBA inventory snapshots, after which pending sends may be visible at Amazon.</summary>
@@ -62,6 +70,10 @@ internal sealed partial class SqlPromotionService(AppDbContext dbContext, IImpor
         {
             await ReconcilePendingSendsAsync(batch.MarketplaceId, cancellationToken).ConfigureAwait(false);
         }
+        else if (batch.Source == ImportSource.Settlements)
+        {
+            await FillExchangeRatesAsync(batchId, cancellationToken).ConfigureAwait(false);
+        }
 
         alerts.Request();
         return Result.Success(new PromotionSummary(batch.Id, batch.Status, batch.PromotedRowCount, batch.RejectedRowCount, batch.SkippedRowCount));
@@ -82,6 +94,26 @@ internal sealed partial class SqlPromotionService(AppDbContext dbContext, IImpor
             LogReconcileFailed(ex, marketplaceId);
         }
     }
+
+    /// <summary>
+    /// Gives settlements paid in another currency their market rate. Like reconciling, a failure is logged
+    /// rather than failing the committed promotion; the next settlement promotion, or Fetch missing rates
+    /// on the Settlements page, tries again.
+    /// </summary>
+    private async Task FillExchangeRatesAsync(long batchId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await exchangeRates.FillMissingAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is SqlException or DbUpdateException or InvalidOperationException)
+        {
+            LogExchangeRatesFailed(ex, batchId);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Filling settlement exchange rates after batch {BatchId} failed; the next settlement promotion retries")]
+    private partial void LogExchangeRatesFailed(Exception exception, long batchId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Matching pending sends to Amazon in {MarketplaceId} failed; the next inventory promotion retries")]
     private partial void LogReconcileFailed(Exception exception, string marketplaceId);

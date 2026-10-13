@@ -15,6 +15,7 @@ namespace AERai.Web.Application.Settlements;
 /// <param name="Fees">The part that counts as fees.</param>
 /// <param name="Refunds">The part that counts as refunds.</param>
 /// <param name="Other">The part that counts as other.</param>
+/// <param name="Currency">ISO 4217 currency of the totals (see <see cref="SettlementLineFilter.Amounts"/>).</param>
 /// <param name="Lines">Every line in the group, earliest posted first.</param>
 public sealed record SettlementOrderGroup(
     string? AmazonOrderId,
@@ -26,6 +27,7 @@ public sealed record SettlementOrderGroup(
     decimal Fees,
     decimal Refunds,
     decimal Other,
+    string? Currency,
     IReadOnlyList<SettlementLineDetail> Lines)
 {
     /// <summary>Whether the group is one order (otherwise it is one transaction type without an order).</summary>

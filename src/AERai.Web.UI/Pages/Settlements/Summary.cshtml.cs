@@ -1,6 +1,7 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Marketplaces;
+using AERai.Web.Application.Security;
 using AERai.Web.Application.Settlements;
 using AERai.Web.Domain.Reporting;
 using AERai.Web.UI.Models;
@@ -11,12 +12,19 @@ namespace AERai.Web.UI.Pages.Settlements;
 /// <summary>
 /// One settlement broken down by SKU, sale price, and currency (from <c>rpt.vw_SettlementSkuSummary</c>);
 /// each row drills down to the orders behind it. Searchable by SKU, ASIN, or title; the rows can be
-/// narrowed to those with refunds or to the amounts without a SKU, and sorted by any amount.
+/// narrowed to those with refunds or to the amounts without a SKU, and sorted by any amount. A settlement
+/// paid in another currency is shown converted into the marketplace's, with its conversion, a switch to
+/// the amounts as paid, and (for Operators) the form that adjusts its rate.
 /// </summary>
 /// <param name="reporting">Reporting queries.</param>
+/// <param name="rates">Settlement exchange rates.</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
-public sealed class SummaryModel(IReportingQueries reporting, ICurrentMarketplace currentMarketplace) : ListPageModel
+public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchangeRateService rates, ICurrentMarketplace currentMarketplace) : ListPageModel
 {
+    /// <summary>Which currency amounts are shown in, from <c>?amounts=original</c>.</summary>
+    [BindProperty(SupportsGet = true, Name = "amounts")]
+    public SettlementAmounts Amounts { get; set; }
+
     /// <summary>Which rows, from <c>?kind=</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "kind")]
     public SettlementRowKind Kind { get; set; }
@@ -31,6 +39,9 @@ public sealed class SummaryModel(IReportingQueries reporting, ICurrentMarketplac
 
     /// <summary>The settlement's totals.</summary>
     public SettlementSummary Settlement { get; private set; } = default!;
+
+    /// <summary>The conversion banner (shown only for a settlement paid in another currency).</summary>
+    public SettlementRatePanel RatePanel { get; private set; } = default!;
 
     /// <summary>The current page of summary rows.</summary>
     public PagedResult<SettlementSkuSummary> Rows { get; private set; } = default!;
@@ -52,8 +63,14 @@ public sealed class SummaryModel(IReportingQueries reporting, ICurrentMarketplac
         }
 
         Settlement = settlement;
+        var rate = settlement.Currency is not null && settlement.Currency != settlement.HomeCurrency
+            ? await rates.GetAsync(marketplace.MarketplaceId, id, cancellationToken)
+            : null;
+        RatePanel = new SettlementRatePanel(
+            settlement, Amounts, LinkWith(("amounts", null)), LinkWith(("amounts", SettlementAmounts.Original.ToString())), rate,
+            User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator));
         Rows = await reporting.GetSettlementSkuSummaryAsync(
-            marketplace.MarketplaceId, id, ToPageRequest(), new SettlementSkuFilter(Kind, Sort, Descending), cancellationToken);
+            marketplace.MarketplaceId, id, ToPageRequest(), new SettlementSkuFilter(Kind, Sort, Descending, Amounts), cancellationToken);
         return Page();
     }
 

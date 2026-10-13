@@ -38,6 +38,13 @@ public sealed class LinesModel(IReportingQueries reporting, ICurrentMarketplace 
     [BindProperty(SupportsGet = true, Name = "desc")]
     public bool Descending { get; set; }
 
+    /// <summary>Which currency amounts are shown in, from <c>?amounts=original</c>.</summary>
+    [BindProperty(SupportsGet = true, Name = "amounts")]
+    public SettlementAmounts Amounts { get; set; }
+
+    /// <summary>The conversion banner (shown only for a settlement paid in another currency).</summary>
+    public SettlementRatePanel RatePanel { get; private set; } = default!;
+
     /// <summary>The summary row being explained (its totals are the totals row).</summary>
     public SettlementSkuSummary Group { get; private set; } = default!;
 
@@ -67,14 +74,16 @@ public sealed class LinesModel(IReportingQueries reporting, ICurrentMarketplace 
 
         var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
         var group = await reporting.GetSettlementSkuGroupAsync(marketplace.MarketplaceId, id, sku, price, cancellationToken);
-        if (group is null)
+        var settlement = group is null ? null : await reporting.GetSettlementAsync(marketplace.MarketplaceId, id, cancellationToken);
+        if (group is null || settlement is null)
         {
             return NotFound();
         }
 
         Group = group;
+        RatePanel = new SettlementRatePanel(settlement, Amounts, LinkWith(("amounts", null)), LinkWith(("amounts", SettlementAmounts.Original.ToString())));
         Groups = await reporting.GetSettlementOrderGroupsAsync(
-            marketplace.MarketplaceId, id, sku, price, ToPageRequest(), new SettlementLineFilter(Bucket, Sort, Descending), cancellationToken);
+            marketplace.MarketplaceId, id, sku, price, ToPageRequest(), new SettlementLineFilter(Bucket, Sort, Descending, Amounts), cancellationToken);
         return Page();
     }
 

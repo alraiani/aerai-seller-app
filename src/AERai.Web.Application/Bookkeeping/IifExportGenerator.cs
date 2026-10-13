@@ -10,7 +10,10 @@ namespace AERai.Web.Application.Bookkeeping;
 /// <remarks>
 /// Kinds of amount that share an account collapse into one summed SPL line. Each SPL is the negation of
 /// that account's total, and the net payout is the sum of every settlement line, so the entry balances by
-/// construction and needs no adjustment line. Pure and I/O-free so it is unit-tested in isolation. The
+/// construction and needs no adjustment line. A settlement paid in another currency is written in the
+/// books' currency: <see cref="SettlementPreviewBuilder"/> has already converted the account totals so they
+/// add up to the converted payout, and the memo records the original amount and the rate. Pure and
+/// I/O-free so it is unit-tested in isolation. The
 /// debit/credit sign convention follows the desktop app's export; test-import a generated file into a
 /// QuickBooks sample company before relying on it for real books.
 /// </remarks>
@@ -22,7 +25,7 @@ public static class IifExportGenerator
     /// <summary>Generates the IIF text.</summary>
     /// <param name="preview">The settlement to export; must be exportable.</param>
     /// <returns>The IIF file content, tab separated, one entry.</returns>
-    /// <exception cref="InvalidOperationException">The settlement has unmapped amounts, no deposit account, or no lines.</exception>
+    /// <exception cref="InvalidOperationException">The settlement has unmapped amounts, no deposit account, no lines, or no exchange rate.</exception>
     public static string Generate(SettlementPreview preview)
     {
         ArgumentNullException.ThrowIfNull(preview);
@@ -42,16 +45,22 @@ public static class IifExportGenerator
             throw new InvalidOperationException($"Settlement {preview.SettlementId} has no lines.");
         }
 
+        if (preview.NeedsRate || preview.AccountTotals is not { Count: > 0 } accountTotals)
+        {
+            throw new InvalidOperationException($"Settlement {preview.SettlementId} has no exchange rate yet.");
+        }
+
         // The deposit lands after the period ends; the bank date is not part of the imported data, so the
         // period end is the date used.
         var date = (preview.PeriodEnd ?? preview.PeriodStart ?? DateTimeOffset.UtcNow).ToString(DateFormat, CultureInfo.InvariantCulture);
         var memo = $"Amazon settlement {preview.SettlementId}";
-
-        var accountTotals = preview.Rows
-            .GroupBy(r => r.QuickBooksAccountName!, StringComparer.Ordinal) // Non-null: unmapped rows were rejected above.
-            .Select(g => (Account: g.Key, Amount: g.Sum(r => r.Amount)))
-            .OrderBy(a => a.Account, StringComparer.Ordinal)
-            .ToList();
+        if (preview.IsConverted)
+        {
+            // Tabs and line breaks would split the IIF line, so the note is kept to plain text.
+            var note = (preview.RateNote ?? string.Empty).Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ').Trim();
+            memo += string.Create(CultureInfo.InvariantCulture,
+                $"; {preview.OriginalCurrency} {preview.OriginalNetTotal:0.00} at {preview.ExchangeRate:0.######} {preview.Currency}{(note.Length > 0 ? $" ({note})" : string.Empty)}");
+        }
 
         var builder = new StringBuilder();
         builder.Append("!TRNS\tTRNSID\tTRNSTYPE\tDATE\tACCNT\tNAME\tCLASS\tAMOUNT\tDOCNUM\tMEMO\r\n");

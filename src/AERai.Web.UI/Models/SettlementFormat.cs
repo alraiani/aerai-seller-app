@@ -37,6 +37,33 @@ public static class SettlementFormat
     public static string Money(decimal amount, string? currency) =>
         string.IsNullOrEmpty(currency) ? amount.ToString("N2", Culture) : DashboardFormat.Price(amount, currency);
 
+    /// <summary>An exchange rate, to six significant decimals.</summary>
+    /// <param name="rate">One unit of the paid currency in the marketplace's.</param>
+    /// <returns>e.g. "0.7312" or "0.054540".</returns>
+    public static string Rate(decimal rate) => rate.ToString(rate >= 1 ? "0.0000" : "0.######", Culture);
+
+    /// <summary>Where a rate came from, in words.</summary>
+    /// <param name="source">The view's <c>RateSource</c>: Market, Manual, Same, or <see langword="null"/>.</param>
+    /// <returns>e.g. "daily rate".</returns>
+    public static string RateSourceLabel(string? source) => source switch
+    {
+        "Manual" => "adjusted rate",
+        "Market" => "daily rate",
+        "Same" => "no conversion",
+        _ => "no rate yet",
+    };
+
+    /// <summary>A tooltip explaining how a settlement was converted.</summary>
+    /// <param name="settlement">The settlement.</param>
+    /// <returns>e.g. "CA$1,234.56 × 0.7312 (daily rate) = $902.71".</returns>
+    public static string RateTitle(SettlementSummary settlement)
+    {
+        ArgumentNullException.ThrowIfNull(settlement);
+        return settlement.ExchangeRate is { } rate && settlement.HomeNet is { } net
+            ? $"{Money(settlement.Net, settlement.Currency)} × {Rate(rate)} ({RateSourceLabel(settlement.RateSource)}) = {Money(net, settlement.HomeCurrency)}"
+            : $"Paid in {settlement.Currency}; no exchange rate yet.";
+    }
+
     /// <summary>The class that colors a signed amount: negative red, zero muted, positive plain.</summary>
     /// <param name="amount">Amount.</param>
     /// <returns>A CSS class.</returns>

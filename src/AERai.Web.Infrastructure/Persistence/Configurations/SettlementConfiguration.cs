@@ -15,6 +15,7 @@ internal sealed class SettlementConfiguration : IEntityTypeConfiguration<Settlem
         builder.Property(s => s.SettlementId).HasMaxLength(32);
         builder.Property(s => s.Currency).HasMaxLength(3);
         builder.Property(s => s.MarketplaceId).HasMaxLength(16);
+        builder.HasOne<SettlementExchangeRate>().WithOne().HasForeignKey<SettlementExchangeRate>(x => x.SettlementId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Marketplace>().WithMany().HasForeignKey(s => s.MarketplaceId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(s => s.Lines).WithOne(l => l.Settlement).HasForeignKey(l => l.SettlementId).OnDelete(DeleteBehavior.Cascade);
     }

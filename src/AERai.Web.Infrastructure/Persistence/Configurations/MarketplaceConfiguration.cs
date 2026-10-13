@@ -20,6 +20,8 @@ internal sealed class MarketplaceConfiguration : IEntityTypeConfiguration<Market
         builder.Property(m => m.Currency).HasMaxLength(3).IsFixedLength();
         builder.Property(m => m.TimeZoneId).HasMaxLength(64);
         builder.Property(m => m.SalesChannel).HasMaxLength(32);
+        builder.Property(m => m.SettlementMarketplaceId).HasMaxLength(16);
+        builder.HasOne<Marketplace>().WithMany().HasForeignKey(m => m.SettlementMarketplaceId).OnDelete(DeleteBehavior.Restrict);
 
         // The UK starts inactive: it is in the EU region, which needs its own SP-API authorization.
         builder.HasData(
@@ -32,6 +34,7 @@ internal sealed class MarketplaceConfiguration : IEntityTypeConfiguration<Market
             {
                 MarketplaceId = MarketplaceIds.Canada, Code = "CA", Name = "Canada", Region = AmazonRegion.NorthAmerica,
                 Currency = "CAD", TimeZoneId = "America/Toronto", SalesChannel = "Amazon.ca", SortOrder = 2, IsActive = true,
+                SettlementMarketplaceId = MarketplaceIds.UnitedStates,
             },
             new Marketplace
             {

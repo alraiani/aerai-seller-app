@@ -19,9 +19,24 @@
             @foreach (var s in Model.Settlements.Items)
             {
                 <tr>
-                    <td>@s.SettlementId</td>
+                    <td>
+                        @s.SettlementId
+                        @if (s.Currency is not null && s.Currency != s.HomeCurrency)
+                        {
+                            <span class="pill pill-info ms-1" title="Paid in @s.Currency; exported in @s.HomeCurrency">@AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)</span>
+                        }
+                    </td>
                     <td>@s.PeriodStart?.ToString("yyyy-MM-dd") – @s.PeriodEnd?.ToString("yyyy-MM-dd")</td>
-                    <td class="text-end fw-semibold">@s.Net.ToString("N2") @s.Currency</td>
+                    <td class="text-end fw-semibold">
+                        @if (s.HomeNet is { } homeNet)
+                        {
+                            @homeNet.ToString("N2") @s.HomeCurrency
+                        }
+                        else
+                        {
+                            <span class="pill pill-warn">No rate yet</span> @s.Net.ToString("N2") @s.Currency
+                        }
+                    </td>
                     <td>
                         @if (Model.ExportedSettlementIds.Contains(s.SettlementId))
                         {
