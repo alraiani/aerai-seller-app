@@ -140,7 +140,7 @@
     <div class="card-toolbar">
         <span class="card-toolbar-title list-count">
             <span class="text-nowrap">@Model.Overview.Items.TotalCount.ToString("N0", en) SKU@(Model.Overview.Items.TotalCount == 1 ? "" : "s")</span>
-            <span class="text-muted-token fw-normal">in @Model.Marketplace.Name@(t.SnapshotDate is { } d ? $" · Amazon snapshot {InventoryFormat.ShortDate(d)}" : "")</span>
+            <span class="text-muted-token fw-normal">in @Model.Marketplace.Name@(t.SnapshotDate is { } d ? $" · FBA as of {InventoryFormat.ShortDate(d)}" : "")@(t.AwdSnapshotDate is { } ad ? $" · AWD as of {InventoryFormat.ShortDate(ad)}" : "")</span>
         </span>
         @if (Model.CanEdit)
         {
@@ -215,7 +215,12 @@
                         }
                         <th class="product-col"><a href="@Model.SortLink(InventorySort.Sku)" class="sort-link">Product @Model.SortArrow(InventorySort.Sku)</a></th>
                         <th><a href="@Model.SortLink(InventorySort.Urgency)" class="sort-link">Status @Model.SortArrow(InventorySort.Urgency)</a></th>
-                        <th class="text-end"><a href="@Model.SortLink(InventorySort.Available)" class="sort-link">Available @Model.SortArrow(InventorySort.Available)</a></th>
+                        <th class="text-end"><a href="@Model.SortLink(InventorySort.Available)" class="sort-link">Available in FBA @Model.SortArrow(InventorySort.Available)</a>
+                            <partial name="_Tip" model='"Units sellable in Amazon fulfillment centers now, from the latest FBA inventory snapshot. Units on their way to FBA are shown under it, not counted."' /></th>
+                        <th class="text-end"><a href="@Model.SortLink(InventorySort.AwdOnHand)" class="sort-link">Available in AWD @Model.SortArrow(InventorySort.AwdOnHand)</a>
+                            <partial name="_Tip" model='"Units on hand in Amazon Warehousing & Distribution (including units AWD has reserved), from the latest AWD sync. Units on their way to AWD are shown under it, not counted."' /></th>
+                        <th class="text-end"><a href="@Model.SortLink(InventorySort.AvailableTotal)" class="sort-link">Total available @Model.SortArrow(InventorySort.AvailableTotal)</a>
+                            <partial name="_Tip" model='"Available in FBA + available in AWD."' /></th>
                         <th><a href="@Model.SortLink(InventorySort.DaysOfInventory)" class="sort-link">Cover @Model.SortArrow(InventorySort.DaysOfInventory)</a>
                             <partial name="_Tip" model='"Days of inventory: how long sellable, inbound, and FC-transfer stock lasts at the current sales rate (home stock not counted). The bar compares it with the restock target."' /></th>
                         <th class="text-end col-sold"><a href="@Model.SortLink(InventorySort.Sold30d)" class="sort-link">Sold 30d @Model.SortArrow(InventorySort.Sold30d)</a></th>
@@ -247,13 +252,28 @@
                             }
                             else
                             {
-                                <div class="fw-semibold">@p.Available.ToString("N0", en)</div>
+                                <div>@p.Available.ToString("N0", en)</div>
                                 @if (p.Inbound > 0)
                                 {
                                     <div class="cell-sub">+@p.Inbound.ToString("N0", en) inbound</div>
                                 }
                             }
                         </td>
+                        <td class="text-end">
+                            @if (p.AwdSnapshotDate is null)
+                            {
+                                <span class="cell-sub">—</span>
+                            }
+                            else
+                            {
+                                <div>@p.AwdOnHand.ToString("N0", en)</div>
+                                @if (p.AwdInbound > 0)
+                                {
+                                    <div class="cell-sub">+@p.AwdInbound.ToString("N0", en) inbound</div>
+                                }
+                            }
+                        </td>
+                        <td class="text-end fw-semibold">@p.AvailableTotal.ToString("N0", en)</td>
                         <td>
                             @if (item.DaysOfInventory is { } days)
                             {

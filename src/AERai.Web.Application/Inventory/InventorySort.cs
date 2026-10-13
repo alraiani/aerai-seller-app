@@ -15,9 +15,15 @@ public enum InventorySort
     /// <summary>Best sellers over the last 30 days first.</summary>
     Sold30d = 3,
 
-    /// <summary>Most sellable units first.</summary>
+    /// <summary>Most units sellable in FBA first.</summary>
     Available = 4,
 
     /// <summary>Best sellers over the last 90 days first.</summary>
     Sold90d = 5,
+
+    /// <summary>Most units on hand in AWD first.</summary>
+    AwdOnHand = 6,
+
+    /// <summary>Most units available in FBA and AWD together first.</summary>
+    AvailableTotal = 7,
 }
