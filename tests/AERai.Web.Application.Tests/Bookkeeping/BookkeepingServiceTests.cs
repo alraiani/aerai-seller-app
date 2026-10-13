@@ -18,7 +18,8 @@ public sealed class BookkeepingServiceTests
         _service = new BookkeepingService(_data, _data, new FakeTimeProvider(Now), NullLogger<BookkeepingService>.Instance);
         _data.Settlements["S1"] = new SettlementBooks(
             "S1", MarketplaceIds.UnitedStates, "USD", new DateTimeOffset(2026, 9, 14, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 28, 0, 0, 0, TimeSpan.Zero),
-            [new SettlementCategoryTotal("ItemPrice", "Principal", 100m, 3), new SettlementCategoryTotal("ItemFees", "Commission", -15m, 3)]);
+            [new SettlementCategoryTotal("ItemPrice", "Principal", 100m, 3), new SettlementCategoryTotal("ItemFees", "Commission", -15m, 3)],
+            "USD", 1m);
     }
 
     private async Task MapEverythingAsync()
@@ -85,7 +86,7 @@ public sealed class BookkeepingServiceTests
     [Fact]
     public async Task ExportAsync_SettlementWithNoLines_Fails()
     {
-        _data.Settlements["EMPTY"] = new SettlementBooks("EMPTY", MarketplaceIds.UnitedStates, "USD", null, null, []);
+        _data.Settlements["EMPTY"] = new SettlementBooks("EMPTY", MarketplaceIds.UnitedStates, "USD", null, null, [], "USD", 1m);
 
         var result = await _service.ExportAsync(MarketplaceIds.UnitedStates, "EMPTY", "ops@example.com", CancellationToken.None);
 

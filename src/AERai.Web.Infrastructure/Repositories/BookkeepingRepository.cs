@@ -13,9 +13,20 @@ internal sealed class BookkeepingRepository(AppDbContext dbContext) : IBookkeepi
     /// <inheritdoc/>
     public async Task<SettlementBooks?> GetSettlementAsync(string marketplaceId, string settlementId, CancellationToken cancellationToken)
     {
-        var settlement = await dbContext.Settlements.AsNoTracking()
-            .Where(s => s.SettlementId == settlementId && s.MarketplaceId == marketplaceId)
-            .Select(s => new { s.SettlementId, s.MarketplaceId, s.Currency, s.PeriodStart, s.PeriodEnd })
+        var settlement = await (
+                from s in dbContext.Settlements.AsNoTracking()
+                join m in dbContext.Marketplaces.AsNoTracking() on s.MarketplaceId equals m.MarketplaceId
+                where s.SettlementId == settlementId && s.MarketplaceId == marketplaceId
+                select new
+                {
+                    s.SettlementId,
+                    s.MarketplaceId,
+                    s.Currency,
+                    s.PeriodStart,
+                    s.PeriodEnd,
+                    HomeCurrency = m.Currency,
+                    Rate = dbContext.SettlementExchangeRates.FirstOrDefault(x => x.SettlementId == s.SettlementId && x.ToCurrency == m.Currency),
+                })
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
         if (settlement is null)
@@ -26,13 +37,23 @@ internal sealed class BookkeepingRepository(AppDbContext dbContext) : IBookkeepi
         var categories = await CategoryTotals(dbContext.SettlementLines.AsNoTracking().Where(l => l.SettlementId == settlementId))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+        // The same rule as rpt.vw_SettlementRate: no conversion in the marketplace's own currency,
+        // otherwise the Operator's rate over the feed's.
+        var same = settlement.Currency is null || string.Equals(settlement.Currency, settlement.HomeCurrency, StringComparison.OrdinalIgnoreCase);
+        var rate = settlement.Rate;
         return new SettlementBooks(
             settlement.SettlementId,
             settlement.MarketplaceId,
             settlement.Currency,
             settlement.PeriodStart,
             settlement.PeriodEnd,
-            [.. categories.Select(c => new SettlementCategoryTotal(c.AmountType, c.AmountDescription, c.Amount, c.LineCount))]);
+            [.. categories.Select(c => new SettlementCategoryTotal(c.AmountType, c.AmountDescription, c.Amount, c.LineCount))],
+            settlement.HomeCurrency,
+            same ? 1m : rate?.EffectiveRate,
+            same || rate is null ? null
+                : rate.ManualRate is not null ? $"entered by {rate.ManualBy} {rate.ManualAt:yyyy-MM-dd}"
+                : $"{rate.MarketSource} {rate.MarketRateDate:yyyy-MM-dd}",
+            same ? null : rate?.ManualHomeAmount);
     }
 
     /// <inheritdoc/>

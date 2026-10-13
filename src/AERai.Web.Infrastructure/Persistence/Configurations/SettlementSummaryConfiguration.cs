@@ -15,6 +15,13 @@ internal sealed class SettlementSummaryConfiguration : IEntityTypeConfiguration<
     {
         builder.ToView("vw_SettlementSummary", Schemas.Reporting).HasNoKey();
         builder.Property(v => v.MarketplaceId).HasMaxLength(16);
+        builder.Property(v => v.HomeCurrency).HasMaxLength(3);
+        builder.Property(v => v.ExchangeRate).HasPrecision(19, 10);
+        builder.Property(v => v.HomeSales).HasPrecision(18, 2);
+        builder.Property(v => v.HomeFees).HasPrecision(18, 2);
+        builder.Property(v => v.HomeRefunds).HasPrecision(18, 2);
+        builder.Property(v => v.HomeOther).HasPrecision(18, 2);
+        builder.Property(v => v.HomeNet).HasPrecision(18, 2);
         builder.Property(v => v.Sales).HasPrecision(18, 2);
         builder.Property(v => v.Fees).HasPrecision(18, 2);
         builder.Property(v => v.Refunds).HasPrecision(18, 2);

@@ -102,6 +102,13 @@ public sealed partial class BlobRefreshService(
                 continue;
             }
 
+            // A settlement file goes to the marketplace that keeps that marketplace's payouts (Canada's
+            // are listed with the United States), the same as a settlement pulled from Amazon.
+            if (file.Source == ImportSource.Settlements && marketplace.SettlementMarketplaceId is { } settlementMarketplaceId)
+            {
+                marketplaceId = settlementMarketplaceId;
+            }
+
             try
             {
                 var outcome = file.Kind == FileKind.Report

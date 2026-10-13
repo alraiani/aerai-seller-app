@@ -12,8 +12,17 @@ public sealed class SettlementLineDetail
     /// <summary>Amazon settlement identifier.</summary>
     public required string SettlementId { get; set; }
 
-    /// <summary>ISO 4217 currency code.</summary>
+    /// <summary>ISO 4217 currency the settlement was paid in.</summary>
     public string? Currency { get; set; }
+
+    /// <summary>Currency the amounts convert into: the marketplace's currency.</summary>
+    public required string HomeCurrency { get; set; }
+
+    /// <summary>
+    /// One unit of <see cref="Currency"/> in <see cref="HomeCurrency"/>: 1 when they are the same, the
+    /// Operator's or the feed's rate otherwise, or <see langword="null"/> while no rate is known yet.
+    /// </summary>
+    public decimal? ExchangeRate { get; set; }
 
     /// <summary>Id of the underlying settlement line.</summary>
     public long LineId { get; set; }
@@ -56,4 +65,19 @@ public sealed class SettlementLineDetail
 
     /// <summary>The amount when it counts as other, otherwise zero.</summary>
     public decimal Other { get; set; }
+
+    /// <summary><see cref="Amount"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeAmount { get; set; }
+
+    /// <summary><see cref="Sales"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeSales { get; set; }
+
+    /// <summary><see cref="Fees"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeFees { get; set; }
+
+    /// <summary><see cref="Refunds"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeRefunds { get; set; }
+
+    /// <summary><see cref="Other"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeOther { get; set; }
 }

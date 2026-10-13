@@ -2,6 +2,7 @@ using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Security;
 using AERai.Web.Infrastructure.Alerts;
 using AERai.Web.Infrastructure.Email;
+using AERai.Web.Infrastructure.ExchangeRates;
 using AERai.Web.Infrastructure.Identity;
 using AERai.Web.Infrastructure.Ingestion;
 using AERai.Web.Infrastructure.Persistence;
@@ -117,8 +118,10 @@ public static class DependencyInjection
         services.AddScoped<IAmazonOrderRepository, AmazonOrderRepository>();
         services.AddScoped<IAppliedBlobRepository, AppliedBlobRepository>();
         services.AddScoped<ISyncSettingsRepository, SyncSettingsRepository>();
+        services.AddScoped<ISettlementExchangeRateRepository, SettlementExchangeRateRepository>();
 
         AddSpApi(services, configuration);
+        AddExchangeRates(services, configuration);
 
         services.AddSingleton<IManualRunChannel, ManualRunChannel>();
         services.AddHostedService<SyncSchedulerWorker>();
@@ -127,6 +130,32 @@ public static class DependencyInjection
         services.AddHostedService<StockAlertWorker>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Registers the daily exchange rates feed for the configured <see cref="ExchangeRateMode"/>. Live reads
+    /// the Frankfurter API on a client of its own (it is not an Amazon API).
+    /// </summary>
+    private static void AddExchangeRates(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<ExchangeRateOptions>().BindConfiguration(ExchangeRateOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+        var mode = configuration.GetSection(ExchangeRateOptions.SectionName).GetValue(nameof(ExchangeRateOptions.Mode), ExchangeRateMode.Live);
+        switch (mode)
+        {
+            case ExchangeRateMode.Live:
+                services.AddHttpClient<IExchangeRateProvider, FrankfurterExchangeRateProvider>((provider, client) =>
+                {
+                    client.BaseAddress = provider.GetRequiredService<IOptions<ExchangeRateOptions>>().Value.BaseUrl;
+                    client.Timeout = TimeSpan.FromSeconds(20);
+                });
+                break;
+            case ExchangeRateMode.Simulated:
+                services.AddSingleton<IExchangeRateProvider, SimulatedExchangeRateProvider>();
+                break;
+            default:
+                services.AddSingleton<IExchangeRateProvider, UnavailableExchangeRateProvider>();
+                break;
+        }
     }
 
     /// <summary>

@@ -18,6 +18,9 @@ internal sealed class BookkeepingExportConfiguration : IEntityTypeConfiguration<
         builder.Property(e => e.DepositAccountName).HasMaxLength(200);
         builder.Property(e => e.NetTotal).HasPrecision(18, 2);
         builder.Property(e => e.Currency).HasMaxLength(3);
+        builder.Property(e => e.OriginalCurrency).HasMaxLength(3);
+        builder.Property(e => e.OriginalNetTotal).HasPrecision(18, 2);
+        builder.Property(e => e.ExchangeRate).HasPrecision(19, 10);
         builder.Property(e => e.GeneratedBy).HasMaxLength(256);
         builder.HasOne<Marketplace>().WithMany().HasForeignKey(e => e.MarketplaceId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Settlement>().WithMany().HasForeignKey(e => e.SettlementId).OnDelete(DeleteBehavior.Restrict);

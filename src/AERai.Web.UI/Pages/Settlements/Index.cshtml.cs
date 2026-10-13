@@ -1,6 +1,7 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Marketplaces;
+using AERai.Web.Application.Security;
 using AERai.Web.Application.Settlements;
 using AERai.Web.Domain.Reporting;
 using AERai.Web.UI.Models;
@@ -11,8 +12,13 @@ namespace AERai.Web.UI.Pages.Settlements;
 /// <summary>
 /// Settlement payouts (from <c>rpt.vw_SettlementSummary</c>): totals for what's listed, then the
 /// settlements, newest period first. Searchable by settlement, order, SKU, ASIN, or title; filterable
-/// by period end; sortable by period and each amount column.
+/// by period end and the currency paid in; sortable by period and each amount column.
 /// </summary>
+/// <remarks>
+/// Amazon lists every North America payout with the United States, so its list holds CAD and MXN
+/// settlements too. Amounts and totals are in the marketplace's currency (converted at each settlement's
+/// rate); each row is tagged with where it came from and keeps its original net beside the converted one.
+/// </remarks>
 /// <param name="reporting">Reporting queries.</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
 public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace currentMarketplace) : ListPageModel
@@ -44,13 +50,19 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
     public PagedResult<SettlementSummary> Settlements { get; private set; } = default!;
 
     /// <summary>
-    /// Totals for the tiles: the selected currency's, else the marketplace's own currency's, over every
-    /// settlement the search and filters select.
+    /// Totals for the tiles, in the marketplace's currency, over every settlement the search and filters
+    /// select (those still waiting for an exchange rate are counted apart).
     /// </summary>
-    public SettlementTotals Totals { get; private set; } = SettlementTotals.Empty(null);
+    public SettlementTotals Totals { get; private set; } = SettlementTotals.Empty(string.Empty);
 
-    /// <summary>Totals of the matching settlements paid in other currencies, which the tiles leave out.</summary>
-    public IReadOnlyList<SettlementTotals> OtherCurrencies { get; private set; } = [];
+    /// <summary>
+    /// The marketplace whose list holds this marketplace's payouts (Canada's are with the United States),
+    /// or <see langword="null"/> when it keeps its own.
+    /// </summary>
+    public Domain.Core.Marketplace? ListedUnder { get; private set; }
+
+    /// <summary>Whether the user may fetch exchange rates.</summary>
+    public bool CanEdit => User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator);
 
     /// <summary>Every currency with matching settlements, ignoring the currency filter (for its choices).</summary>
     public IReadOnlyList<string> Currencies { get; private set; } = [];
@@ -63,7 +75,9 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
     /// <returns>A task that completes when the page is loaded.</returns>
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        var selection = await currentMarketplace.GetAsync(cancellationToken);
+        Marketplace = selection.Current;
+        ListedUnder = Marketplace.SettlementMarketplaceId is { } listedUnder ? selection.All.FirstOrDefault(m => m.MarketplaceId == listedUnder) : null;
 
         // Dates are the marketplace's local days, like every other date filter in the app.
         var zone = TimeZoneInfo.FindSystemTimeZoneById(Marketplace.TimeZoneId);
@@ -75,13 +89,9 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
             Descending);
         var request = ToPageRequest();
 
-        // Totals come per currency (a marketplace's listing can hold payouts in another currency) and
-        // are never added together: the tiles show one currency and name the others.
-        var totals = await reporting.GetSettlementTotalsAsync(Marketplace.MarketplaceId, request, filter with { Currency = null }, cancellationToken);
-        Currencies = totals.Select(t => t.Currency).OfType<string>().ToList();
-        var shown = filter.Currency ?? Marketplace.Currency;
-        Totals = totals.FirstOrDefault(t => t.Currency == shown) ?? SettlementTotals.Empty(shown);
-        OtherCurrencies = filter.Currency is null ? totals.Where(t => t.Currency != shown).ToList() : [];
+        Totals = await reporting.GetSettlementTotalsAsync(Marketplace.MarketplaceId, request, filter, cancellationToken)
+            ?? SettlementTotals.Empty(Marketplace.Currency);
+        Currencies = await reporting.GetSettlementCurrenciesAsync(Marketplace.MarketplaceId, request, filter, cancellationToken);
 
         Settlements = await reporting.GetSettlementsAsync(Marketplace.MarketplaceId, request, filter, cancellationToken);
     }

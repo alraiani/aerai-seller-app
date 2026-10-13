@@ -28,11 +28,20 @@ public sealed class BookkeepingExport
     /// <summary>Deposit account the file posted the payout to.</summary>
     public required string DepositAccountName { get; set; }
 
-    /// <summary>Net payout in the file (the sum of every settlement line).</summary>
+    /// <summary>Net payout in the file (the sum of every settlement line, converted when the settlement was paid in another currency).</summary>
     public decimal NetTotal { get; set; }
 
-    /// <summary>ISO 4217 currency code of the amounts.</summary>
+    /// <summary>ISO 4217 currency code of the amounts in the file.</summary>
     public string? Currency { get; set; }
+
+    /// <summary>Currency the settlement was paid in, when the file converted it; otherwise <see langword="null"/>.</summary>
+    public string? OriginalCurrency { get; set; }
+
+    /// <summary>Net payout in <see cref="OriginalCurrency"/>, when the file converted it.</summary>
+    public decimal? OriginalNetTotal { get; set; }
+
+    /// <summary>Exchange rate the file used (one unit of <see cref="OriginalCurrency"/> in <see cref="Currency"/>), when it converted.</summary>
+    public decimal? ExchangeRate { get; set; }
 
     /// <summary>Start of the settlement period.</summary>
     public DateTimeOffset? PeriodStart { get; set; }

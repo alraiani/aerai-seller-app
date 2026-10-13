@@ -17,7 +17,7 @@ public interface IDashboardQueries
     /// <returns>Matching lines.</returns>
     Task<IReadOnlyList<SalesLine>> GetSalesLinesAsync(string marketplaceId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken);
 
-    /// <summary>The settlement with the latest period end.</summary>
+    /// <summary>The settlement with the latest period end that can be shown in the marketplace's currency (it has an exchange rate, or needs none).</summary>
     /// <param name="marketplaceId">Marketplace to report on.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The settlement, or <see langword="null"/>.</returns>

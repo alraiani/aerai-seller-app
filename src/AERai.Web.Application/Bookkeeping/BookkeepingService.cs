@@ -69,6 +69,12 @@ public sealed partial class BookkeepingService(IBookkeepingQueries queries, IBoo
             return Result.Failure<BookkeepingExportSummary>("Set this marketplace's deposit account on the Account mapping page before exporting.");
         }
 
+        if (preview.NeedsRate)
+        {
+            return Result.Failure<BookkeepingExportSummary>(
+                $"Settlement {settlementId} was paid in {preview.Currency} and has no exchange rate yet. Fetch the rate or enter it on the settlement's page before exporting.");
+        }
+
         var generatedAt = timeProvider.GetUtcNow();
         var export = new BookkeepingExport
         {
@@ -79,6 +85,9 @@ public sealed partial class BookkeepingService(IBookkeepingQueries queries, IBoo
             DepositAccountName = preview.DepositAccountName!, // Non-null: HasDepositAccount was checked above.
             NetTotal = preview.NetTotal,
             Currency = preview.Currency,
+            OriginalCurrency = preview.OriginalCurrency,
+            OriginalNetTotal = preview.OriginalNetTotal,
+            ExchangeRate = preview.ExchangeRate,
             PeriodStart = preview.PeriodStart,
             PeriodEnd = preview.PeriodEnd,
             GeneratedAt = generatedAt,

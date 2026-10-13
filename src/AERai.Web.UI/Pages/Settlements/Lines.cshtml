@@ -4,6 +4,7 @@
 @model AERai.Web.UI.Pages.Settlements.LinesModel
 @{
     var g = Model.Group;
+    var gm = SettlementMoney.Of(g, Model.Amounts);
     var groups = Model.Groups.Items;
     var label = g.Sku ?? "No SKU";
     ViewData["Title"] = $"{label} · settlement {g.SettlementId}";
@@ -12,16 +13,22 @@
 <nav class="crumbs" aria-label="Breadcrumb">
     <a asp-page="Index">Settlements</a>
     <span aria-hidden="true">/</span>
-    <a asp-page="Summary" asp-route-id="@g.SettlementId">@g.SettlementId</a>
+    <a asp-page="Summary" asp-route-id="@g.SettlementId" asp-route-amounts="@(Model.Amounts == SettlementAmounts.Home ? null : Model.Amounts.ToString())">@g.SettlementId</a>
     <span aria-hidden="true">/</span>
-    <span>@label@(g.SalePrice is { } each ? $" at {SettlementFormat.Money(each, g.Currency)}" : "")</span>
+    <span>@label@(SettlementMoney.SalePriceOf(g, Model.Amounts) is { } each ? $" at {SettlementFormat.Money(each, gm.Currency)}" : "")</span>
 </nav>
+
+<partial name="_SettlementRate" model="Model.RatePanel" />
 
 @* ---------- Search, bucket filter, sort ---------- *@
 <div class="list-toolbar mb-3">
     <form method="get" class="filters" data-autosubmit-form role="search">
         <input type="hidden" name="sku" value="@Model.Sku" />
         <input type="hidden" name="price" value="@Model.Price" />
+        @if (Model.Amounts != SettlementAmounts.Home)
+        {
+            <input type="hidden" name="amounts" value="@Model.Amounts" />
+        }
         @if (Model.Descending)
         {
             <input type="hidden" name="desc" value="true" />
@@ -55,7 +62,7 @@
         <span class="card-toolbar-title list-count">
             <span class="text-nowrap">@Model.Groups.TotalCount.ToString("N0", CultureInfo.InvariantCulture) group@(Model.Groups.TotalCount == 1 ? "" : "s")</span>
             <span class="text-muted-token fw-normal">@(g.Title ?? (g.Sku is null ? "amounts that belong to no product" : g.Asin))</span>
-            <partial name="_Tip" model='"Every settlement line behind the summary row, one group per order (lines without an order are grouped by type). Expand a group to see its lines; the total row matches the summary row."' />
+            <partial name="_Tip" model='"Every settlement line behind the summary row, one group per order (lines without an order are grouped by type). Expand a group to see its lines; the total row matches the summary row. Converted amounts are rounded line by line, so they can differ from the total by a cent."' />
         </span>
         @if (groups.Count > 0)
         {
@@ -93,10 +100,10 @@
                         <td></td>
                         <td colspan="3">
                             <div class="fw-semibold">Total · @g.LineCount.ToString("N0", CultureInfo.InvariantCulture) line@(g.LineCount == 1 ? "" : "s")@(g.OrderCount > 0 ? $" in {g.OrderCount:N0} order{(g.OrderCount == 1 ? "" : "s")}" : "")</div>
-                            <partial name="_SettlementBreakdown" model="(g.Sales, g.Fees, g.Refunds, g.Other, g.Net, g.Currency)" />
+                            <partial name="_SettlementBreakdown" model="(gm.Sales, gm.Fees, gm.Refunds, gm.Other, gm.Net, gm.Currency)" />
                         </td>
                         <td class="text-end money fw-semibold">@g.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
-                        <td class="text-end money fw-semibold @SettlementFormat.AmountClass(g.Net)">@SettlementFormat.Money(g.Net, g.Currency)</td>
+                        <td class="text-end money fw-semibold @SettlementFormat.AmountClass(gm.Net)">@SettlementFormat.Money(gm.Net, gm.Currency)</td>
                     </tr>
                 </tbody>
                 @for (var i = 0; i < groups.Count; i++)
@@ -123,11 +130,12 @@
                             </td>
                             <td class="text-nowrap">@SettlementFormat.Posted(group.FirstPosted)</td>
                             <td class="text-end money">@(group.Units == 0 ? "" : group.Units.ToString("N0", CultureInfo.InvariantCulture))</td>
-                            <td class="text-end money fw-semibold @SettlementFormat.AmountClass(group.Amount)">@SettlementFormat.Money(group.Amount, g.Currency)</td>
+                            <td class="text-end money fw-semibold @SettlementFormat.AmountClass(group.Amount)">@SettlementFormat.Money(group.Amount, group.Currency ?? gm.Currency)</td>
                         </tr>
                         @foreach (var line in group.Lines)
                         {
                             var bucket = SettlementFormat.BucketOf(line);
+                            var (lineAmount, lineCurrency) = SettlementMoney.AmountOf(line, Model.Amounts);
                             <tr class="group-child">
                                 <td></td>
                                 <td>
@@ -146,7 +154,7 @@
                                 <td class="text-muted-token">@line.TransactionType</td>
                                 <td class="text-nowrap text-muted-token">@SettlementFormat.Posted(line.PostedDate)</td>
                                 <td class="text-end money">@(line.Units == 0 ? "" : line.Units.ToString("N0", CultureInfo.InvariantCulture))</td>
-                                <td class="text-end money @SettlementFormat.AmountClass(line.Amount)">@SettlementFormat.Money(line.Amount, g.Currency)</td>
+                                <td class="text-end money @SettlementFormat.AmountClass(lineAmount)">@SettlementFormat.Money(lineAmount, lineCurrency)</td>
                             </tr>
                         }
                     </tbody>

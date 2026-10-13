@@ -85,6 +85,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Curated settlement lines.</summary>
     public DbSet<SettlementLine> SettlementLines => Set<SettlementLine>();
 
+    /// <summary>Exchange rates of settlements paid in another currency than their marketplace's.</summary>
+    public DbSet<SettlementExchangeRate> SettlementExchangeRates => Set<SettlementExchangeRate>();
+
     /// <summary>QuickBooks accounts for each kind of settlement amount.</summary>
     public DbSet<BookkeepingAccountMapping> BookkeepingAccountMappings => Set<BookkeepingAccountMapping>();
 
