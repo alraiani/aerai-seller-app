@@ -148,7 +148,7 @@
                                         @if (p.PendingToAmazon > 0)
                                         {
                                             <div class="cell-sub @(item.PendingSendOverdue ? "text-warn" : "")"
-                                                 title="@(item.PendingSendOverdue ? $"Amazon still doesn’t show a send from more than {Model.PendingExpiryDays} days ago; check it under Awaiting Amazon below." : "Counted as Amazon stock until an inventory sync shows it.")">
+                                                 title="@(item.PendingSendOverdue ? $"Amazon still doesn’t show a send from more than {Model.PendingExpiryDays} days ago; check it on the Awaiting Amazon tab." : "Counted as Amazon stock until an inventory sync shows it.")">
                                                 +@p.PendingToAmazon.ToString("N0", en) sent, awaiting Amazon
                                             </div>
                                         }
@@ -258,20 +258,3 @@
         </div>
     }
 </form>
-
-@if (Model.Pending is { Items.Count: > 0 } pendingPanel)
-{
-    <div class="card mt-3 no-print" id="pending-sends">
-        <div class="card-toolbar">
-            <span class="card-toolbar-title list-count">
-                <span class="text-nowrap">Awaiting Amazon</span>
-                <span class="text-muted-token fw-normal">@pendingPanel.Units.ToString("N0", en) units in @pendingPanel.Items.Count.ToString("N0", en) send@(pendingPanel.Items.Count == 1 ? "" : "s")@(pendingPanel.OverdueCount > 0 ? $" · {pendingPanel.OverdueCount} to check" : "")</span>
-                <partial name="_Tip" model='$"Units sent from home that Amazon’s numbers don’t show yet. They clear on their own after an inventory sync shows them; add the FBA shipment id to match a send by its shipment. After {pendingPanel.ExpiryDays} days a send is flagged for someone to check."' />
-            </span>
-            <div class="card-toolbar-group">
-                <a asp-page="HomeStock/Pending" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"><partial name="_Icon" model='"search"' /> Search &amp; filter</a>
-            </div>
-        </div>
-        <partial name="_PendingSends" model="pendingPanel" />
-    </div>
-}

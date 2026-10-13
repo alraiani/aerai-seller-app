@@ -1,7 +1,7 @@
 @using System.Globalization
 @model AERai.Web.UI.Models.PendingSendsPanel
-@* Sends from home stock that Amazon's numbers don't show yet. Used on the Worksheet (one family) and the
-   Pending sends page; every form posts to /Inventory/HomeStock/Pending and returns to where it came from. *@
+@* Sends from home stock that Amazon's numbers don't show yet (the Awaiting Amazon page). Every form posts
+   to /Inventory/HomeStock/Pending and returns to the same family, search, and view. *@
 @{
     var en = CultureInfo.GetCultureInfo("en-US");
 
@@ -30,7 +30,7 @@
 {
     @* One shipment usually holds several SKUs: tick their sends (the boxes belong to this form through
        form="pending-bulk-form") and add the id once. *@
-    <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="ShipmentIds" asp-route-back="@Model.Back" asp-route-family="@Model.FamilyId"
+    <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="ShipmentIds" asp-route-family="@Model.FamilyId"
           asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" id="pending-bulk-form" class="bulk-bar bulk-bar-row" data-bulk-bar data-bulk-noun="send">
         <span class="bulk-count" data-bulk-count>Tick the sends in one FBA shipment to add its id to all of them.</span>
         <input type="text" name="shipmentId" class="form-control form-control-sm bulk-input shipment-ref" placeholder="FBA shipment id" maxlength="100" required
@@ -102,7 +102,7 @@
                         }
                         else if (Model.CanEdit)
                         {
-                            <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="ShipmentId" asp-route-id="@s.Id" asp-route-back="@Model.Back" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="shipment-id-form">
+                            <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="ShipmentId" asp-route-id="@s.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="shipment-id-form">
                                 <input type="text" name="shipmentId" class="form-control form-control-sm shipment-ref" placeholder="Add FBA shipment id" maxlength="100" required aria-label="FBA shipment id for the @s.Sku send" />
                                 <button type="submit" class="btn btn-sm btn-soft btn-icon" aria-label="Save the shipment id" title="Save the shipment id"><partial name="_Icon" model='"check"' /></button>
                             </form>
@@ -115,14 +115,14 @@
                     @if (Model.CanEdit)
                     {
                         <td class="text-end text-nowrap">
-                            <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="Reconciled" asp-route-id="@s.Id" asp-route-back="@Model.Back" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="d-inline"
+                            <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="Reconciled" asp-route-id="@s.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="d-inline"
                                   data-confirm="Mark the @s.Sku send as received by Amazon? Its @s.Pending.ToString("N0", en) awaiting units stop counting as Amazon stock.">
                                 <button type="submit" class="btn btn-sm btn-soft" aria-label="Mark the @s.Sku send as received by Amazon"
                                         data-bs-toggle="tooltip" data-bs-title="Amazon has it: stop counting it as pending">Received</button>
                             </form>
                             @if (s.ReconciledUnits == 0)
                             {
-                                <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="Cancel" asp-route-id="@s.Id" asp-route-back="@Model.Back" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="d-inline"
+                                <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="Cancel" asp-route-id="@s.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="d-inline"
                                       data-confirm="Cancel the @s.Sku send? A reversing ledger entry puts its @s.UnitsSent.ToString("N0", en) units back in home stock.">
                                     <button type="submit" class="btn btn-sm btn-soft-bad btn-icon" aria-label="Cancel the @s.Sku send"
                                             data-bs-toggle="tooltip" data-bs-title="It never went out: put the units back in home stock"><partial name="_Icon" model='"x"' /></button>

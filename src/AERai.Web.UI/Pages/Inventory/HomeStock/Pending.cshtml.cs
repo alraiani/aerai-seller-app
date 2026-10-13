@@ -12,7 +12,7 @@ namespace AERai.Web.UI.Pages.Inventory.HomeStock;
 /// <summary>
 /// Sends from home stock that Amazon's numbers don't show yet, across the marketplace or one family.
 /// Operators and Admins add the FBA shipment id to a send logged without one, mark a send reconciled, or
-/// cancel one that never went out; the Worksheet's panel posts its actions here too.
+/// cancel one that never went out.
 /// </summary>
 /// <param name="pending">Pending sends.</param>
 /// <param name="items">Families for the filter.</param>
@@ -60,25 +60,23 @@ public sealed class PendingModel(IPendingSendService pending, IInventoryItemServ
         var zone = TimeZoneInfo.FindSystemTimeZoneById(Marketplace.TimeZoneId);
         var filter = new PendingSendFilter(FamilyId, Search, View);
         List = await pending.ListAsync(Marketplace.MarketplaceId, filter, cancellationToken);
-        Panel = new PendingSendsPanel(List.Items, CanEdit, zone, options.Value.PendingSendExpiryDays, null, FamilyId, IsFiltered, filter);
+        Panel = new PendingSendsPanel(List.Items, CanEdit, zone, options.Value.PendingSendExpiryDays, FamilyId, IsFiltered, filter);
     }
 
     /// <summary>Adds the FBA shipment id to a send logged without one.</summary>
     /// <param name="id">The send's ledger entry id.</param>
     /// <param name="shipmentId">The FBA shipment id.</param>
-    /// <param name="back"><c>worksheet</c> to return to the Worksheet; otherwise this page.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A redirect back.</returns>
-    public Task<IActionResult> OnPostShipmentIdAsync(long id, string? shipmentId, string? back, CancellationToken cancellationToken) =>
-        ActAsync(back, (m, user) => pending.SetShipmentIdAsync(m, id, shipmentId, user, cancellationToken), "Shipment id added; an inventory sync is on its way to check it.", cancellationToken);
+    /// <returns>A redirect back to the list.</returns>
+    public Task<IActionResult> OnPostShipmentIdAsync(long id, string? shipmentId, CancellationToken cancellationToken) =>
+        ActAsync((m, user) => pending.SetShipmentIdAsync(m, id, shipmentId, user, cancellationToken), "Shipment id added; an inventory sync is on its way to check it.", cancellationToken);
 
     /// <summary>Adds one FBA shipment id to every ticked send logged without one.</summary>
     /// <param name="ids">The ticked sends' ledger entry ids.</param>
     /// <param name="shipmentId">The FBA shipment id.</param>
-    /// <param name="back"><c>worksheet</c> to return to the Worksheet; otherwise this page.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A redirect back.</returns>
-    public async Task<IActionResult> OnPostShipmentIdsAsync(long[]? ids, string? shipmentId, string? back, CancellationToken cancellationToken)
+    /// <returns>A redirect back to the list.</returns>
+    public async Task<IActionResult> OnPostShipmentIdsAsync(long[]? ids, string? shipmentId, CancellationToken cancellationToken)
     {
         if (!CanEdit)
         {
@@ -98,26 +96,24 @@ public sealed class PendingModel(IPendingSendService pending, IInventoryItemServ
                 + (skipped > 0 ? $" {skipped:N0} skipped: no longer pending or already had a reference." : string.Empty);
         }
 
-        return Back(back);
+        return BackToList();
     }
 
     /// <summary>Closes a send by hand.</summary>
     /// <param name="id">The send's ledger entry id.</param>
-    /// <param name="back"><c>worksheet</c> to return to the Worksheet; otherwise this page.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A redirect back.</returns>
-    public Task<IActionResult> OnPostReconciledAsync(long id, string? back, CancellationToken cancellationToken) =>
-        ActAsync(back, (m, user) => pending.MarkReconciledAsync(m, id, user, cancellationToken), "Marked as received by Amazon; it no longer counts as pending.", cancellationToken);
+    /// <returns>A redirect back to the list.</returns>
+    public Task<IActionResult> OnPostReconciledAsync(long id, CancellationToken cancellationToken) =>
+        ActAsync((m, user) => pending.MarkReconciledAsync(m, id, user, cancellationToken), "Marked as received by Amazon; it no longer counts as pending.", cancellationToken);
 
     /// <summary>Cancels a send that never went out (its units return to home stock).</summary>
     /// <param name="id">The send's ledger entry id.</param>
-    /// <param name="back"><c>worksheet</c> to return to the Worksheet; otherwise this page.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A redirect back.</returns>
-    public Task<IActionResult> OnPostCancelAsync(long id, string? back, CancellationToken cancellationToken) =>
-        ActAsync(back, (m, user) => pending.CancelAsync(m, id, user, cancellationToken), "Send cancelled; its units are back in home stock (see the ledger).", cancellationToken);
+    /// <returns>A redirect back to the list.</returns>
+    public Task<IActionResult> OnPostCancelAsync(long id, CancellationToken cancellationToken) =>
+        ActAsync((m, user) => pending.CancelAsync(m, id, user, cancellationToken), "Send cancelled; its units are back in home stock (see the ledger).", cancellationToken);
 
-    private async Task<IActionResult> ActAsync(string? back, Func<string, string, Task<Application.Common.Result>> action, string success, CancellationToken cancellationToken)
+    private async Task<IActionResult> ActAsync(Func<string, string, Task<Application.Common.Result>> action, string success, CancellationToken cancellationToken)
     {
         if (!CanEdit)
         {
@@ -127,10 +123,9 @@ public sealed class PendingModel(IPendingSendService pending, IInventoryItemServ
         Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
         var result = await action(Marketplace.MarketplaceId, User.Identity!.Name!); // Non-null: the page requires an authenticated user.
         TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? success : result.Error;
-        return Back(back);
+        return BackToList();
     }
 
-    private RedirectToPageResult Back(string? back) => back == "worksheet"
-        ? RedirectToPage("/Inventory/Worksheet", new { family = FamilyId })
-        : RedirectToPage(new { family = FamilyId, q = Search, view = View == PendingSendView.All ? null : View.ToString() });
+    private RedirectToPageResult BackToList() =>
+        RedirectToPage(new { family = FamilyId, q = Search, view = View == PendingSendView.All ? null : View.ToString() });
 }
