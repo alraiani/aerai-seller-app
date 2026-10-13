@@ -55,15 +55,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                 columns: new[] { "MarketplaceId", "Sku" },
                 filter: "[Type] = N'ShippedToAmazon' AND [Units] < 0 AND [ReconciledAt] IS NULL");
 
-            // Sends logged before this have no baseline to match against, and Amazon's numbers have long
-            // caught up with nearly all of them, so they start closed rather than all showing as pending.
-            migrationBuilder.Sql("""
-                UPDATE core.HomeStockMovement
-                SET ReconciledUnits = -Units, ReconciledAt = SYSDATETIMEOFFSET(), ReconciledBy = N'system'
-                WHERE Type = N'ShippedToAmazon' AND Units < 0;
-                """);
-
             migrationBuilder.Sql(SqlResource.Read("V016_PendingToAmazon", "rpt.vw_InventoryPosition.sql"));
+
+            // Sends logged before this: closed if Amazon's latest snapshot is newer, otherwise kept pending
+            // with that snapshot as their baseline. Reads the view above, so it runs after it.
+            migrationBuilder.Sql(SqlResource.Read("V016_PendingToAmazon", "backfill-pending-sends.sql"));
         }
 
         /// <inheritdoc />

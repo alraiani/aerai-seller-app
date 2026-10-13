@@ -130,6 +130,50 @@ public sealed class PendingToAmazonTests(SqlDatabaseFixture fixture) : IClassFix
         Assert.True(cancelled.IsSuccess, cancelled.Error);
         var position = await PositionAsync("T-PND-3");
         Assert.Equal((0, 20), (position.PendingToAmazon, position.HomeStock));
-        Assert.Empty(await scope.ServiceProvider.GetRequiredService<IPendingSendService>().ListAsync(MarketplaceIds.UnitedStates, null, CancellationToken.None));
+        var open = await scope.ServiceProvider.GetRequiredService<IPendingSendService>().ListAsync(MarketplaceIds.UnitedStates, null, CancellationToken.None);
+        Assert.DoesNotContain(open, i => i.Send.Sku == "T-PND-3");
+    }
+
+    [SqlFact]
+    public async Task Backfill_SendsFromBeforePendingTracking_ClosedOnlyWhenASnapshotCameAfterThem()
+    {
+        // Logged after the SKU's latest snapshot: Amazon can't show it yet.
+        await PromoteFbaAsync("T-PND-4\tB0PND00004\tWidget\t40\t0\t0\t0\t0\t0\n");
+        await ReceiveAsync("T-PND-4", 50);
+        await SendAsync("T-PND-4", 50, 10);
+
+        // Logged before the SKU's latest snapshot: that snapshot already reflects it.
+        await AddProductAsync("T-PND-5");
+        await ReceiveAsync("T-PND-5", 20);
+        await SendAsync("T-PND-5", 20, 5);
+        await PromoteFbaAsync("T-PND-5\tB0PND00005\tWidget\t30\t0\t0\t0\t0\t0\n");
+
+        // Never at Amazon at all.
+        await AddProductAsync("T-PND-6");
+        await ReceiveAsync("T-PND-6", 8);
+        await SendAsync("T-PND-6", 8, 8);
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // Put the sends back the way they were before the columns existed.
+        await db.Database.ExecuteSqlRawAsync("""
+            UPDATE core.HomeStockMovement
+            SET AmazonBaselineUnits = NULL, AmazonBaselineAt = NULL, ReconciledUnits = 0, ReconciledAt = NULL, ReconciledBy = NULL
+            WHERE Sku IN ('T-PND-4', 'T-PND-5', 'T-PND-6') AND Type = 'ShippedToAmazon'
+            """);
+        var script = SqlResource.Read("V016_PendingToAmazon", "backfill-pending-sends.sql");
+
+        await db.Database.ExecuteSqlRawAsync(script);
+        await db.Database.ExecuteSqlRawAsync(script);
+
+        var open = await LastSendAsync("T-PND-4");
+        var closed = await LastSendAsync("T-PND-5");
+        var neverAtAmazon = await LastSendAsync("T-PND-6");
+        Assert.Equal(((int?)40, (DateTimeOffset?)null), (open.AmazonBaselineUnits, open.ReconciledAt));
+        Assert.Equal((await PositionAsync("T-PND-4")).SnapshotReceivedAt, open.AmazonBaselineAt);
+        Assert.Equal((5, HomeStockMovement.SystemReconciler), (closed.ReconciledUnits, closed.ReconciledBy));
+        Assert.Equal(((int?)0, (DateTimeOffset?)null, (DateTimeOffset?)null), (neverAtAmazon.AmazonBaselineUnits, neverAtAmazon.AmazonBaselineAt, neverAtAmazon.ReconciledAt));
+        Assert.Equal((10, 0, 8), ((await PositionAsync("T-PND-4")).PendingToAmazon, (await PositionAsync("T-PND-5")).PendingToAmazon, (await PositionAsync("T-PND-6")).PendingToAmazon));
     }
 }
