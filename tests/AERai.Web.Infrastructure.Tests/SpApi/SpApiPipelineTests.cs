@@ -172,6 +172,85 @@ public sealed class SpApiPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task ConnectionFailure_IsRetriedThenSucceeds()
+    {
+        _lwa.Reply(HttpStatusCode.OK, TokenJson);
+        _api.Fail(HttpRequestError.SecureConnectionError).Fail(HttpRequestError.ConnectionError)
+            .Reply(HttpStatusCode.OK, """{"reportId":"1","reportType":"X","processingStatus":"DONE","reportDocumentId":"D","createdTime":"2026-10-02T00:00:00Z"}""");
+
+        var report = await CreateClient().GetReportAsync(AmazonRegion.NorthAmerica, "1", CancellationToken.None);
+
+        Assert.Equal("DONE", report.ProcessingStatus);
+        Assert.Equal(3, _api.Requests.Count);
+    }
+
+    [Fact]
+    public async Task ConnectionFailuresExhausted_SurfaceTheError()
+    {
+        _lwa.Reply(HttpStatusCode.OK, TokenJson);
+        for (var i = 0; i < 4; i++)
+        {
+            _api.Fail(HttpRequestError.ConnectionError);
+        }
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => CreateClient().GetReportAsync(AmazonRegion.NorthAmerica, "1", CancellationToken.None));
+
+        Assert.Equal(HttpRequestError.ConnectionError, ex.HttpRequestError);
+        Assert.Equal(4, _api.Requests.Count); // 1 attempt + MaxRetries (3).
+    }
+
+    [Fact]
+    public async Task CreateReport_ConnectionNeverOpened_IsRetried()
+    {
+        _lwa.Reply(HttpStatusCode.OK, TokenJson);
+        _api.Fail(HttpRequestError.SecureConnectionError).Reply(HttpStatusCode.Accepted, """{"reportId":"7"}""");
+
+        var reportId = await CreateClient().CreateReportAsync(UnitedStates, "X", null, null, CancellationToken.None);
+
+        Assert.Equal("7", reportId);
+        Assert.Equal(2, _api.Requests.Count);
+    }
+
+    [Fact]
+    public async Task CreateReport_ConnectionDroppedAfterSending_IsNotRetried()
+    {
+        _lwa.Reply(HttpStatusCode.OK, TokenJson);
+        _api.Fail(HttpRequestError.ResponseEnded);
+
+        // Amazon may already have the request; a second one inside the cooldown would fail both.
+        await Assert.ThrowsAsync<HttpRequestException>(() => CreateClient().CreateReportAsync(UnitedStates, "X", null, null, CancellationToken.None));
+
+        Assert.Single(_api.Requests);
+    }
+
+    [Fact]
+    public async Task ConnectionRetryHandler_RetriesTokenRefreshAndDocumentDownloads()
+    {
+        _lwa.Fail(HttpRequestError.NameResolutionError).Reply(HttpStatusCode.OK, TokenJson);
+        _documents.Fail(HttpRequestError.ResponseEnded).Reply(HttpStatusCode.OK, "doc");
+        using var lwaRetry = new SpApiConnectionRetryHandler(_options, _clock, NullLogger<SpApiConnectionRetryHandler>.Instance) { InnerHandler = _lwa };
+        using var documentRetry = new SpApiConnectionRetryHandler(_options, _clock, NullLogger<SpApiConnectionRetryHandler>.Instance) { InnerHandler = _documents };
+        var factory = new StubHttpClientFactory(new() { [LwaTokenProvider.HttpClientName] = lwaRetry });
+        using var tokens = new LwaTokenProvider(factory, _options, _clock, NullLogger<LwaTokenProvider>.Instance);
+        using var documents = new HttpClient(documentRetry, disposeHandler: false);
+
+        Assert.Equal("tok-1", await tokens.GetAccessTokenAsync(AmazonRegion.NorthAmerica, CancellationToken.None));
+        using var response = await documents.GetAsync(new Uri("https://s3.example/doc"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, _lwa.Requests.Count);
+        Assert.Equal(2, _documents.Requests.Count);
+    }
+
+    [Fact]
+    public void IsTransientConnectionFailure_IgnoresHttpErrorResponses()
+    {
+        var withStatus = new HttpRequestException(HttpRequestError.Unknown, "Bad request.", statusCode: HttpStatusCode.BadRequest);
+
+        Assert.False(SpApiRetry.IsTransientConnectionFailure(withStatus, HttpMethod.Get));
+    }
+
+    [Fact]
     public async Task Unauthorized_RefreshesTokenOnceAndRetries()
     {
         _lwa.Reply(HttpStatusCode.OK, TokenJson)
