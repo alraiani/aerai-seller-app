@@ -41,7 +41,7 @@ public sealed class SpApiOptions
     /// <summary>Europe region (United Kingdom): endpoint and its own refresh token.</summary>
     public SpApiRegionOptions Europe { get; set; } = new();
 
-    /// <summary>Retries for throttled (429) or failed (5xx) calls before giving up.</summary>
+    /// <summary>Retries for throttled (429) or failed (5xx) calls, and for connection failures, before giving up.</summary>
     [Range(0, 10)]
     public int MaxRetries { get; set; } = 5;
 

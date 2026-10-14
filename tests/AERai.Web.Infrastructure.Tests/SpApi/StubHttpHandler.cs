@@ -20,6 +20,10 @@ internal sealed class StubHttpHandler : HttpMessageHandler
         return this;
     }
 
+    /// <summary>Fails the next request without a response, as a dropped network connection does.</summary>
+    public StubHttpHandler Fail(HttpRequestError error) =>
+        Reply(_ => throw new HttpRequestException(error, $"Simulated {error}."));
+
     public StubHttpHandler Reply(Func<HttpRequestMessage, HttpResponseMessage> reply)
     {
         _responses.Enqueue(reply);

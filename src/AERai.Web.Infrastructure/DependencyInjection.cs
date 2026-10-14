@@ -180,8 +180,9 @@ public static class DependencyInjection
                 services.AddSingleton<SpApiRateLimiter>();
                 services.AddSingleton<LwaTokenProvider>();
                 services.AddTransient<SpApiPipelineHandler>();
-                services.AddHttpClient(LwaTokenProvider.HttpClientName);
-                services.AddHttpClient(ReportsApiClient.DocumentHttpClientName);
+                services.AddTransient<SpApiConnectionRetryHandler>();
+                services.AddHttpClient(LwaTokenProvider.HttpClientName).AddHttpMessageHandler<SpApiConnectionRetryHandler>();
+                services.AddHttpClient(ReportsApiClient.DocumentHttpClientName).AddHttpMessageHandler<SpApiConnectionRetryHandler>();
                 services.AddHttpClient<ReportsApiClient>((provider, client) =>
                         client.BaseAddress = provider.GetRequiredService<IOptions<SpApiOptions>>().Value.Endpoint)
                     .AddHttpMessageHandler<SpApiPipelineHandler>();
