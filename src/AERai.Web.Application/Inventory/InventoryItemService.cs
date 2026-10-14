@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Imports;
@@ -236,12 +235,7 @@ public sealed partial class InventoryItemService(
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         ArgumentNullException.ThrowIfNull(content);
 
-        var parsed = Path.GetExtension(fileName).ToLowerInvariant() switch
-        {
-            ".xlsx" => await spreadsheets.ReadAsync(content, MaxHomeStockRows, cancellationToken).ConfigureAwait(false),
-            ".csv" or ".tsv" or ".txt" => await ParseTextAsync(content, cancellationToken).ConfigureAwait(false),
-            _ => Result.Failure<ParsedFile>("Upload a .xlsx, .csv, or .tsv file."),
-        };
+        var parsed = await UploadedSheet.ReadAsync(spreadsheets, fileName, content, MaxHomeStockRows, cancellationToken).ConfigureAwait(false);
         if (parsed.IsFailure)
         {
             return Result.Failure<HomeStockReconciliation>(parsed.Error);
@@ -309,12 +303,6 @@ public sealed partial class InventoryItemService(
         return fields.FirstOrDefault(f => f.Value is { } v && (v < f.Min || v > MaxLeadTimeDays)) is { Name: { } bad } field
             ? $"{bad} must be between {field.Min} and {MaxLeadTimeDays} days."
             : null;
-    }
-
-    private static async Task<Result<ParsedFile>> ParseTextAsync(Stream content, CancellationToken cancellationToken)
-    {
-        using var reader = new StreamReader(content, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-        return await DelimitedTextParser.ParseAsync(reader, MaxHomeStockRows, cancellationToken).ConfigureAwait(false);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Updated {Sku} in {MarketplaceId}: family {Family}, home stock {HomeStock}")]
