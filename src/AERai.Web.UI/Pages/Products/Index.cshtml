@@ -1,38 +1,221 @@
 @page
+@using System.Globalization
+@using AERai.Web.Application.Products
+@using AERai.Web.UI.Models
 @model AERai.Web.UI.Pages.Products.IndexModel
 @{
     ViewData["Title"] = "Products & COGS";
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var t = Model.Totals;
+    var rows = Model.Products.Items;
+    var zone = TimeZoneInfo.FindSystemTimeZoneById(Model.Marketplace.TimeZoneId);
+    var coverage = t.SkuCount == 0 ? 0 : (int)Math.Floor(100m * t.WithCost / t.SkuCount);
+    var noProducts = t.SkuCount == 0 && !Model.IsFiltered;
 }
-<partial name="_SearchForm" model="Model.Search" />
-<div class="card">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
-            <thead><tr><th>SKU</th><th>ASIN</th><th>Title</th><th class="text-end">Cost of goods (@Model.Marketplace.Currency)</th><th>Updated</th><th></th></tr></thead>
-            <tbody>
-            @foreach (var p in Model.Products.Items)
-            {
-                <tr>
-                    <td>@p.Sku</td>
-                    <td>@p.Asin</td>
-                    <td class="cell-truncate" title="@p.Title">@p.Title</td>
-                    <td class="text-end">@(p.CostOfGoods is { } cost ? DashboardFormat.Price(cost, Model.Marketplace.Currency) : "—")</td>
-                    <td>@p.UpdatedAt.ToString("yyyy-MM-dd")</td>
-                    <td class="text-end">
-                        @if (Model.CanEdit)
-                        {
-                            <a asp-page="Edit" asp-route-sku="@p.Sku" class="btn btn-sm btn-outline-primary">Edit</a>
-                        }
-                    </td>
-                </tr>
-            }
-            @if (Model.Products.Items.Count == 0)
-            {
-                <tr><td colspan="6" class="text-body-secondary p-3">No products yet. Products are created when orders or inventory are promoted.</td></tr>
-            }
-            </tbody>
-        </table>
-        </div>
+
+@* ---------- Tiles: filter by whether a cost is set (counts follow the search and family, not the tile) ---------- *@
+<div class="row g-3 mb-3">
+    <div class="col-12 col-md-4">
+        <a class="card tile h-100" href="@Model.CostLink(ProductCostFilter.All)" aria-current="@(Model.Cost == ProductCostFilter.All ? "true" : null)">
+            <div class="kpi">
+                <div class="kpi-label">Products <partial name="_Tip" model='"Every SKU in the catalog that matches the search and family. Click to list them all."' /></div>
+                <div class="kpi-value">@t.SkuCount.ToString("N0", en)</div>
+                <div class="kpi-foot">In @Model.Marketplace.Name · costs in @Model.Marketplace.Currency</div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-md-4">
+        <a class="card tile h-100" href="@Model.CostLink(ProductCostFilter.Missing)" aria-current="@(Model.Cost == ProductCostFilter.Missing ? "true" : null)">
+            <div class="kpi">
+                <div class="kpi-label">Missing cost <partial name="_Tip" model='"SKUs without a cost of goods in this marketplace: their margins and the bookkeeping export can’t use a cost. Click to list them."' /></div>
+                <div class="kpi-value @(t.MissingCost > 0 ? "text-warn" : "")">@t.MissingCost.ToString("N0", en)</div>
+                <div class="kpi-foot">
+                    @if (t.MissingCost == 0)
+                    {
+                        <span>Every SKU has a cost</span>
+                    }
+                    else
+                    {
+                        <span class="pill pill-warn">Needs a cost</span>
+                    }
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-md-4">
+        <a class="card tile h-100" href="@Model.CostLink(ProductCostFilter.Set)" aria-current="@(Model.Cost == ProductCostFilter.Set ? "true" : null)">
+            <div class="kpi">
+                <div class="kpi-label">Cost set <partial name="_Tip" model='"SKUs with a cost of goods in this marketplace. Click to list them."' /></div>
+                <div class="kpi-value">@t.WithCost.ToString("N0", en)</div>
+                <div class="kpi-foot">
+                    <svg class="coverage-bar" width="80" height="6" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+                        <rect class="cover-track" x="0" y="0" width="100" height="6" rx="3" />
+                        <rect class="cover-ok" x="0" y="0" width="@coverage" height="6" rx="3" />
+                    </svg>
+                    <span>@coverage% covered</span>
+                </div>
+            </div>
+        </a>
     </div>
 </div>
-<partial name="_Pager" model="Model.Products.ToPager(Model.Search)" />
+
+@* ---------- Search + filters ---------- *@
+<div class="list-toolbar mb-3">
+    <form method="get" class="filters" data-autosubmit-form role="search">
+        @if (Model.Cost != ProductCostFilter.All)
+        {
+            <input type="hidden" name="cost" value="@Model.Cost" />
+        }
+        @if (Model.Descending)
+        {
+            <input type="hidden" name="desc" value="true" />
+        }
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search SKU, ASIN, name, family…" aria-label="Search products (every word must match)" />
+        </div>
+        <select name="family" class="form-select form-select-sm" aria-label="Family">
+            <option value="">All families</option>
+            @foreach (var f in Model.Families)
+            {
+                <option value="@f.Id" selected="@(Model.FamilyId == f.Id)">@f.Name</option>
+            }
+        </select>
+        <select name="sort" class="form-select form-select-sm" aria-label="Sort by">
+            <option value="" selected="@(Model.Sort == ProductSort.Sku)">SKU</option>
+            <option value="@ProductSort.Title" selected="@(Model.Sort == ProductSort.Title)">Name</option>
+            <option value="@ProductSort.Family" selected="@(Model.Sort == ProductSort.Family)">Family</option>
+            <option value="@ProductSort.Cost" selected="@(Model.Sort == ProductSort.Cost)">Cost (highest first)</option>
+            <option value="@ProductSort.Updated" selected="@(Model.Sort == ProductSort.Updated)">Recently updated</option>
+        </select>
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
+        @if (Model.IsFiltered)
+        {
+            <a href="@Url.Page("Index", new { cost = Model.Cost == ProductCostFilter.All ? null : Model.Cost.ToString() })" class="btn btn-sm btn-link">Clear filters</a>
+        }
+    </form>
+</div>
+
+@* ---------- Product list ---------- *@
+<form method="post" action="@(Request.PathBase + Request.Path + Request.QueryString)" asp-antiforgery="true" data-dirty-form class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@Model.Products.TotalCount.ToString("N0", en) product@(Model.Products.TotalCount == 1 ? "" : "s")</span>
+            @if (Model.CanEdit && rows.Count > 0)
+            {
+                <span class="text-muted-token fw-normal">Type a cost to change it; blank clears it</span>
+            }
+        </span>
+        @if (Model.CanEdit)
+        {
+            <div class="card-toolbar-group">
+                <a asp-page="Upload" asp-page-handler="Template" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"
+                   data-bs-toggle="tooltip" data-bs-title="Download the COGS sheet (.xlsx) with current costs@(Model.FamilyId is null ? "" : " for this family") to edit in bulk and upload back."><partial name="_Icon" model='"download"' /> COGS sheet</a>
+                <a asp-page="Upload" class="btn btn-sm btn-soft"
+                   data-bs-toggle="tooltip" data-bs-title="Upload a filled-in COGS sheet; you'll review the changes before they're saved."><partial name="_Icon" model='"upload"' /> Upload</a>
+            </div>
+        }
+    </div>
+
+    @if (noProducts)
+    {
+        <div class="empty-state">
+            <div class="empty-title">No products yet</div>
+            <div class="empty-detail">Products are created when orders or inventory are promoted or synced from Amazon.</div>
+        </div>
+    }
+    else if (rows.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-title">No products match</div>
+            <div class="empty-detail">Try fewer words, another family, or a different tile.</div>
+            <a asp-page="Index" class="btn btn-sm btn-soft">Show all products</a>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table data-table products-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="product-col" aria-sort="@Model.AriaSort(ProductSort.Sku)"><a href="@Model.SortLink(ProductSort.Sku)" class="sort-link">Product @Model.SortArrow(ProductSort.Sku)</a></th>
+                        <th class="col-family" aria-sort="@Model.AriaSort(ProductSort.Family)"><a href="@Model.SortLink(ProductSort.Family)" class="sort-link">Family @Model.SortArrow(ProductSort.Family)</a></th>
+                        <th class="col-cost" aria-sort="@Model.AriaSort(ProductSort.Cost)"><a href="@Model.SortLink(ProductSort.Cost)" class="sort-link">Cost of goods @Model.SortArrow(ProductSort.Cost)</a>
+                            <partial name="_Tip" model='"Landed cost per unit in this marketplace’s currency. Each marketplace has its own cost."' /></th>
+                        <th class="col-updated" aria-sort="@Model.AriaSort(ProductSort.Updated)"><a href="@Model.SortLink(ProductSort.Updated)" class="sort-link">Updated @Model.SortArrow(ProductSort.Updated)</a></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @for (var i = 0; i < rows.Count; i++)
+                {
+                    var p = rows[i];
+                    var error = Model.RowErrors.GetValueOrDefault(p.Sku);
+                    var editUrl = Model.CanEdit ? Url.Page("/Inventory/Edit", new { sku = p.Sku }) : null;
+                    <tr>
+                        <td class="product-col"><partial name="_ProductCell" model="new ProductCellModel(p.Sku, p.Asin, p.Title, null, p.ImagePath, editUrl)" /></td>
+                        <td class="col-family">
+                            @if (p.Family is { } family)
+                            {
+                                <span class="tag tag-family">@family</span>
+                            }
+                            else
+                            {
+                                <span class="cell-sub">—</span>
+                            }
+                        </td>
+                        <td class="col-cost">
+                            @if (Model.CanEdit)
+                            {
+                                <input type="hidden" name="Rows[@i].Sku" value="@p.Sku" />
+                                <input type="hidden" name="Rows[@i].Original" value="@ProductCostText.Format(p.CostOfGoods)" />
+                                <div class="input-group input-group-sm cost-group">
+                                    <span class="input-group-text" aria-hidden="true">@Model.Symbol</span>
+                                    <input type="text" name="Rows[@i].Value" value="@Model.ValueFor(p)" data-original="@ProductCostText.Format(p.CostOfGoods)"
+                                           inputmode="decimal" autocomplete="off" maxlength="12" placeholder="Not set"
+                                           class="form-control cost-input @(error is null ? "" : "is-invalid")"
+                                           aria-label="Cost of goods for @p.Sku in @Model.Marketplace.Currency"
+                                           aria-invalid="@(error is null ? null : "true")" aria-describedby="@(error is null ? null : $"cost-error-{i}")" />
+                                </div>
+                                @if (error is not null)
+                                {
+                                    <div id="cost-error-@i" class="invalid-feedback d-block">@error</div>
+                                }
+                            }
+                            else if (p.CostOfGoods is { } cost)
+                            {
+                                <span class="fw-semibold">@DashboardFormat.Price(cost, Model.Marketplace.Currency)</span>
+                            }
+                            else
+                            {
+                                <span class="pill pill-warn">Not set</span>
+                            }
+                        </td>
+                        <td class="col-updated">
+                            @if (p.CostUpdatedAt is { } costAt)
+                            {
+                                <span title="Cost last set @TimeZoneInfo.ConvertTime(costAt, zone).ToString("MMM d, yyyy h:mm tt", en)">@TimeZoneInfo.ConvertTime(costAt, zone).ToString("MMM d, yyyy", en)</span>
+                            }
+                            else
+                            {
+                                <span class="cell-sub">—</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (Model.CanEdit && rows.Count > 0)
+    {
+        <div class="save-bar m-2" data-save-bar>
+            <span class="text-muted-token" data-save-count aria-live="polite">Change costs above, then save.</span>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <a href="@(Request.PathBase + Request.Path + Request.QueryString)" class="btn btn-sm btn-link">Discard</a>
+                <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"check"' /> Save costs</button>
+            </div>
+        </div>
+    }
+</form>
+<partial name="_Pager" model="Model.Products.ToPager(Model.Search, Model.CurrentFilters())" />
