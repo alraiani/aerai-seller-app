@@ -586,6 +586,23 @@ public sealed class ReportIngestionServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_FbaReservedInventoryInsideCooldown_WaitsWithoutRequesting()
+    {
+        AddSchedule(AmazonReportType.FbaReservedInventory);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
+        var service = CreateService(Polling);
+        await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(10));
+
+        var second = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        var waiting = _runs.Stored[second.RunId];
+        Assert.Null(waiting.PendingReportId);
+        Assert.Equal(Now.AddMinutes(31), waiting.NextCheckAt);
+        Assert.Single(_gateway.Requests);
+    }
+
+    [Fact]
     public async Task RunAsync_RestockSoonAfterAnotherRequest_RequestsStraightAway()
     {
         AddSchedule(AmazonReportType.RestockRecommendations);

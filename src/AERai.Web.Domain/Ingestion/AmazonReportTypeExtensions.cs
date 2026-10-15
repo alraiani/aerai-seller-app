@@ -26,8 +26,17 @@ public static class AmazonReportTypeExtensions
     /// The shortest time Amazon allows between two requests for the report in one marketplace. Amazon
     /// accepts a request made sooner but then fails it as <c>FATAL</c>, so the request is held back instead.
     /// </summary>
+    /// <remarks>
+    /// Amazon generates its near real-time FBA reports (both inventory reports here) no more than
+    /// once every 30 minutes.
+    /// </remarks>
     /// <param name="reportType">The report type.</param>
-    /// <returns>30 minutes for <see cref="AmazonReportType.FbaInventory"/>; <see cref="TimeSpan.Zero"/> (no limit) otherwise.</returns>
+    /// <returns>
+    /// 30 minutes for <see cref="AmazonReportType.FbaInventory"/> and <see cref="AmazonReportType.FbaReservedInventory"/>;
+    /// <see cref="TimeSpan.Zero"/> (no limit) otherwise.
+    /// </returns>
     public static TimeSpan RequestCooldown(this AmazonReportType reportType) =>
-        reportType == AmazonReportType.FbaInventory ? TimeSpan.FromMinutes(30) : TimeSpan.Zero;
+        reportType is AmazonReportType.FbaInventory or AmazonReportType.FbaReservedInventory
+            ? TimeSpan.FromMinutes(30)
+            : TimeSpan.Zero;
 }
