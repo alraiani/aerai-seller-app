@@ -119,17 +119,21 @@ public sealed partial class StagingImportService : IStagingImportService
             return Result.Failure<ImportReceipt>(parsed.Error);
         }
 
-        var missing = mapper.RequiredColumns.Except(parsed.Value.Headers, StringComparer.Ordinal).ToList();
+        var file = ApplyAliases(mapper, parsed.Value);
+        var missing = mapper.RequiredColumns.Except(file.Headers, StringComparer.Ordinal).ToList();
         if (missing.Count > 0)
         {
-            // A wrong report type is the usual cause, so say what the file looks like instead.
+            // A wrong report type is the usual cause, so say what the file looks like instead. Otherwise
+            // list the file's columns: the file itself isn't visible from a scheduled run's message.
             var looksLike = MatchingSources(parsed.Value.Headers).Where(s => s != command.Source).ToList();
-            var hint = looksLike.Count == 1 ? $" It looks like a {looksLike[0]} file: choose that report type." : string.Empty;
+            var hint = looksLike.Count == 1
+                ? $" It looks like a {looksLike[0]} file: choose that report type."
+                : $" The file's columns are: {string.Join(", ", parsed.Value.Headers)}.";
             return Result.Failure<ImportReceipt>(
                 $"The file is missing required {command.Source} column(s): {string.Join(", ", missing)}.{hint}");
         }
 
-        if (parsed.Value.Records.Count == 0)
+        if (file.Records.Count == 0)
         {
             return Result.Failure<ImportReceipt>(NoDataRowsError);
         }
@@ -144,10 +148,10 @@ public sealed partial class StagingImportService : IStagingImportService
             UploadedBy = command.RequestedBy,
             UploadedAt = _timeProvider.GetUtcNow(),
             Status = ImportBatchStatus.Received,
-            RowCount = parsed.Value.Records.Count,
+            RowCount = file.Records.Count,
         };
 
-        foreach (var record in parsed.Value.Records)
+        foreach (var record in file.Records)
         {
             mapper.Append(batch, record);
         }
@@ -179,11 +183,70 @@ public sealed partial class StagingImportService : IStagingImportService
         };
     }
 
-    /// <summary>The report types whose required columns are all present in the headers.</summary>
-    private List<ImportSource> MatchingSources(IReadOnlyCollection<string> headers) =>
+    /// <summary>The report types whose required columns are all present in the headers (aliases included).</summary>
+    private List<ImportSource> MatchingSources(IReadOnlyList<string> headers) =>
         [.. _mappers.Values
-            .Where(m => !m.RequiredColumns.Except(headers, StringComparer.Ordinal).Any())
+            .Where(m => !m.RequiredColumns.Except(ResolveHeaders(m, headers), StringComparer.Ordinal).Any())
             .Select(m => m.Source)];
+
+    /// <summary>
+    /// Renames each header that is an alias of a column the file lacks to that column's name (the
+    /// first alias present wins); every other header is kept as it is.
+    /// </summary>
+    private static List<string> ResolveHeaders(IStagingRowMapper mapper, IReadOnlyList<string> headers)
+    {
+        var resolved = headers.ToList();
+        foreach (var (column, aliases) in mapper.ColumnAliases)
+        {
+            if (resolved.Contains(column, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
+            var index = aliases.Select(a => resolved.IndexOf(a)).FirstOrDefault(i => i >= 0, -1);
+            if (index >= 0)
+            {
+                resolved[index] = column;
+            }
+        }
+
+        return resolved;
+    }
+
+    /// <summary>
+    /// Returns the file with aliased headers renamed (see <see cref="ResolveHeaders"/>), so mappers
+    /// read every record by the names they know. Raw lines are kept as they were.
+    /// </summary>
+    private static ParsedFile ApplyAliases(IStagingRowMapper mapper, ParsedFile file)
+    {
+        var headers = ResolveHeaders(mapper, file.Headers);
+        var renames = headers
+            .Select((name, i) => (From: file.Headers[i], To: name))
+            .Where(r => !string.Equals(r.From, r.To, StringComparison.Ordinal))
+            .ToList();
+        if (renames.Count == 0)
+        {
+            return file;
+        }
+
+        var records = file.Records
+            .Select(record =>
+            {
+                var fields = new Dictionary<string, string>(record.Fields, StringComparer.Ordinal);
+                foreach (var (from, to) in renames)
+                {
+                    if (fields.Remove(from, out var value))
+                    {
+                        fields[to] = value;
+                    }
+                }
+
+                return record with { Fields = fields };
+            })
+            .ToList();
+
+        return new ParsedFile(headers, records);
+    }
 
     /// <inheritdoc/>
     public async Task<Result<ImportReceipt>> RestageAsync(long batchId, string requestedBy, CancellationToken cancellationToken)

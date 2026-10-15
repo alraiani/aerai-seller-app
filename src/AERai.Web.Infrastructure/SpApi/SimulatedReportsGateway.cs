@@ -182,14 +182,15 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
     private static string ReservedInventoryReport(string reportId)
     {
         var random = Seeded(reportId);
-        var builder = new StringBuilder("sku\tfnsku\tasin\tproduct-name\treserved_qty\treserved_customerorders\treserved_fc-transfers\treserved_fc-processing\n");
+        // Amazon's current layout: reserved_staging in place of the documented reserved_fc-transfers.
+        var builder = new StringBuilder("sku\tfnsku\tasin\tproduct-name\treserved_qty\treserved_customerorders\treserved_fc-processing\treserved_staging\tprogram\n");
 
 #pragma warning disable CA5394 // Simulated data; randomness is not security-sensitive.
         foreach (var (sku, asin, title, _) in Catalog)
         {
-            int customerOrders = random.Next(0, 8), transfers = random.Next(0, 3) == 0 ? random.Next(5, 40) : 0, processing = random.Next(0, 4);
+            int customerOrders = random.Next(0, 8), staging = random.Next(0, 3) == 0 ? random.Next(5, 40) : 0, processing = random.Next(0, 4);
             builder.Append(CultureInfo.InvariantCulture,
-                $"{sku}\tX00{asin[4..]}\t{asin}\t{title}\t{customerOrders + transfers + processing}\t{customerOrders}\t{transfers}\t{processing}\n");
+                $"{sku}\tX00{asin[4..]}\t{asin}\t{title}\t{customerOrders + staging + processing}\t{customerOrders}\t{processing}\t{staging}\t\n");
         }
 #pragma warning restore CA5394
 

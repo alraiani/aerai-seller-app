@@ -22,7 +22,7 @@ public sealed class StagingImportServiceTests
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 2, 12, 0, 0, TimeSpan.Zero));
 
     private StagingImportService CreateService(ImportOptions? options = null) => new(
-        [new OrderLineMapper(), new InventoryRowMapper(), new SettlementLineMapper()],
+        [new OrderLineMapper(), new InventoryRowMapper(), new SettlementLineMapper(), new FbaReservedInventoryRowMapper()],
         _rawFiles,
         _repository,
         _batches,
@@ -117,6 +117,51 @@ public sealed class StagingImportServiceTests
 
         Assert.Equal("orders.csv", Assert.Single(_repository.Saved).FileName);
         Assert.DoesNotContain("..", Assert.Single(_rawFiles.Files).Key, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ImportAsync_ReservedFileWithStagingInsteadOfTransfers_ReadsStagingAsTransfers()
+    {
+        // Header and quoting exactly as Amazon's live US report (October 2026).
+        var content =
+            "\"sku\",\"fnsku\",\"asin\",\"product-name\",\"reserved_qty\",\"reserved_customerorders\",\"reserved_fc-processing\",\"reserved_staging\",\"program\"\n" +
+            "\"A-1\",\"X001\",\"B01\",\"Cloth, 3-Pack\",\"9\",\"2\",\"4\",\"3\",\"\"\n";
+
+        var result = await CreateService().ImportAsync(
+            Command(content, "reserved.csv", ImportSource.FbaReservedInventory), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : null);
+        var row = Assert.Single(Assert.Single(_repository.Saved).FbaReservedRows);
+        Assert.Equal("2", row.ReservedCustomerOrders);
+        Assert.Equal("3", row.ReservedFcTransfers);
+        Assert.Equal("4", row.ReservedFcProcessing);
+    }
+
+    [Fact]
+    public async Task ImportAsync_ReservedFileWithDocumentedHeaders_ReadsTheColumns()
+    {
+        var content =
+            "sku\treserved_qty\treserved_customerorders\treserved_fc-transfers\treserved_fc-processing\n" +
+            "A-1\t9\t2\t3\t4\n";
+
+        var result = await CreateService().ImportAsync(
+            Command(content, "reserved.tsv", ImportSource.FbaReservedInventory), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : null);
+        Assert.Equal("3", Assert.Single(Assert.Single(_repository.Saved).FbaReservedRows).ReservedFcTransfers);
+    }
+
+    [Fact]
+    public async Task ImportAsync_RequiredColumnMissing_ErrorListsTheFilesColumns()
+    {
+        var content = "sku\treserved_customerorders\tmystery_column\treserved_fc-processing\nA-1\t2\t3\t4\n";
+
+        var result = await CreateService().ImportAsync(
+            Command(content, "reserved.tsv", ImportSource.FbaReservedInventory), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("reserved-fc-transfers", result.Error, StringComparison.Ordinal);
+        Assert.Contains("mystery-column", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]

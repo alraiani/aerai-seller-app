@@ -22,7 +22,7 @@ public sealed class StgFbaReservedRow : StagingRow
     /// <summary><c>reserved_customerorders</c>.</summary>
     public string? ReservedCustomerOrders { get; set; }
 
-    /// <summary><c>reserved_fc-transfers</c>.</summary>
+    /// <summary><c>reserved_fc-transfers</c>, or <c>reserved_staging</c> in the current report layout.</summary>
     public string? ReservedFcTransfers { get; set; }
 
     /// <summary><c>reserved_fc-processing</c>.</summary>
