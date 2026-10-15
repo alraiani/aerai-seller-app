@@ -23,7 +23,8 @@ internal sealed class MarketplaceConfiguration : IEntityTypeConfiguration<Market
         builder.Property(m => m.SettlementMarketplaceId).HasMaxLength(16);
         builder.HasOne<Marketplace>().WithMany().HasForeignKey(m => m.SettlementMarketplaceId).OnDelete(DeleteBehavior.Restrict);
 
-        // The UK starts inactive: it is in the EU region, which needs its own SP-API authorization.
+        // The UK is in the EU region, which needs its own SP-API authorization (SpApi:Europe:RefreshToken);
+        // it was seeded inactive until that existed and is active now that it does.
         builder.HasData(
             new Marketplace
             {
@@ -39,7 +40,7 @@ internal sealed class MarketplaceConfiguration : IEntityTypeConfiguration<Market
             new Marketplace
             {
                 MarketplaceId = MarketplaceIds.UnitedKingdom, Code = "UK", Name = "United Kingdom", Region = AmazonRegion.Europe,
-                Currency = "GBP", TimeZoneId = "Europe/London", SalesChannel = "Amazon.co.uk", SortOrder = 3, IsActive = false,
+                Currency = "GBP", TimeZoneId = "Europe/London", SalesChannel = "Amazon.co.uk", SortOrder = 3, IsActive = true,
             });
     }
 }
