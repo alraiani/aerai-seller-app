@@ -42,12 +42,6 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// </summary>
     public static readonly TimeSpan DataEndSafetyMargin = TimeSpan.FromMinutes(5);
 
-    /// <summary>
-    /// Added to a report's request cooldown so a request made right at its end is not refused because
-    /// Amazon's clock is a little behind ours.
-    /// </summary>
-    private static readonly TimeSpan RequestCooldownMargin = TimeSpan.FromMinutes(1);
-
     /// <summary>How much of a failed report's error document is read; Amazon's are a line or two.</summary>
     private const int MaxFailureDocumentChars = 4_000;
 
@@ -353,6 +347,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             }
 
             run.NextCheckAt = allowedAt;
+            run.Message = ReportRequestCooldown.Describe(context.Schedule.ReportType, allowedAt);
             await _runs.SaveProgressAsync(run, cancellationToken).ConfigureAwait(false);
             LogRequestHeldBack(run.Id, context.Schedule.Name, allowedAt);
             return true;
@@ -380,6 +375,9 @@ public sealed partial class ReportIngestionService : IReportIngestionService
 
         run.AmazonReportIds = reportId;
         run.PendingReportId = reportId;
+
+        // A run that waited out the cooldown no longer waits; its outcome becomes the message when it finishes.
+        run.Message = null;
         run.ReportRequestedAt = now;
         run.PollAttempts = 0;
         run.NextCheckAt = now + PollDelay(0);
@@ -395,15 +393,14 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// </summary>
     private async Task<DateTimeOffset?> RequestAllowedAtAsync(RunContext context, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var cooldown = context.Schedule.ReportType.RequestCooldown();
-        if (cooldown <= TimeSpan.Zero)
+        var reportType = context.Schedule.ReportType;
+        if (reportType.RequestCooldown() <= TimeSpan.Zero)
         {
             return null;
         }
 
-        var lastRequest = await _runs.GetLastReportRequestAsync(context.Schedule.ReportType, context.Schedule.MarketplaceId, cancellationToken).ConfigureAwait(false);
-        var allowedAt = lastRequest + cooldown + RequestCooldownMargin;
-        return allowedAt > now ? allowedAt : null;
+        var lastRequest = await _runs.GetLastReportRequestAsync(reportType, context.Schedule.MarketplaceId, cancellationToken).ConfigureAwait(false);
+        return ReportRequestCooldown.WaitUntil(reportType, lastRequest, now);
     }
 
     /// <summary>Downloads (or records the absence of) an on-demand report Amazon has finished with.</summary>

@@ -60,7 +60,8 @@ internal sealed class SyncRunRepository(AppDbContext dbContext) : ISyncRunReposi
                 .SetProperty(r => r.PendingReportId, run.PendingReportId)
                 .SetProperty(r => r.NextCheckAt, run.NextCheckAt)
                 .SetProperty(r => r.ReportRequestedAt, run.ReportRequestedAt)
-                .SetProperty(r => r.PollAttempts, run.PollAttempts),
+                .SetProperty(r => r.PollAttempts, run.PollAttempts)
+                .SetProperty(r => r.Message, run.Message),
                 cancellationToken);
     }
 
