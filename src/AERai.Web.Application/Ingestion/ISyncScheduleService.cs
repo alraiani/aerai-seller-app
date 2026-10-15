@@ -35,8 +35,11 @@ public interface ISyncScheduleService
     /// <param name="id">Schedule id.</param>
     /// <param name="user">Acting user.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>Success, or a failure when the schedule is unknown or Amazon is not connected.</returns>
-    Task<Result> RunNowAsync(int id, string user, CancellationToken cancellationToken);
+    /// <returns>
+    /// Whether the report request will wait for Amazon's request limit, or a failure when the schedule
+    /// is unknown or Amazon is not connected.
+    /// </returns>
+    Task<Result<RunNowResult>> RunNowAsync(int id, string user, CancellationToken cancellationToken);
 
     /// <summary>
     /// Queues a run that re-pulls a window of history (Orders, Settlements). FBA inventory is a
@@ -55,7 +58,10 @@ public interface ISyncScheduleService
     /// </summary>
     /// <param name="user">Acting user.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>What was queued and skipped, or a failure when Amazon is not connected or no schedule is switched on.</returns>
+    /// <returns>
+    /// What was queued, skipped, and will wait for Amazon's request limit, or a failure when Amazon is
+    /// not connected or no schedule is switched on.
+    /// </returns>
     Task<Result<SyncAllResult>> SyncAllAsync(string user, CancellationToken cancellationToken);
 
     /// <summary>

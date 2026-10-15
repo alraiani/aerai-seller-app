@@ -541,6 +541,7 @@ public sealed class ReportIngestionServiceTests
         var waiting = _runs.Stored[second.RunId];
         Assert.Null(waiting.PendingReportId);
         Assert.Equal(Now.AddMinutes(31), waiting.NextCheckAt);
+        Assert.Equal(ReportRequestCooldown.Describe(AmazonReportType.FbaInventory, Now.AddMinutes(31)), waiting.Message);
         Assert.Single(_gateway.Requests);
 
         _clock.SetUtcNow(waiting.NextCheckAt!.Value);
@@ -550,7 +551,28 @@ public sealed class ReportIngestionServiceTests
         Assert.Equal(2, _gateway.Requests.Count);
         Assert.Equal("R2", _runs.Stored[second.RunId].PendingReportId);
         Assert.Equal(Now.AddMinutes(31), _runs.Stored[second.RunId].ReportRequestedAt);
+        Assert.Null(_runs.Stored[second.RunId].Message); // Asked Amazon, so no longer waiting.
         Assert.Equal(SyncRunStatus.Running, _runs.Stored[first.RunId].Status);
+    }
+
+    [Fact]
+    public async Task ContinueAsync_RunThatWaitedOutTheCooldown_FinishesWithoutTheWaitingMessage()
+    {
+        AddSchedule(AmazonReportType.FbaInventory);
+        var service = CreateService(Polling);
+        await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(10));
+        var second = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.Done, "D1"));
+        _gateway.Documents["D1"] = "sku\tafn-fulfillable-quantity\n";
+
+        _clock.SetUtcNow(_runs.Stored[second.RunId].NextCheckAt!.Value);
+        await service.ContinueAsync(second.RunId, CancellationToken.None);
+        _clock.SetUtcNow(_runs.Stored[second.RunId].NextCheckAt!.Value);
+        var finished = await service.ContinueAsync(second.RunId, CancellationToken.None);
+
+        Assert.NotEqual(SyncRunStatus.Running, finished.Status);
+        Assert.DoesNotContain("Waiting until", finished.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -583,6 +605,23 @@ public sealed class ReportIngestionServiceTests
         var summary = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
 
         Assert.Equal("R2", _runs.Stored[summary.RunId].PendingReportId);
+    }
+
+    [Fact]
+    public async Task RunAsync_FbaReservedInventoryInsideCooldown_WaitsWithoutRequesting()
+    {
+        AddSchedule(AmazonReportType.FbaReservedInventory);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
+        var service = CreateService(Polling);
+        await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(10));
+
+        var second = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        var waiting = _runs.Stored[second.RunId];
+        Assert.Null(waiting.PendingReportId);
+        Assert.Equal(Now.AddMinutes(31), waiting.NextCheckAt);
+        Assert.Single(_gateway.Requests);
     }
 
     [Fact]
