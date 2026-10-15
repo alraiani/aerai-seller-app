@@ -584,7 +584,7 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                             MarketplaceId = "A1F83G8C2ARO7P",
                             Code = "UK",
                             Currency = "GBP",
-                            IsActive = false,
+                            IsActive = true,
                             Name = "United Kingdom",
                             Region = "Europe",
                             SalesChannel = "Amazon.co.uk",
