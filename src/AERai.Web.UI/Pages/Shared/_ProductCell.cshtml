@@ -1,0 +1,33 @@
+@model AERai.Web.UI.Models.ProductCellModel
+@* Product cell shared by the Inventory and Products lists: picture, title (a link when EditUrl is set), SKU · ASIN, family. *@
+<div class="product-cell">
+    @if (Model.ImagePath is { } image)
+    {
+        <img class="product-thumb" src="@Url.Page("/Inventory/Image", new { sku = Model.Sku, v = System.IO.Path.GetFileNameWithoutExtension(image) })" alt="" loading="lazy" width="40" height="40" />
+    }
+    else
+    {
+        <span class="product-thumb product-thumb-empty" aria-hidden="true"><partial name="_Icon" model='"box"' /></span>
+    }
+    <div class="min-w-0">
+        @if (Model.EditUrl is { } edit)
+        {
+            <a class="product-title product-link" href="@edit" title="@(Model.Title ?? Model.Sku)">@(Model.Title ?? Model.Sku)</a>
+        }
+        else
+        {
+            <div class="product-title" title="@(Model.Title ?? Model.Sku)">@(Model.Title ?? Model.Sku)</div>
+        }
+        <div class="product-sku">
+            <span>@Model.Sku</span>
+            @if (Model.Asin is { } asin)
+            {
+                <span>· @asin</span>
+            }
+            @if (Model.Family is { } family)
+            {
+                <span class="tag tag-family">@family</span>
+            }
+        </div>
+    </div>
+</div>

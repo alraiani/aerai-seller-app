@@ -1,0 +1,214 @@
+@page
+@using System.Globalization
+@using AERai.Web.Application.Products
+@using AERai.Web.UI.Models
+@model AERai.Web.UI.Pages.Products.UploadModel
+@{
+    ViewData["Title"] = "Upload COGS";
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var currency = Model.Marketplace.Currency;
+}
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">Products &amp; COGS</a>
+    <span aria-hidden="true">/</span>
+    <span>Upload</span>
+</nav>
+
+@if (Model.Preview is { } preview)
+{
+    @* ---------- Review: the sheet checked against current costs; nothing saved yet ---------- *@
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-xl-3">
+            <div class="card tile h-100"><div class="kpi">
+                <div class="kpi-label">New costs</div>
+                <div class="kpi-value @(preview.NewCount > 0 ? "text-positive" : "")">@preview.NewCount.ToString("N0", en)</div>
+                <div class="kpi-foot">SKUs getting a cost</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card tile h-100"><div class="kpi">
+                <div class="kpi-label">Changed costs</div>
+                <div class="kpi-value">@preview.UpdatedCount.ToString("N0", en)</div>
+                <div class="kpi-foot">Replace the cost on record</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card tile h-100"><div class="kpi">
+                <div class="kpi-label">Unchanged</div>
+                <div class="kpi-value">@preview.UnchangedCount.ToString("N0", en)</div>
+                <div class="kpi-foot">@preview.BlankCount.ToString("N0", en) blank, left as they are</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card tile h-100 @(preview.Rejected.Count > 0 ? "tile-bad" : "")"><div class="kpi">
+                <div class="kpi-label">Skipped rows</div>
+                <div class="kpi-value">@preview.Rejected.Count.ToString("N0", en)</div>
+                <div class="kpi-foot">@(preview.Rejected.Count == 0 ? "Every row could be read" : "Listed below; not applied")</div>
+            </div></div>
+        </div>
+    </div>
+
+    @if (preview.Changes.Count == 0)
+    {
+        <div class="card mb-3">
+            <div class="empty-state">
+                <div class="empty-title">Nothing to change</div>
+                <div class="empty-detail">Every cost in the sheet already matches @Model.Marketplace.Name's costs, or was left blank.</div>
+                <a asp-page="Upload" class="btn btn-sm btn-soft">Upload another sheet</a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <form method="post" asp-page-handler="Apply" class="card mb-3">
+            <div class="card-toolbar">
+                <span class="card-toolbar-title">
+                    Review @preview.Changes.Count.ToString("N0", en) change@(preview.Changes.Count == 1 ? "" : "s") in @Model.Marketplace.Name (@currency)
+                    <partial name="_Tip" model='"Each row compares the cost in your sheet with the cost on record now. Nothing is saved until you apply. A SKU whose cost changes before you apply is skipped."' />
+                </span>
+                <span class="text-muted-token small">Nothing is saved until you apply</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table data-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th class="text-end">On record</th>
+                            <th class="text-end">In sheet</th>
+                            <th class="text-end">Change</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var c in preview.Changes)
+                    {
+                        <tr>
+                            <td>
+                                <span class="fw-semibold">@c.Sku</span>
+                                @if (c.Title is { } title)
+                                {
+                                    <div class="cell-sub cell-truncate" title="@title">@title</div>
+                                }
+                            </td>
+                            <td class="text-end">
+                                @if (c.Current is { } current)
+                                {
+                                    @DashboardFormat.Price(current, currency)
+                                }
+                                else
+                                {
+                                    <span class="pill pill-warn">Not set</span>
+                                }
+                            </td>
+                            <td class="text-end fw-semibold">@(c.New is { } updated ? DashboardFormat.Price(updated, currency) : "—")</td>
+                            <td class="text-end">
+                                @if (c.Current is { } before && c.New is { } after)
+                                {
+                                    var diff = after - before;
+                                    <span class="ledger-units @(diff > 0 ? "in" : "out")">@(diff > 0 ? "+" : "−")@DashboardFormat.Price(Math.Abs(diff), currency)</span>
+                                }
+                                else
+                                {
+                                    <span class="pill pill-ok">New</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+            <div class="form-section-body border-top">
+                <input type="hidden" asp-for="Changes" />
+                <div class="d-flex gap-2 justify-content-end">
+                    <a asp-page="Upload" class="btn btn-link">Cancel</a>
+                    <button type="submit" class="btn btn-primary"><partial name="_Icon" model='"check"' /> Apply @preview.Changes.Count.ToString("N0", en) change@(preview.Changes.Count == 1 ? "" : "s")</button>
+                </div>
+            </div>
+        </form>
+    }
+
+    @if (preview.Rejected.Count > 0)
+    {
+        <div class="card mb-3">
+            <div class="card-toolbar"><span class="card-toolbar-title">Skipped rows</span></div>
+            <div class="table-responsive">
+                <table class="table data-table mb-0">
+                    <thead><tr><th>Row</th><th>Problem</th><th>Line</th></tr></thead>
+                    <tbody>
+                    @foreach (var row in preview.Rejected.Take(UploadModel.RejectedRowsShown))
+                    {
+                        <tr><td>@row.RowNumber</td><td>@row.ErrorMessage</td><td class="raw-line">@row.RawLine</td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+            @if (preview.Rejected.Count > UploadModel.RejectedRowsShown)
+            {
+                <p class="page-footnote px-3 pb-2">Showing the first @UploadModel.RejectedRowsShown of @preview.Rejected.Count.ToString("N0", en) skipped rows.</p>
+            }
+        </div>
+    }
+    return;
+}
+
+<div class="row g-3">
+    <div class="col-xl-8">
+        <section class="card form-section mb-3">
+            <div class="form-section-head">
+                <span class="step">1</span>
+                <div>
+                    <h2>Download the COGS sheet</h2>
+                    <p>An Excel workbook already mapped to this upload: every product (or one family), grouped by family, with its current @Model.Marketplace.Name cost in the yellow <code>cost-of-goods</code> column. Type the new costs in @currency there and upload it back as-is.</p>
+                </div>
+            </div>
+            <div class="form-section-body">
+                <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
+                    <input type="hidden" name="handler" value="Template" />
+                    <select name="family" class="form-select w-auto" aria-label="Which products to include">
+                        <option value="">All products</option>
+                        @foreach (var f in Model.Families)
+                        {
+                            <option value="@f.Id">@f.Name only</option>
+                        }
+                    </select>
+                    <button type="submit" class="btn btn-soft"><partial name="_Icon" model='"download"' /> Download .xlsx</button>
+                </form>
+                <div class="form-text mt-2">Reference columns (ASIN, product name, family, when the cost was last set) help you fill it in and are ignored on upload.</div>
+            </div>
+        </section>
+
+        <section class="card form-section mb-3">
+            <div class="form-section-head">
+                <span class="step">2</span>
+                <div>
+                    <h2>Upload, review, apply</h2>
+                    <p>The sheet is checked against the costs on record in @Model.Marketplace.Name. You'll see every new and changed cost before anything is saved. Products not in the file, or with a blank cost, are left alone.</p>
+                </div>
+            </div>
+            <div class="form-section-body">
+                <form method="post" enctype="multipart/form-data">
+                    <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
+                    <div class="mb-3">
+                        <label asp-for="Spreadsheet" class="form-label">COGS sheet</label>
+                        <input asp-for="Spreadsheet" type="file" class="form-control" accept=".xlsx,.csv,.tsv" aria-describedby="spreadsheet-help" />
+                        <div id="spreadsheet-help" class="form-text">.xlsx, .csv, or .tsv, up to @(UploadModel.MaxFileBytes / (1024 * 1024)) MB and @ProductService.MaxCostSheetRows.ToString("N0", en) rows.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><partial name="_Icon" model='"upload"' /> Upload and review</button>
+                </form>
+            </div>
+        </section>
+    </div>
+    <div class="col-xl-4">
+        <div class="card summary-card">
+            <div class="card-body">
+                <div class="kpi-label mb-2">File layout</div>
+                <ul class="summary-facts">
+                    <li>A header row with <code>sku</code> and <code>cost-of-goods</code> columns; others are ignored (the downloaded sheet already has them)</li>
+                    <li>Costs are per unit in @currency and rounded to cents; <code>$4.50</code> and <code>1,204.5</code> both work</li>
+                    <li>A blank cost leaves the SKU's cost as it is; clear a cost on the Products page</li>
+                    <li>Unknown SKUs and bad numbers are skipped and listed</li>
+                    <li>If a SKU appears twice, the last row wins</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>

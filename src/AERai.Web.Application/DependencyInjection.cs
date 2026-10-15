@@ -68,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<IHomeStockTemplateService, HomeStockTemplateService>();
         services.AddScoped<IStockAlertService, StockAlertService>();
         services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<IProductCostTemplateService, ProductCostTemplateService>();
         services.AddScoped<IBookkeepingService, BookkeepingService>();
         services.AddScoped<ISettlementExchangeRateService, SettlementExchangeRateService>();
         services.AddScoped<IBlobRefreshService, BlobRefreshService>();

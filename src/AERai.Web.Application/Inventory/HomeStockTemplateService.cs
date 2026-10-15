@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Domain.Core;
@@ -43,19 +42,7 @@ public sealed class HomeStockTemplateService(IInventoryService inventory, IHomeS
         var family = familyId is null ? null : rows.FirstOrDefault()?.Family;
         var title = family is null ? $"Home stock — {marketplace.Name}" : $"Home stock — {family}, {marketplace.Name}";
         var today = LocalTime.DateOf(clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId));
-        var fileName = string.Create(CultureInfo.InvariantCulture, $"home-stock-{marketplace.Code}{(family is null ? "" : "-" + Slug(family))}-{today:yyyy-MM-dd}.xlsx");
+        var fileName = string.Create(CultureInfo.InvariantCulture, $"home-stock-{marketplace.Code}{(family is null ? "" : "-" + FileNames.Slug(family))}-{today:yyyy-MM-dd}.xlsx");
         return (fileName, writer.Write(title, rows));
-    }
-
-    /// <summary>A family name made safe for a file name ("Microfiber Magic" → "microfiber-magic").</summary>
-    private static string Slug(string name)
-    {
-        var builder = new StringBuilder(name.Length);
-        foreach (var c in name.Trim().ToLowerInvariant())
-        {
-            builder.Append(char.IsAsciiLetterOrDigit(c) ? c : '-');
-        }
-
-        return string.Join('-', builder.ToString().Split('-', StringSplitOptions.RemoveEmptyEntries));
     }
 }
