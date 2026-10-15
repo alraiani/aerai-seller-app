@@ -49,6 +49,7 @@ internal sealed class FakeSyncRunRepository : ISyncRunRepository
         stored.NextCheckAt = run.NextCheckAt;
         stored.ReportRequestedAt = run.ReportRequestedAt;
         stored.PollAttempts = run.PollAttempts;
+        stored.Message = run.Message;
         return Task.CompletedTask;
     }
 

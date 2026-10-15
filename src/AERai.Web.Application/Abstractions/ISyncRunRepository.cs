@@ -28,7 +28,7 @@ public interface ISyncRunRepository
 
     /// <summary>
     /// Saves a still-running run's progress: the data window, the Amazon report it is waiting for,
-    /// and when to check on it next.
+    /// when to check on it next, and its message (what it is waiting for, if anything).
     /// </summary>
     /// <param name="run">The run.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

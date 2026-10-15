@@ -137,20 +137,21 @@ public sealed partial class SyncScheduleService(
     }
 
     /// <inheritdoc/>
-    public async Task<Result> RunNowAsync(int id, string user, CancellationToken cancellationToken)
+    public async Task<Result<RunNowResult>> RunNowAsync(int id, string user, CancellationToken cancellationToken)
     {
         if (!connection.CanRun)
         {
-            return Result.Failure($"Amazon is not connected: {connection.Problem}");
+            return Result.Failure<RunNowResult>($"Amazon is not connected: {connection.Problem}");
         }
 
-        if (await repository.GetAsync(id, cancellationToken).ConfigureAwait(false) is null)
+        if (await repository.GetAsync(id, cancellationToken).ConfigureAwait(false) is not { } schedule)
         {
-            return Result.Failure("Schedule not found.");
+            return Result.Failure<RunNowResult>("Schedule not found.");
         }
 
+        var wait = await RequestWaitAsync(schedule, cancellationToken).ConfigureAwait(false);
         await queue.EnqueueAsync(new ManualRunRequest(id, user), cancellationToken).ConfigureAwait(false);
-        return Result.Success();
+        return Result.Success(new RunNowResult(wait));
     }
 
     /// <inheritdoc/>
@@ -224,6 +225,7 @@ public sealed partial class SyncScheduleService(
 
         var queued = new List<string>();
         var skipped = new List<string>();
+        var waiting = new List<RequestWait>();
         foreach (var schedule in schedules)
         {
             // A run still waiting on Amazon for this schedule is already doing this work.
@@ -233,12 +235,34 @@ public sealed partial class SyncScheduleService(
                 continue;
             }
 
+            if (await RequestWaitAsync(schedule, cancellationToken).ConfigureAwait(false) is { } wait)
+            {
+                waiting.Add(wait);
+            }
+
             await queue.EnqueueAsync(new ManualRunRequest(schedule.Id, user), cancellationToken).ConfigureAwait(false);
             queued.Add(schedule.Name);
         }
 
         LogSyncAll(queued.Count, skipped.Count, user);
-        return Result.Success(new SyncAllResult(queued, skipped));
+        return Result.Success(new SyncAllResult(queued, skipped, waiting));
+    }
+
+    /// <summary>
+    /// Whether a run queued now would have to wait for the report's request limit, judged from the last
+    /// request for the same report type and marketplace. Only reports with a cooldown are looked up.
+    /// </summary>
+    private async Task<RequestWait?> RequestWaitAsync(SyncSchedule schedule, CancellationToken cancellationToken)
+    {
+        if (schedule.ReportType.RequestCooldown() <= TimeSpan.Zero)
+        {
+            return null;
+        }
+
+        var lastRequest = await runs.GetLastReportRequestAsync(schedule.ReportType, schedule.MarketplaceId, cancellationToken).ConfigureAwait(false);
+        return ReportRequestCooldown.WaitUntil(schedule.ReportType, lastRequest, clock.GetUtcNow()) is { } until
+            ? new RequestWait(schedule.Name, until, ReportRequestCooldown.Describe(schedule.ReportType, until))
+            : null;
     }
 
     /// <summary>Switched-on schedules in active marketplaces, by marketplace then report type.</summary>

@@ -183,6 +183,11 @@ public sealed class IndexModel(
         }
 
         TempData[StatusMessage.Success] = "Run queued. This page refreshes on its own while it runs.";
+        if (result.Value.Wait is { } wait)
+        {
+            TempData[StatusMessage.Warning] = wait.Message;
+        }
+
         return RedirectToPage("Runs", new { scheduleId = id });
     }
 
@@ -202,10 +207,21 @@ public sealed class IndexModel(
         var queued = result.Value.Queued.Count;
         TempData[StatusMessage.Success] =
             $"Sync all queued {queued} run{(queued == 1 ? "" : "s")}. You can leave this page; follow progress in the run history.";
+        var warnings = new List<string>();
         if (result.Value.Skipped.Count > 0)
         {
-            TempData[StatusMessage.Warning] =
-                $"Skipped because the previous run is still waiting on Amazon: {string.Join(", ", result.Value.Skipped)}.";
+            warnings.Add($"Skipped because the previous run is still waiting on Amazon: {string.Join(", ", result.Value.Skipped)}.");
+        }
+
+        if (result.Value.Waiting.Count > 0)
+        {
+            warnings.Add("Waiting for Amazon's limit on how often it builds a report: " +
+                string.Join(", ", result.Value.Waiting.Select(w => $"{w.ScheduleName} until {w.Until.UtcDateTime:HH:mm} UTC")) + ".");
+        }
+
+        if (warnings.Count > 0)
+        {
+            TempData[StatusMessage.Warning] = string.Join(" ", warnings);
         }
 
         return RedirectToPage("Runs");

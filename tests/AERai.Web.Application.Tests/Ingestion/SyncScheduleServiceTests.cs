@@ -135,7 +135,45 @@ public sealed class SyncScheduleServiceTests
         var result = await CreateService().RunNowAsync(id, "ops", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.Wait);
         Assert.Equal(new ManualRunRequest(id, "ops"), Assert.Single(_channel.Enqueued));
+    }
+
+    [Fact]
+    public async Task RunNowAsync_ReportRequestedInsideItsCooldown_QueuesAndSaysUntilWhenItWaits()
+    {
+        var id = await AddScheduleAsync("FBA reserved", AmazonReportType.FbaReservedInventory);
+        AddRequestedRun(AmazonReportType.FbaReservedInventory, _clock.GetUtcNow().AddMinutes(-10));
+
+        var result = await CreateService().RunNowAsync(id, "ops", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var wait = Assert.IsType<RequestWait>(result.Value.Wait);
+        Assert.Equal(_clock.GetUtcNow().AddMinutes(21), wait.Until);
+        Assert.Equal("Waiting until 12:21 UTC to ask Amazon: it builds this report at most once every 30 minutes.", wait.Message);
+        Assert.Single(_channel.Enqueued);
+    }
+
+    [Fact]
+    public async Task RunNowAsync_ReportRequestedBeforeItsCooldown_DoesNotWait()
+    {
+        var id = await AddScheduleAsync("FBA reserved", AmazonReportType.FbaReservedInventory);
+        AddRequestedRun(AmazonReportType.FbaReservedInventory, _clock.GetUtcNow().AddMinutes(-40));
+
+        var result = await CreateService().RunNowAsync(id, "ops", CancellationToken.None);
+
+        Assert.Null(result.Value.Wait);
+    }
+
+    /// <summary>A finished run that asked Amazon for the report at <paramref name="requestedAt"/>.</summary>
+    private void AddRequestedRun(AmazonReportType reportType, DateTimeOffset requestedAt)
+    {
+        var id = _runs.Stored.Count + 100;
+        _runs.Stored[id] = new SyncRun
+        {
+            Id = id, SyncScheduleId = 999, ReportType = reportType, MarketplaceId = MarketplaceIds.UnitedStates,
+            TriggeredBy = "scheduler", Status = SyncRunStatus.Succeeded, ReportRequestedAt = requestedAt,
+        };
     }
 
     [Fact]
@@ -328,7 +366,23 @@ public sealed class SyncScheduleServiceTests
         Assert.True(result.IsSuccess, result.Error);
         Assert.Equal(["Orders API"], result.Value.Queued);
         Assert.Equal(["Restock"], result.Value.Skipped);
+        Assert.Empty(result.Value.Waiting);
         Assert.Equal(new ManualRunRequest(orders, "ops"), Assert.Single(_channel.Enqueued));
+    }
+
+    [Fact]
+    public async Task SyncAllAsync_ReportRequestedInsideItsCooldown_QueuesItAndListsItAsWaiting()
+    {
+        await AddScheduleAsync("Orders API", AmazonReportType.OrdersApi);
+        await AddScheduleAsync("FBA inventory", AmazonReportType.FbaInventory);
+        AddRequestedRun(AmazonReportType.FbaInventory, _clock.GetUtcNow().AddMinutes(-5));
+
+        var result = await CreateService().SyncAllAsync("ops", CancellationToken.None);
+
+        Assert.Equal(2, result.Value.Queued.Count);
+        var wait = Assert.Single(result.Value.Waiting);
+        Assert.Equal("FBA inventory", wait.ScheduleName);
+        Assert.Equal(_clock.GetUtcNow().AddMinutes(26), wait.Until);
     }
 
     [Fact]
