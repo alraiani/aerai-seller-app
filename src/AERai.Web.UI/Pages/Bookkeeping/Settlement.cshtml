@@ -8,10 +8,22 @@
     <div class="card-body">
         <h2 class="h6">Settlement @p.SettlementId</h2>
         <p class="mb-1">Period @p.PeriodStart?.ToString("yyyy-MM-dd") – @p.PeriodEnd?.ToString("yyyy-MM-dd"). Net payout <strong>@p.NetTotal.ToString("N2") @p.Currency</strong>.</p>
+        @if (p.IsConverted)
+        {
+            <p class="mb-1">Paid in @p.OriginalCurrency: @p.OriginalNetTotal?.ToString("N2") @p.OriginalCurrency × @p.ExchangeRate?.ToString("0.######") (@p.RateNote) = @p.NetTotal.ToString("N2") @p.Currency. The entry is written in @p.Currency.</p>
+            @if (p.RoundingAdjustment != 0)
+            {
+                <p class="mb-1 text-body-secondary small">Each account is converted and rounded to the cent; the @p.RoundingAdjustment.ToString("0.00") @p.Currency left over is added to the largest account line so the entry balances.</p>
+            }
+        }
         <p class="mb-0 text-body-secondary">Deposit account: @(p.HasDepositAccount ? p.DepositAccountName : "not set")</p>
     </div>
 </div>
 
+@if (p.NeedsRate)
+{
+    <div class="alert alert-warning">This settlement was paid in @p.Currency and has no exchange rate yet, so it can't be exported in the books' currency. Fetch the rate or enter it on the <a asp-page="/Settlements/Summary" asp-route-id="@p.SettlementId">settlement's page</a>.</div>
+}
 @if (!p.HasDepositAccount)
 {
     <div class="alert alert-warning">Set this marketplace's deposit account on the <a asp-page="Mapping">Account mapping</a> page.</div>
@@ -29,7 +41,10 @@
         <div class="table-responsive">
         <table class="table table-sm mb-0">
             <thead>
-                <tr><th>Amount type</th><th>Description</th><th>QuickBooks account</th><th class="text-end">Amount</th></tr>
+                <tr><th>Amount type</th><th>Description</th><th>QuickBooks account</th>@if (p.IsConverted)
+                    {
+                        <th class="text-end">@p.OriginalCurrency</th>
+                    }<th class="text-end">Amount@(p.IsConverted ? $" ({p.Currency})" : "")</th></tr>
             </thead>
             <tbody>
             @foreach (var r in p.Rows)
@@ -47,16 +62,23 @@
                             @r.QuickBooksAccountName
                         }
                     </td>
-                    <td class="text-end">@r.Amount.ToString("N2")</td>
+                    @if (p.IsConverted)
+                    {
+                        <td class="text-end text-body-secondary">@r.Amount.ToString("N2")</td>
+                    }
+                    <td class="text-end">@((p.IsConverted ? r.HomeAmount ?? 0 : r.Amount).ToString("N2"))</td>
                 </tr>
             }
             @if (p.Rows.Count == 0)
             {
-                <tr><td colspan="4" class="text-body-secondary p-3">This settlement has no lines.</td></tr>
+                <tr><td colspan="@(p.IsConverted ? 5 : 4)" class="text-body-secondary p-3">This settlement has no lines.</td></tr>
             }
             </tbody>
             <tfoot>
-                <tr><th colspan="3">Net payout</th><th class="text-end">@p.NetTotal.ToString("N2") @p.Currency</th></tr>
+                <tr><th colspan="3">Net payout</th>@if (p.IsConverted)
+                    {
+                        <th class="text-end text-body-secondary">@p.OriginalNetTotal?.ToString("N2") @p.OriginalCurrency</th>
+                    }<th class="text-end">@p.NetTotal.ToString("N2") @p.Currency</th></tr>
             </tfoot>
         </table>
         </div>

@@ -1,67 +1,138 @@
 @page "{id}"
 @using System.Globalization
+@using AERai.Web.Application.Settlements
 @model AERai.Web.UI.Pages.Settlements.SummaryModel
 @{
     var s = Model.Settlement;
+    var total = SettlementMoney.Of(s, Model.Amounts);
+    var rows = Model.Rows.Items;
+    var amountsRoute = Model.Amounts == SettlementAmounts.Home ? null : Model.Amounts.ToString();
     ViewData["Title"] = $"Settlement {s.SettlementId}";
 }
-<div class="card-toolbar">
-    <p class="text-body-secondary mb-0">
-        Period @s.PeriodStart?.ToString("yyyy-MM-dd") – @s.PeriodEnd?.ToString("yyyy-MM-dd"). Net payout <strong>@s.Net.ToString("N2") @s.Currency</strong>.
-        One row per SKU and price each, with the units sold at that price; select a row to see the lines behind it.
-    </p>
-    <a asp-page="Index" class="btn btn-outline-secondary btn-sm">All settlements</a>
-</div>
-<partial name="_SearchForm" model="Model.Search" />
-<div class="card">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
-            <thead>
-                <tr><th>SKU</th><th>ASIN</th><th class="text-end">Price each</th><th>Currency</th><th class="text-end">Units</th><th class="text-end">Orders</th><th class="text-end">Sales</th><th class="text-end">Fees</th><th class="text-end">Refunds</th><th class="text-end">Other</th><th class="text-end">Net</th></tr>
-            </thead>
-            <tbody>
-            @foreach (var r in Model.Rows.Items)
-            {
-                <tr>
-                    <td>
-                        <a asp-page="Lines" asp-route-id="@r.SettlementId" asp-route-sku="@r.Sku" asp-route-price="@r.SalePrice?.ToString(CultureInfo.InvariantCulture)">@(r.Sku ?? "(no SKU)")</a>
-                        @if (r.Title is not null)
-                        {
-                            <div class="small text-body-secondary cell-truncate" title="@r.Title">@r.Title</div>
-                        }
-                    </td>
-                    <td>@r.Asin</td>
-                    <td class="text-end">@r.SalePrice?.ToString("N2")</td>
-                    <td>@r.Currency</td>
-                    <td class="text-end">@r.Units.ToString("N0")</td>
-                    <td class="text-end">@r.OrderCount</td>
-                    <td class="text-end">@r.Sales.ToString("N2")</td>
-                    <td class="text-end">@r.Fees.ToString("N2")</td>
-                    <td class="text-end">@r.Refunds.ToString("N2")</td>
-                    <td class="text-end">@r.Other.ToString("N2")</td>
-                    <td class="text-end fw-semibold">@r.Net.ToString("N2")</td>
-                </tr>
-            }
-            @if (Model.Rows.Items.Count == 0)
-            {
-                <tr><td colspan="11" class="text-body-secondary p-3">Nothing to show for this settlement.</td></tr>
-            }
-            </tbody>
-            <tfoot>
-                <tr class="fw-semibold">
-                    <td colspan="4">Settlement total</td>
-                    <td class="text-end">@s.Units.ToString("N0")</td>
-                    <td></td>
-                    <td class="text-end">@s.Sales.ToString("N2")</td>
-                    <td class="text-end">@s.Fees.ToString("N2")</td>
-                    <td class="text-end">@s.Refunds.ToString("N2")</td>
-                    <td class="text-end">@s.Other.ToString("N2")</td>
-                    <td class="text-end">@s.Net.ToString("N2")</td>
-                </tr>
-            </tfoot>
-        </table>
+
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">Settlements</a>
+    <span aria-hidden="true">/</span>
+    <span>@s.SettlementId</span>
+</nav>
+
+@* ---------- The payout at a glance ---------- *@
+<div class="card mb-3">
+    <div class="settlement-head">
+        <div>
+            <div class="kpi-label">Net payout · @SettlementFormat.Period(s.PeriodStart, s.PeriodEnd)</div>
+            <div class="kpi-value @SettlementFormat.AmountClass(total.Net)">@SettlementFormat.Money(total.Net, total.Currency)</div>
+            <div class="kpi-foot">@s.Units.ToString("N0", CultureInfo.InvariantCulture) unit@(s.Units == 1 ? "" : "s") sold@(s.DepositDate is { } deposit ? " · paid out " + deposit.ToString("MMM d, yyyy", CultureInfo.InvariantCulture) : "")</div>
         </div>
+        <partial name="_SettlementBreakdown" model="(total.Sales, total.Fees, total.Refunds, total.Other, total.Net, total.Currency)" />
     </div>
 </div>
-<partial name="_Pager" model="Model.Rows.ToPager(Model.Search)" />
+
+<partial name="_SettlementRate" model="Model.RatePanel" />
+
+@* ---------- Search, row filter ---------- *@
+<div class="list-toolbar mb-3">
+    <form method="get" class="filters" role="search">
+        @foreach (var (key, value) in Model.CurrentFilters())
+        {
+            <input type="hidden" name="@key" value="@value" />
+        }
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search SKU, ASIN, title…" aria-label="Search this settlement" />
+        </div>
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Search</button>
+        @if (Model.IsFiltered)
+        {
+            <a asp-page="Summary" asp-route-id="@s.SettlementId" class="btn btn-sm btn-link">Clear filters</a>
+        }
+    </form>
+    <nav class="segmented" aria-label="Rows">
+        <a href="@Model.KindLink(SettlementRowKind.All)" class="@(Model.Kind == SettlementRowKind.All ? "active" : "")">All rows</a>
+        <a href="@Model.KindLink(SettlementRowKind.WithRefunds)" class="@(Model.Kind == SettlementRowKind.WithRefunds ? "active" : "")"
+           data-bs-toggle="tooltip" data-bs-title="SKUs and prices with any refund in this settlement.">With refunds</a>
+        <a href="@Model.KindLink(SettlementRowKind.NoSku)" class="@(Model.Kind == SettlementRowKind.NoSku ? "active" : "")"
+           data-bs-toggle="tooltip" data-bs-title="Amounts that belong to no product: subscription, storage, and other service fees.">No SKU</a>
+    </nav>
+</div>
+
+<div class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@Model.Rows.TotalCount.ToString("N0", CultureInfo.InvariantCulture) row@(Model.Rows.TotalCount == 1 ? "" : "s")</span>
+            <span class="text-muted-token fw-normal">by SKU and price each</span>
+            <partial name="_Tip" model='"One row per SKU and price each, with the units sold at that price. Open a row to see the orders behind it."' />
+        </span>
+    </div>
+    @if (rows.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-title">@(Model.IsFiltered ? "No rows match" : "Nothing to show for this settlement")</div>
+            @if (Model.IsFiltered)
+            {
+                <div class="empty-detail">Try a different search or show all rows.</div>
+                <a asp-page="Summary" asp-route-id="@s.SettlementId" class="btn btn-sm btn-soft">Clear filters</a>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table data-table settlement-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th><a href="@Model.SortLink(SettlementSkuSort.Sku)" class="sort-link">Product @Model.SortArrow(SettlementSkuSort.Sku)</a></th>
+                        <th class="text-end">Price each</th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Units)" class="sort-link">Units @Model.SortArrow(SettlementSkuSort.Units)</a></th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Orders)" class="sort-link">Orders @Model.SortArrow(SettlementSkuSort.Orders)</a></th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Sales)" class="sort-link">Sales @Model.SortArrow(SettlementSkuSort.Sales)</a></th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Fees)" class="sort-link">Fees @Model.SortArrow(SettlementSkuSort.Fees)</a></th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Refunds)" class="sort-link">Refunds @Model.SortArrow(SettlementSkuSort.Refunds)</a></th>
+                        <th class="text-end">Other</th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Net)" class="sort-link">Net @Model.SortArrow(SettlementSkuSort.Net)</a></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in rows)
+                    {
+                        var m = SettlementMoney.Of(r, Model.Amounts);
+                        <tr>
+                            <td>
+                                <a asp-page="Lines" asp-route-id="@r.SettlementId" asp-route-sku="@r.Sku" asp-route-price="@r.SalePrice?.ToString(CultureInfo.InvariantCulture)" asp-route-amounts="@amountsRoute" class="fw-semibold">@(r.Sku ?? "No SKU (service fees)")</a>
+                                @if (r.Title is not null || r.Asin is not null)
+                                {
+                                    <div class="cell-sub cell-truncate" title="@r.Title">@(r.Asin is null ? "" : r.Asin + " · ")@r.Title</div>
+                                }
+                            </td>
+                            <td class="text-end money">@(SettlementMoney.SalePriceOf(r, Model.Amounts) is { } price ? SettlementFormat.Money(price, m.Currency) : "")</td>
+                            <td class="text-end money">@r.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
+                            <td class="text-end money">@r.OrderCount.ToString("N0", CultureInfo.InvariantCulture)</td>
+                            <td class="text-end money">@SettlementFormat.Money(m.Sales, m.Currency)</td>
+                            <td class="text-end money @SettlementFormat.AmountClass(m.Fees)">@SettlementFormat.Money(m.Fees, m.Currency)</td>
+                            <td class="text-end money @SettlementFormat.AmountClass(m.Refunds)">@SettlementFormat.Money(m.Refunds, m.Currency)</td>
+                            <td class="text-end money @SettlementFormat.AmountClass(m.Other)">@SettlementFormat.Money(m.Other, m.Currency)</td>
+                            <td class="text-end money fw-semibold @SettlementFormat.AmountClass(m.Net)">@SettlementFormat.Money(m.Net, m.Currency)</td>
+                        </tr>
+                    }
+                </tbody>
+                @if (!Model.IsFiltered)
+                {
+                    @* Converted rows are each rounded, so in the marketplace's currency they can differ from the settlement total by a cent or two. *@
+                    <tfoot>
+                        <tr>
+                            <td colspan="2">Settlement total</td>
+                            <td class="text-end money">@s.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
+                            <td></td>
+                            <td class="text-end money">@SettlementFormat.Money(total.Sales, total.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(total.Fees, total.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(total.Refunds, total.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(total.Other, total.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(total.Net, total.Currency)</td>
+                        </tr>
+                    </tfoot>
+                }
+            </table>
+        </div>
+    }
+</div>
+<partial name="_Pager" model="Model.Rows.ToPager(Model.Search, Model.CurrentFilters())" />

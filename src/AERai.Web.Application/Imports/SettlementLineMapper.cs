@@ -35,6 +35,7 @@ public sealed class SettlementLineMapper : IStagingRowMapper
             AmountType = record.Get("amount-type"),
             AmountDescription = record.Get("amount-description"),
             Amount = record.Get("amount"),
+            DepositDate = record.Get("deposit-date"),
             Currency = record.Get("currency"),
         });
     }

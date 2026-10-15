@@ -14,13 +14,17 @@ namespace AERai.Web.Application.Inventory;
 /// <param name="RestockOverdue">SKUs whose restock deadline has passed.</param>
 /// <param name="RestockSoon">SKUs whose restock is due within the alert window.</param>
 /// <param name="SnapshotDate">The newest snapshot date among the SKUs, or <see langword="null"/> when there are none.</param>
-public sealed record InventoryTotals(int SkuCount, int Available, int Inbound, int Reserved, int Unfulfillable, int HomeStock, int AwdOnHand, int AwdInbound, int PendingToAmazon, int OutOfStock, int RestockOverdue, int RestockSoon, DateOnly? SnapshotDate)
+/// <param name="AwdSnapshotDate">The marketplace's latest AWD snapshot date, or <see langword="null"/> when AWD has never been synced (or no SKUs are included).</param>
+public sealed record InventoryTotals(int SkuCount, int Available, int Inbound, int Reserved, int Unfulfillable, int HomeStock, int AwdOnHand, int AwdInbound, int PendingToAmazon, int OutOfStock, int RestockOverdue, int RestockSoon, DateOnly? SnapshotDate, DateOnly? AwdSnapshotDate)
 {
     /// <summary>Units physically in Amazon's fulfillment centers: available, reserved, and unfulfillable.</summary>
     public int InWarehouse => Available + Reserved + Unfulfillable;
 
     /// <summary>Every unit Amazon reports in the FBA network, in any state.</summary>
     public int AmazonTotal => InWarehouse + Inbound;
+
+    /// <summary>Units sellable in FBA plus everything on hand in AWD.</summary>
+    public int AvailableTotal => Available + AwdOnHand;
 
     /// <summary>Units in AWD or on their way into it.</summary>
     public int AwdTotal => AwdOnHand + AwdInbound;

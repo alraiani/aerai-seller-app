@@ -32,7 +32,7 @@ public sealed class IndexModel(IReportingQueries reporting, IBookkeepingService 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
-        Settlements = await reporting.GetSettlementsAsync(marketplace.MarketplaceId, ToPageRequest(), cancellationToken);
+        Settlements = await reporting.GetSettlementsAsync(marketplace.MarketplaceId, ToPageRequest(), null, cancellationToken);
         Exports = await bookkeeping.GetExportsAsync(marketplace.MarketplaceId, cancellationToken);
         ExportedSettlementIds = Exports.Select(e => e.SettlementId).ToHashSet(StringComparer.Ordinal);
     }

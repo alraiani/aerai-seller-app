@@ -8,8 +8,9 @@ namespace AERai.Web.Infrastructure.SpApi;
 
 /// <summary>
 /// The single choke point for every SP-API call: per-operation rate limiting, the LWA access token
-/// header, retry with exponential backoff and jitter on 429/5xx, one token refresh on 401/403, and
-/// structured logging of operation, status, attempt, and latency (never tokens).
+/// header, retry with exponential backoff and jitter on 429/5xx and on connection failures that are
+/// safe to repeat (<see cref="SpApiRetry.IsTransientConnectionFailure"/>), one token refresh on
+/// 401/403, and structured logging of operation, status, attempt, and latency (never tokens).
 /// </summary>
 /// <param name="tokens">Access token cache.</param>
 /// <param name="limiter">Per-operation token buckets.</param>
@@ -51,7 +52,19 @@ internal sealed partial class SpApiPipelineHandler(
             request.Headers.Add(AccessTokenHeader, await tokens.GetAccessTokenAsync(region, cancellationToken).ConfigureAwait(false));
 
             var started = Stopwatch.GetTimestamp();
-            var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            HttpResponseMessage response;
+            try
+            {
+                response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex) when (attempt < settings.MaxRetries && SpApiRetry.IsTransientConnectionFailure(ex, request.Method))
+            {
+                var backoff = SpApiRetry.Backoff(attempt, settings);
+                LogConnectionRetry(operation, region, ex.HttpRequestError, attempt + 1, backoff.TotalSeconds);
+                await Task.Delay(backoff, clock, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
             var elapsedMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             LogCall(operation, region, (int)response.StatusCode, attempt, elapsedMs);
 
@@ -78,8 +91,7 @@ internal sealed partial class SpApiPipelineHandler(
     }
 
     /// <summary>
-    /// Honors <c>Retry-After</c> when Amazon sends it; otherwise exponential backoff with full jitter
-    /// so throttled callers don't retry in lockstep.
+    /// Honors <c>Retry-After</c> when Amazon sends it; otherwise <see cref="SpApiRetry.Backoff"/>.
     /// </summary>
     private static TimeSpan RetryDelay(HttpResponseMessage response, int attempt, SpApiOptions settings)
     {
@@ -88,11 +100,7 @@ internal sealed partial class SpApiPipelineHandler(
             return retryAfter < settings.MaxRetryDelay ? retryAfter : settings.MaxRetryDelay;
         }
 
-        var exponential = settings.RetryBaseDelay.TotalMilliseconds * Math.Pow(2, attempt);
-        var capped = Math.Min(exponential, settings.MaxRetryDelay.TotalMilliseconds);
-#pragma warning disable CA5394 // Jitter is not security-sensitive.
-        return TimeSpan.FromMilliseconds(capped / 2 + Random.Shared.NextDouble() * capped / 2);
-#pragma warning restore CA5394
+        return SpApiRetry.Backoff(attempt, settings);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "SP-API {Operation} ({Region}) -> {StatusCode} (attempt {Attempt}, {ElapsedMs:0} ms)")]
@@ -100,4 +108,7 @@ internal sealed partial class SpApiPipelineHandler(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "SP-API {Operation} throttled or failed; retry {Retry} in {DelaySeconds:0.0}s")]
     private partial void LogRetry(string operation, int retry, double delaySeconds);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "SP-API {Operation} ({Region}) connection failed ({Error}); retry {Retry} in {DelaySeconds:0.0}s")]
+    private partial void LogConnectionRetry(string operation, AmazonRegion region, HttpRequestError error, int retry, double delaySeconds);
 }

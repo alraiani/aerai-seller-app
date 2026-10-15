@@ -176,6 +176,8 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
             InventorySort.Sold30d => descending ? items.OrderBy(i => i.UnitsSold30d) : items.OrderByDescending(i => i.UnitsSold30d),
             InventorySort.Sold90d => descending ? items.OrderBy(i => i.UnitsSold90d) : items.OrderByDescending(i => i.UnitsSold90d),
             InventorySort.Available => descending ? items.OrderBy(i => i.Position.Available) : items.OrderByDescending(i => i.Position.Available),
+            InventorySort.AwdOnHand => descending ? items.OrderBy(i => i.Position.AwdOnHand) : items.OrderByDescending(i => i.Position.AwdOnHand),
+            InventorySort.AvailableTotal => descending ? items.OrderBy(i => i.Position.AvailableTotal) : items.OrderByDescending(i => i.Position.AvailableTotal),
             _ => items.OrderBy(i => 0),
         };
         return ordered.ThenBy(i => i.Sku, StringComparer.Ordinal);
@@ -234,5 +236,6 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
         OutOfStock: items.Count(i => i.Status == StockStatus.OutOfStock),
         RestockOverdue: items.Count(i => i.Status == StockStatus.RestockOverdue),
         RestockSoon: items.Count(i => i.Status == StockStatus.RestockSoon),
-        SnapshotDate: items.Count == 0 ? null : items.Max(i => i.Position.SnapshotDate));
+        SnapshotDate: items.Count == 0 ? null : items.Max(i => i.Position.SnapshotDate),
+        AwdSnapshotDate: items.Count == 0 ? null : items.Max(i => i.Position.AwdSnapshotDate));
 }

@@ -49,6 +49,9 @@ public sealed class SqlDatabaseFixture : IAsyncLifetime
 
                 // The built-in simulator stands in for Amazon, so ingestion runs end to end without credentials.
                 ["SpApi:Mode"] = "Simulated",
+
+                // Fixed rates, so settlements paid in another currency convert without calling the internet.
+                ["ExchangeRates:Mode"] = "Simulated",
             })
             .Build();
 

@@ -42,6 +42,15 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// </summary>
     public static readonly TimeSpan DataEndSafetyMargin = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// Added to a report's request cooldown so a request made right at its end is not refused because
+    /// Amazon's clock is a little behind ours.
+    /// </summary>
+    private static readonly TimeSpan RequestCooldownMargin = TimeSpan.FromMinutes(1);
+
+    /// <summary>How much of a failed report's error document is read; Amazon's are a line or two.</summary>
+    private const int MaxFailureDocumentChars = 4_000;
+
     /// <summary>Settlement listing re-checks a day of overlap; the ledger prevents duplicates.</summary>
     private static readonly TimeSpan SettlementListOverlap = TimeSpan.FromDays(1);
 
@@ -173,9 +182,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             {
                 await IngestListedReportsAsync(context, cancellationToken).ConfigureAwait(false);
             }
-            else
+            else if (await RequestReportAsync(context, cancellationToken).ConfigureAwait(false))
             {
-                await RequestReportAsync(context, cancellationToken).ConfigureAwait(false);
                 return Summarize(context);
             }
         }
@@ -199,7 +207,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     {
         var run = await _runs.GetAsync(runId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"Sync run {runId} does not exist.");
-        if (run.Status != SyncRunStatus.Running || run.PendingReportId is not { } reportId)
+        if (run.Status != SyncRunStatus.Running || run.NextCheckAt is null)
         {
             return new SyncRunSummary(run.Id, run.Status, run.Message ?? string.Empty, []);
         }
@@ -210,16 +218,27 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             ?? throw new InvalidOperationException($"Sync schedule {run.SyncScheduleId} does not exist.");
         var backfill = run.BackfillStart is { } start && run.BackfillEnd is { } end ? new BackfillWindow(start, end) : null;
         var context = new RunContext(schedule, run, backfill);
-        context.ReportIds.Add(reportId);
 
         try
         {
             context.Marketplace = await ResolveMarketplaceAsync(schedule, cancellationToken).ConfigureAwait(false);
+            if (run.PendingReportId is not { } reportId)
+            {
+                // Held back by the report's request cooldown: ask Amazon now (or wait again if another run asked meanwhile).
+                if (await RequestReportAsync(context, cancellationToken).ConfigureAwait(false))
+                {
+                    return Summarize(context);
+                }
+
+                return await FinishAsync(context, cancellationToken).ConfigureAwait(false);
+            }
+
+            context.ReportIds.Add(reportId);
             var status = await _gateway.GetReportStatusAsync(context.Marketplace, reportId, cancellationToken).ConfigureAwait(false);
             if (status.Status is AmazonProcessingStatus.InQueue or AmazonProcessingStatus.InProgress)
             {
                 var now = _clock.GetUtcNow();
-                if (now >= run.StartedAt + _options.ReportMaxWait)
+                if (now >= (run.ReportRequestedAt ?? run.StartedAt) + _options.ReportMaxWait)
                 {
                     throw new TimeoutException($"Report {reportId} was not ready after {_options.ReportMaxWait.TotalMinutes:0} minutes.");
                 }
@@ -313,9 +332,32 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// stays <see cref="SyncRunStatus.Running"/>; the scheduler checks on it later through
     /// <see cref="ContinueAsync"/> instead of waiting here.
     /// </summary>
-    private async Task RequestReportAsync(RunContext context, CancellationToken cancellationToken)
+    /// <remarks>
+    /// A report asked for again inside its <see cref="AmazonReportTypeExtensions.RequestCooldown"/> is not
+    /// sent: the run waits until the cooldown ends and <see cref="ContinueAsync"/> asks then. If another run of
+    /// the schedule is already waiting to ask, this one ends without asking, since that run's report will
+    /// be just as fresh.
+    /// </remarks>
+    /// <returns><see langword="true"/> when the run is now waiting; <see langword="false"/> when it is done (skipped).</returns>
+    private async Task<bool> RequestReportAsync(RunContext context, CancellationToken cancellationToken)
     {
         var now = _clock.GetUtcNow();
+        var run = context.Run;
+        if (await RequestAllowedAtAsync(context, now, cancellationToken).ConfigureAwait(false) is { } allowedAt)
+        {
+            if (await _runs.HasWaitingRequestAsync(context.Schedule.Id, run.Id, cancellationToken).ConfigureAwait(false))
+            {
+                context.Notes.Add($"Not requested: another run of this schedule asks Amazon for the report at the end of its {context.Schedule.ReportType.RequestCooldown().TotalMinutes:0}-minute limit.");
+                LogRequestSkipped(run.Id, context.Schedule.Name);
+                return false;
+            }
+
+            run.NextCheckAt = allowedAt;
+            await _runs.SaveProgressAsync(run, cancellationToken).ConfigureAwait(false);
+            LogRequestHeldBack(run.Id, context.Schedule.Name, allowedAt);
+            return true;
+        }
+
         DateTimeOffset? start = null;
         DateTimeOffset? end = null;
 
@@ -330,7 +372,6 @@ public sealed partial class ReportIngestionService : IReportIngestionService
                     : end.Value.AddDays(-context.Schedule.LookbackDays);
         }
 
-        var run = context.Run;
         run.DataStart = start;
         run.DataEnd = end;
 
@@ -339,10 +380,30 @@ public sealed partial class ReportIngestionService : IReportIngestionService
 
         run.AmazonReportIds = reportId;
         run.PendingReportId = reportId;
+        run.ReportRequestedAt = now;
         run.PollAttempts = 0;
         run.NextCheckAt = now + PollDelay(0);
         await _runs.SaveProgressAsync(run, cancellationToken).ConfigureAwait(false);
         LogAwaitingReport(run.Id, reportId, run.NextCheckAt.Value);
+        return true;
+    }
+
+    /// <summary>
+    /// When the report may next be asked for, if that is still in the future: the last request for the
+    /// same report type and marketplace (by any run) plus the report's cooldown and a margin for clock
+    /// differences with Amazon. <see langword="null"/> when it may be asked for now.
+    /// </summary>
+    private async Task<DateTimeOffset?> RequestAllowedAtAsync(RunContext context, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var cooldown = context.Schedule.ReportType.RequestCooldown();
+        if (cooldown <= TimeSpan.Zero)
+        {
+            return null;
+        }
+
+        var lastRequest = await _runs.GetLastReportRequestAsync(context.Schedule.ReportType, context.Schedule.MarketplaceId, cancellationToken).ConfigureAwait(false);
+        var allowedAt = lastRequest + cooldown + RequestCooldownMargin;
+        return allowedAt > now ? allowedAt : null;
     }
 
     /// <summary>Downloads (or records the absence of) an on-demand report Amazon has finished with.</summary>
@@ -373,8 +434,44 @@ public sealed partial class ReportIngestionService : IReportIngestionService
                 break;
 
             default:
-                Fail(context.Run, $"Amazon could not generate report {reportId} (status {status.Status}).");
+                var reason = status.ReportDocumentId is { } errorDocumentId
+                    ? await ReadFailureReasonAsync(context, reportId, errorDocumentId, cancellationToken).ConfigureAwait(false)
+                    : null;
+                Fail(context.Run, reason is null
+                    ? $"Amazon could not generate report {reportId} (status {status.Status})."
+                    : $"Amazon could not generate report {reportId} (status {status.Status}): {reason}");
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Reads the short error document Amazon attaches to a failed report, which says why it failed
+    /// (usually JSON with an <c>errorDetails</c> field). Best effort: <see langword="null"/> when it cannot be read,
+    /// so the run still fails with the plain message.
+    /// </summary>
+    private async Task<string?> ReadFailureReasonAsync(RunContext context, string reportId, string reportDocumentId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var stream = await _gateway.OpenReportDocumentAsync(context.Marketplace, reportDocumentId, cancellationToken).ConfigureAwait(false);
+            await using (stream.ConfigureAwait(false))
+            {
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+                var buffer = new char[MaxFailureDocumentChars];
+                var read = await reader.ReadBlockAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false);
+                return FailureReason.FromDocument(new string(buffer, 0, read));
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+#pragma warning disable CA1031 // The reason only improves the failure message; not getting it must not change the outcome.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            LogFailureReasonUnreadable(ex, reportId);
+            return null;
         }
     }
 
@@ -564,12 +661,13 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     {
         var schedule = context.Schedule;
         var source = ToImportSource(schedule.ReportType);
+        var marketplaceId = StagingMarketplaceId(context);
         var displayName = string.Create(CultureInfo.InvariantCulture, $"{schedule.ReportType}-{reportId}.tsv");
         var path = RawFilePaths.Build(source, _clock.GetUtcNow(), Guid.NewGuid(), displayName);
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["source"] = source.ToString(),
-            ["marketplaceid"] = schedule.MarketplaceId,
+            ["marketplaceid"] = marketplaceId,
             ["amazonreportid"] = reportId,
             ["syncrunid"] = context.Run.Id.ToString(CultureInfo.InvariantCulture),
             ["uploadedby"] = context.Run.TriggeredBy,
@@ -583,7 +681,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         }
 
         var staged = await _staging.StageRawFileAsync(
-            new StageRawFileCommand(source, schedule.MarketplaceId, path, sha256, displayName, context.Run.TriggeredBy), cancellationToken).ConfigureAwait(false);
+            new StageRawFileCommand(source, marketplaceId, path, sha256, displayName, context.Run.TriggeredBy), cancellationToken).ConfigureAwait(false);
 
         if (staged.IsFailure)
         {
@@ -618,6 +716,21 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             ? $"Batch {batchId}: {promoted.Value.PromotedRowCount:N0} promoted, {promoted.Value.RejectedRowCount:N0} rejected{SkippedNote(promoted.Value)}."
             : $"Batch {batchId} staged but promotion failed: {promoted.Error}");
     }
+
+    /// <summary>
+    /// The marketplace a downloaded report is staged under: the schedule's, except that settlements go to
+    /// the marketplace that keeps the schedule marketplace's payouts.
+    /// </summary>
+    /// <remarks>
+    /// Amazon ignores the marketplace when listing settlement reports and returns every payout of the
+    /// region (USD, CAD, and MXN in North America) whichever marketplace asks. They are all kept under the
+    /// United States (Canada's <see cref="Marketplace.SettlementMarketplaceId"/>), so it never depends on
+    /// which schedule happened to list a report first; each is converted into USD for reporting.
+    /// </remarks>
+    private static string StagingMarketplaceId(RunContext context) =>
+        context.Schedule.ReportType == AmazonReportType.Settlements && context.Marketplace.SettlementMarketplaceId is { } settlementMarketplaceId
+            ? settlementMarketplaceId
+            : context.Schedule.MarketplaceId;
 
     /// <summary>Each report type lands in the staging table that matches its native layout.</summary>
     /// <summary>The schedule's marketplace, which must still exist and be active to be pulled.</summary>
@@ -684,6 +797,15 @@ public sealed partial class ReportIngestionService : IReportIngestionService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} is waiting for Amazon report {ReportId}; next check at {NextCheckAt}")]
     private partial void LogAwaitingReport(long runId, string reportId, DateTimeOffset nextCheckAt);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} ('{ScheduleName}') waits until {AllowedAt} to request its report: Amazon refuses it more often")]
+    private partial void LogRequestHeldBack(long runId, string scheduleName, DateTimeOffset allowedAt);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} ('{ScheduleName}') did not request its report: another run of the schedule is already waiting to")]
+    private partial void LogRequestSkipped(long runId, string scheduleName);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read the error document of failed Amazon report {ReportId}")]
+    private partial void LogFailureReasonUnreadable(Exception exception, string reportId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} finished: {Status} — {Message}")]
     private partial void LogRunCompleted(long runId, SyncRunStatus status, string? message);

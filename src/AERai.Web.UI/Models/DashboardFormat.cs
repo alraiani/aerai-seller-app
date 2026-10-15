@@ -12,11 +12,12 @@ public static class DashboardFormat
 {
     private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("en-US");
 
-    /// <summary>Symbols for the marketplaces' currencies; "CA$" keeps Canadian dollars distinct from US.</summary>
+    /// <summary>Symbols for the marketplaces' currencies (and MXN, which North America payouts include); "CA$" and "MX$" keep them distinct from US dollars.</summary>
     private static readonly Dictionary<string, string> Symbols = new(StringComparer.Ordinal)
     {
         ["USD"] = "$",
         ["CAD"] = "CA$",
+        ["MXN"] = "MX$",
         ["GBP"] = "£",
     };
 
@@ -32,6 +33,11 @@ public static class DashboardFormat
     /// <param name="currency">ISO currency code.</param>
     /// <returns>e.g. "CA$4.13".</returns>
     public static string Price(decimal amount, string currency) => Format(amount, currency, "N2");
+
+    /// <summary>The symbol shown before amounts in a currency.</summary>
+    /// <param name="currency">ISO currency code.</param>
+    /// <returns>e.g. "$", "CA$", "£", or the code itself for other currencies.</returns>
+    public static string Symbol(string currency) => Symbols.TryGetValue(currency, out var symbol) ? symbol : currency;
 
     private static string Format(decimal amount, string currency, string numberFormat)
     {

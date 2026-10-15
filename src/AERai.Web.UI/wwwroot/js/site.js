@@ -337,6 +337,32 @@
         if (message && !window.confirm(message)) { event.preventDefault(); }
     });
 
+    // ---------- Expandable row groups (Settlements → Lines) ----------
+    // A [data-expand-row] button opens or closes its group (the <tbody> named by aria-controls) by
+    // toggling .is-expanded; [data-expand-all="true|false"] does every group on the page. Without
+    // script the lines simply show (CSS hides them only under html.js).
+    function setExpanded(button, open) {
+        var group = document.getElementById(button.getAttribute("aria-controls"));
+        if (!group) { return; }
+        group.classList.toggle("is-expanded", open);
+        button.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    document.addEventListener("click", function (event) {
+        var row = event.target.closest && event.target.closest("[data-expand-row]");
+        // A click anywhere on a group's parent row (other than a link) toggles it too.
+        var parent = !row && event.target.closest && !event.target.closest("a, button") && event.target.closest(".group-row");
+        if (parent) { row = parent.querySelector("[data-expand-row]"); }
+        if (row) {
+            setExpanded(row, row.getAttribute("aria-expanded") !== "true");
+            return;
+        }
+        var all = event.target.closest && event.target.closest("[data-expand-all]");
+        if (all) {
+            var open = all.getAttribute("data-expand-all") === "true";
+            document.querySelectorAll("[data-expand-row]").forEach(function (button) { setExpanded(button, open); });
+        }
+    });
+
     // ---------- Toggles and filters submit as soon as they change ----------
     // A [data-autosubmit] control, or any select inside a [data-autosubmit-form], submits its form on
     // change. Every such form also has a submit button (hidden via .js-hide), so it works without script.

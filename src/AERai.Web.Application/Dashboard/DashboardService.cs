@@ -2,6 +2,7 @@ using System.Globalization;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Inventory;
+using AERai.Web.Application.Settlements;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.Domain.Reporting;
@@ -98,10 +99,23 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
             Inventory: stock,
             LatestPayout: settlement is null
                 ? null
-                : new PayoutGlance(settlement.SettlementId, settlement.PeriodStart, settlement.PeriodEnd, settlement.Net, settlement.Sales, settlement.Fees, settlement.Refunds, marketplace.Currency),
+                : PayoutOf(settlement, marketplace.Currency),
             Sync: sync,
             SalesCoverageStart: coverageStart,
             ComparisonAvailable: comparable);
+    }
+
+    /// <summary>
+    /// The latest payout in the marketplace's currency. Amazon lists every North America payout with the
+    /// United States, so it may have been paid in CAD or MXN; it is shown converted and tagged with where it
+    /// came from.
+    /// </summary>
+    private static PayoutGlance PayoutOf(SettlementSummary settlement, string currency)
+    {
+        var money = SettlementMoney.Of(settlement, SettlementAmounts.Home);
+        return new PayoutGlance(
+            settlement.SettlementId, settlement.PeriodStart, settlement.PeriodEnd, money.Net, money.Sales, money.Fees, money.Refunds, currency,
+            money.IsConverted ? SettlementOrigin.FromCurrency(settlement.Currency) : null);
     }
 
     private static decimal Revenue(IEnumerable<SalesLine> lines) => lines.Sum(l => l.ItemPrice);

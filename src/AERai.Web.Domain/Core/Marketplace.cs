@@ -30,6 +30,13 @@ public sealed class Marketplace
     /// </summary>
     public required string SalesChannel { get; set; }
 
+    /// <summary>
+    /// Marketplace whose settlements list holds this marketplace's payouts, or <see langword="null"/> for
+    /// its own. Amazon lists every settlement of a region whichever marketplace is asked, so the North
+    /// America payouts (USD, CAD, MXN) are all kept under the United States; Canada points there.
+    /// </summary>
+    public string? SettlementMarketplaceId { get; set; }
+
     /// <summary>Order in the switcher.</summary>
     public int SortOrder { get; set; }
 

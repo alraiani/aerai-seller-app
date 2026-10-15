@@ -173,17 +173,17 @@ body { background-color: var(--app-bg); color: var(--text); font-feature-setting
 .sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0 0 0.75rem; }
 .app-brand { display: inline-flex; align-items: center; gap: 0.55rem; color: var(--sidebar-strong); font-weight: 700; font-size: 1.15rem; text-decoration: none; padding: 0.25rem 0.25rem; min-width: 0; }
 .app-brand:hover { color: var(--sidebar-strong); }
-.brand-text { white-space: nowrap; font-weight: 300; font-size: 1.35rem; line-height: 1; }
+.brand-text { white-space: nowrap; }
+.brand-text span { font-weight: 300; }
 /* The logo file is black ink on transparent; used as a mask so its color comes from a theme token
-   (white on the sidebar, body text on the sign-in card) instead of being baked into the image. */
-.brand-logo, .login-logo {
+   (body text on the sign-in card) instead of being baked into the image. */
+.login-logo {
     display: block; flex-shrink: 0; aspect-ratio: 459 / 209; background-color: currentColor;
     -webkit-mask: url("../img/aerai-logo.png") center / contain no-repeat;
     mask: url("../img/aerai-logo.png") center / contain no-repeat;
 }
-.brand-logo { height: 2.4rem; }
 .brand-mark {
-    display: none; align-items: center; justify-content: center; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
     width: 1.85rem; height: 1.85rem; border-radius: 0.5rem;
     background: var(--sidebar-active); color: var(--sidebar-strong); font-size: 1rem; font-weight: 700;
 }
@@ -280,8 +280,6 @@ html:not(.js) .nav-rail-toggle { display: none; }
 @media (min-width: 769px) {
     :root[data-nav="rail"] .app-sidebar { width: 4.25rem; padding-left: 0.6rem; padding-right: 0.6rem; }
     :root[data-nav="rail"] .sidebar-head { flex-direction: column; align-items: center; }
-    :root[data-nav="rail"] .brand-logo { display: none; }
-    :root[data-nav="rail"] .brand-mark { display: inline-flex; }
     :root[data-nav="rail"] .brand-text,
     :root[data-nav="rail"] .nav-label {
         position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
@@ -460,6 +458,13 @@ html:not(.js) .nav-rail-toggle { display: none; }
 .pill-running { color: var(--violet); background: var(--violet-soft); }
 .pill-running::before { animation: pulse 1.4s ease-in-out infinite; }
 a.pill:hover { filter: brightness(0.95); }
+
+/* Where a settlement paid in another currency came from (CA, MX): a bordered, stronger tint than the
+   status pills so a converted payout stands out in a list of USD ones. Colors are the palette tokens,
+   which have light and dark values. */
+.pill-origin { --origin: var(--info); color: var(--origin); background: color-mix(in srgb, var(--origin) 18%, transparent); border: 1px solid color-mix(in srgb, var(--origin) 55%, transparent); letter-spacing: 0.03em; }
+.pill-origin-ca { --origin: var(--c-red); }
+.pill-origin-mx { --origin: var(--c-green); }
 
 .tag { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 0.35rem; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.01em; }
 .tag-orders { color: var(--brand); background: var(--brand-soft); }
@@ -816,4 +821,63 @@ th .tip { text-transform: none; }
     .worksheet-table .sku-cell { position: static; }
     .worksheet-table tr { break-inside: avoid; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* ---------- Settlements ---------- */
+.money { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.amount-neg { color: var(--negative); }
+.amount-zero { color: var(--muted); }
+.filters .filter-label { margin: 0 0 0 0.25rem; font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+.settlement-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); background: var(--surface-2); }
+
+/* The payout at a glance: the net on the left, its four parts beside it. */
+.settlement-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 2rem; padding: 1.1rem 1.25rem; }
+.amount-breakdown { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; }
+.amount-breakdown > div { display: flex; flex-direction: column; padding: 0.35rem 0.75rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--surface-2); min-width: 6.5rem; }
+.amount-breakdown dt { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.amount-breakdown dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.amount-breakdown .amount-breakdown-total { border-color: var(--brand); background: var(--brand-soft); }
+.totals-row .amount-breakdown { margin-top: 0.4rem; }
+.totals-row .amount-breakdown > div { padding: 0.2rem 0.6rem; min-width: 0; }
+.totals-row .amount-breakdown dd { font-size: 0.8rem; }
+
+/* Order groups: a parent row per order that expands into its lines. Lines show without script;
+   with it (html.js) they hide until the group is expanded. */
+.group-table .toggle-col { width: 2.75rem; padding-right: 0; }
+.group-table .totals-row > td { background: var(--surface-2); border-bottom: 2px solid var(--border); }
+.group-table tbody.order-group { border-top: 0; }
+.group-table .group-row > td { border-bottom-color: var(--border); }
+.group-table .group-toggle { color: var(--muted); border: 0; line-height: 1; }
+.group-table .group-toggle:hover { color: var(--brand); background: var(--brand-soft); }
+.group-table .group-toggle .icon { transition: transform 0.15s; transform: rotate(-90deg); }
+.group-table .group-toggle[aria-expanded="true"] .icon { transform: none; }
+:root:not(.js) .group-table .group-toggle, :root:not(.js) .expand-controls { display: none; }
+.js .group-table tbody.order-group:not(.is-expanded) .group-child { display: none; }
+.group-table .group-child > td { background: var(--surface-2); padding-top: 0.45rem; padding-bottom: 0.45rem; font-size: 0.82rem; }
+.group-table .group-child > td:nth-child(2) { padding-left: 1.5rem; }
+.group-table tbody.order-group.is-expanded .group-row > td { background: var(--brand-soft); }
+.child-desc { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.type-tag { display: inline-block; margin: 0 0.25rem 0.15rem 0; padding: 0.05rem 0.45rem; border: 1px solid var(--border); border-radius: 0.4rem; font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+.js .group-table .group-row { cursor: pointer; }
+
+/* ---------- Products & COGS ---------- */
+a.tile[aria-current="true"] { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand), 0 0 0 0.15rem var(--brand-soft); }
+.coverage-bar { vertical-align: middle; margin-right: 0.35rem; }
+.products-table .col-family { width: 1%; white-space: nowrap; }
+.products-table .col-cost { width: 11rem; }
+.products-table .col-updated { width: 1%; white-space: nowrap; }
+.cost-group { max-width: 10rem; flex-wrap: nowrap; }
+.cost-group .input-group-text { background: var(--surface-2); color: var(--muted); border-color: var(--border); min-width: 2.25rem; justify-content: center; }
+.cost-input { text-align: right; font-variant-numeric: tabular-nums; }
+.cost-input::placeholder { color: var(--muted); font-style: italic; text-align: right; }
+.cost-input.is-changed { border-color: var(--brand); box-shadow: 0 0 0 0.15rem var(--brand-soft); }
+@media (max-width: 767.98px) {
+    .products-table .col-family, .products-table .col-updated { display: none; }
+    .products-table .product-col { max-width: 0; width: 100%; }
+    .products-table .product-cell { gap: 0.5rem; }
+    .products-table .product-thumb { width: 32px; height: 32px; }
+    .products-table .product-title { max-width: 100%; }
+    .products-table .col-cost { width: 7.5rem; }
+    .cost-group { max-width: 7.5rem; }
+    .cost-group .input-group-text { min-width: 0; padding-inline: 0.4rem; }
 }

@@ -2,6 +2,7 @@ using System.Text;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Imports;
+using AERai.Web.Application.Products;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Staging;
 using AERai.Web.Infrastructure.Persistence;
@@ -95,8 +96,8 @@ public sealed class MarketplacePromotionTests(SqlDatabaseFixture fixture) : ICla
         Assert.Equal(4.10m, (await products.GetAsync("M-COST-1", Us, CancellationToken.None))!.CostOfGoods);
         Assert.False(await products.UpdateCostAsync("NO-SUCH-SKU", Us, 1m, now, CancellationToken.None));
 
-        var usList = await products.ListAsync(Us, new PageRequest(1, 50, "M-COST-"), CancellationToken.None);
-        var caList = await products.ListAsync(Ca, new PageRequest(1, 50, "M-COST-"), CancellationToken.None);
+        var usList = await products.ListAsync(Us, ProductListFilter.Default, new PageRequest(1, 50, "M-COST-"), CancellationToken.None);
+        var caList = await products.ListAsync(Ca, ProductListFilter.Default, new PageRequest(1, 50, "M-COST-"), CancellationToken.None);
         Assert.Equal(4.10m, Assert.Single(usList.Items).CostOfGoods);
         Assert.Null(Assert.Single(caList.Items).CostOfGoods);
     }

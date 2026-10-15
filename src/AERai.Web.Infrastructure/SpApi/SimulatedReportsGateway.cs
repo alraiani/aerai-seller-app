@@ -43,6 +43,17 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
         [MarketplaceIds.UnitedKingdom] = (0.80m, "203", 0.5),
     };
 
+    /// <summary>
+    /// Who gets paid out in each region, as Amazon lists them: every settlement of the region whichever
+    /// marketplace asks (North America pays USD, CAD, and MXN separately, MXN for the Mexican marketplace
+    /// this app doesn't sell in as its own).
+    /// </summary>
+    private static readonly Dictionary<AmazonRegion, (string Code, string Currency, decimal PriceFactor, string OrderPrefix)[]> SettlementPayers = new()
+    {
+        [AmazonRegion.NorthAmerica] = [("US", "USD", 1.00m, "114"), ("CA", "CAD", 1.35m, "702"), ("MX", "MXN", 18.5m, "701")],
+        [AmazonRegion.Europe] = [("UK", "GBP", 0.80m, "203")],
+    };
+
     private readonly ConcurrentDictionary<string, Func<string>> _documents = new(StringComparer.Ordinal);
 
     /// <inheritdoc/>
@@ -93,11 +104,16 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
                 continue;
             }
 
-            // Each marketplace settles separately, so report (and settlement) ids carry its code.
-            var reportId = string.Create(CultureInfo.InvariantCulture, $"SIM-SETTLE-{marketplace.Code}-{end:yyyyMMdd}");
-            var periodStart = start;
-            _documents[DocumentId(reportId)] = () => SettlementReport(marketplace, reportId, periodStart, end);
-            reports.Add(new AvailableAmazonReport(reportId, DocumentId(reportId), created));
+            // Like Amazon, every payout of the region is listed whichever marketplace asks; each currency
+            // settles separately, so report (and settlement) ids carry the payer's code and are the same
+            // for every marketplace of the region.
+            foreach (var payer in SettlementPayers.GetValueOrDefault(marketplace.Region, []))
+            {
+                var reportId = string.Create(CultureInfo.InvariantCulture, $"SIM-SETTLE-{payer.Code}-{end:yyyyMMdd}");
+                var periodStart = start;
+                _documents[DocumentId(reportId)] = () => SettlementReport(payer.Currency, payer.PriceFactor, payer.OrderPrefix, reportId, periodStart, end);
+                reports.Add(new AvailableAmazonReport(reportId, DocumentId(reportId), created));
+            }
         }
 
         return Task.FromResult<IReadOnlyList<AvailableAmazonReport>>(reports);
@@ -202,11 +218,9 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
         return builder.ToString();
     }
 
-    private static string SettlementReport(Marketplace marketplace, string reportId, DateTimeOffset start, DateTimeOffset end)
+    private static string SettlementReport(string currency, decimal priceFactor, string prefix, string reportId, DateTimeOffset start, DateTimeOffset end)
     {
         var random = Seeded(reportId);
-        var (priceFactor, prefix, _) = ProfileOf(marketplace);
-        var currency = marketplace.Currency;
         var settlementId = reportId["SIM-SETTLE-".Length..];
         var builder = new StringBuilder("settlement-id\tsettlement-start-date\tsettlement-end-date\tdeposit-date\ttotal-amount\tcurrency\ttransaction-type\torder-id\tamount-type\tamount-description\tamount\tposted-date\tsku\n");
         builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t{start:yyyy-MM-dd HH:mm:ss} UTC\t{end:yyyy-MM-dd HH:mm:ss} UTC\t{end.AddDays(1):yyyy-MM-dd HH:mm:ss} UTC\t\t{currency}\t\t\t\t\t\t\t\n");
