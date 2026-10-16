@@ -761,7 +761,9 @@ th .tip { text-transform: none; }
 /* ---------- Inventory worksheet ---------- */
 .worksheet-table td, .worksheet-table th { white-space: nowrap; vertical-align: middle; }
 .worksheet-table .sku-cell { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 11rem; border-left: 4px solid var(--sku, transparent); }
-.worksheet-table thead .sku-cell { background: var(--surface-2); z-index: 2; border-left-color: transparent; }
+/* The header row stays in view while the sheet scrolls, as on the Inventory list (see .table-scroll). */
+.worksheet-table thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--border); }
+.worksheet-table thead .sku-cell { background: var(--surface-2); z-index: 3; border-left-color: transparent; }
 .worksheet-table .sku-code { font-weight: 600; color: var(--sku, var(--text)); letter-spacing: 0.01em; }
 .worksheet-table .sku-title { display: block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; font-size: 0.75rem; color: var(--muted); }
 .worksheet-table tbody tr.sku-row:hover > td { background: var(--surface-2); }
@@ -816,6 +818,8 @@ th .tip { text-transform: none; }
     .app-main, .app-content { margin: 0 !important; padding: 0 !important; }
     .card { border: 0; box-shadow: none; }
     .table-responsive { overflow: visible; }
+    .table-scroll { max-height: none; }
+    .worksheet-table thead th { position: static; }
     .worksheet-table { font-size: 10pt; }
     .worksheet-table .home-input { border: 0; box-shadow: none; padding: 0; width: auto; }
     .worksheet-table .sku-cell { position: static; }
