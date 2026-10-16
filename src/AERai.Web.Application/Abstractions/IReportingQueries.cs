@@ -9,13 +9,6 @@ namespace AERai.Web.Application.Abstractions;
 /// </summary>
 public interface IReportingQueries
 {
-    /// <summary>Lists orders, newest first.</summary>
-    /// <param name="marketplaceId">Marketplace to report on.</param>
-    /// <param name="request">Paging; search matches order id or status.</param>
-    /// <returns>One page of orders.</returns>
-    /// <param name="cancellationToken">Cancels the operation.</param>
-    Task<PagedResult<OrderSummary>> GetOrdersAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken);
-
     /// <summary>Lists settlements, newest period first unless the filter sorts otherwise.</summary>
     /// <param name="marketplaceId">Marketplace to report on.</param>
     /// <param name="request">Paging; search matches the settlement id, or any SKU, ASIN, title, or order id in the settlement.</param>

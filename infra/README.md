@@ -41,7 +41,7 @@ Azure SQL, Blob Storage, and Key Vault through its **system-assigned managed ide
    | `SpApi--ClientId` | LWA client id of the SP-API app |
    | `SpApi--ClientSecret` | LWA client secret |
    | `SpApi--RefreshToken` | Seller authorization refresh token for North America (US, Canada) |
-   | `SpApi--Europe--RefreshToken` | *Optional.* Refresh token for the Europe region (UK), once the UK account is authorized |
+   | `SpApi--Europe--RefreshToken` | Refresh token for the Europe region (UK). The UK marketplace is active, so its runs fail without it |
 
    Restart the app. The **Amazon sync** page shows "Live" with no warning once the first three are present;
    then switch on the schedules you want. Secret rotation = update the secret and restart.

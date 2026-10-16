@@ -2,6 +2,7 @@ using System.Text;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Imports;
+using AERai.Web.Application.Orders;
 using AERai.Web.Application.Products;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Staging;
@@ -52,9 +53,9 @@ public sealed class MarketplacePromotionTests(SqlDatabaseFixture fixture) : ICla
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         Assert.Equal([Ca, Ca], await db.Orders.Where(o => o.AmazonOrderId.StartsWith("M-")).Select(o => o.MarketplaceId).ToListAsync());
 
-        var orders = scope.ServiceProvider.GetRequiredService<IReportingQueries>();
-        var caOrders = await orders.GetOrdersAsync(Ca, new PageRequest(1, 50, "M-"), CancellationToken.None);
-        var usOrders = await orders.GetOrdersAsync(Us, new PageRequest(1, 50, "M-"), CancellationToken.None);
+        var orders = scope.ServiceProvider.GetRequiredService<IOrderQueries>();
+        var caOrders = await orders.GetOrdersAsync(Ca, new PageRequest(1, 50, "M-"), OrderListFilter.Default, CancellationToken.None);
+        var usOrders = await orders.GetOrdersAsync(Us, new PageRequest(1, 50, "M-"), OrderListFilter.Default, CancellationToken.None);
         Assert.Equal(2, caOrders.TotalCount);
         Assert.Equal(0, usOrders.TotalCount);
     }
