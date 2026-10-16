@@ -5,6 +5,7 @@ using AERai.Web.Application.Imports;
 using AERai.Web.Application.Inventory;
 using AERai.Web.Application.Ingestion;
 using AERai.Web.Application.Marketplaces;
+using AERai.Web.Application.Orders;
 using AERai.Web.Application.Products;
 using AERai.Web.Application.Security;
 using AERai.Web.Application.Settlements;
@@ -68,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<IHomeStockTemplateService, HomeStockTemplateService>();
         services.AddScoped<IStockAlertService, StockAlertService>();
         services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<IProductCostTemplateService, ProductCostTemplateService>();
         services.AddScoped<IBookkeepingService, BookkeepingService>();
         services.AddScoped<ISettlementExchangeRateService, SettlementExchangeRateService>();

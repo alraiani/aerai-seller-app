@@ -938,6 +938,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AmazonOrderId");
+
                     b.HasIndex("SettlementId");
 
                     b.ToTable("SettlementLine", "core");

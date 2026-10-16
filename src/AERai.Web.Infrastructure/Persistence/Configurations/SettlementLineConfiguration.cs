@@ -21,5 +21,8 @@ internal sealed class SettlementLineConfiguration : IEntityTypeConfiguration<Set
         builder.Property(l => l.AmountType).HasMaxLength(64);
         builder.Property(l => l.AmountDescription).HasMaxLength(128);
         builder.Property(l => l.Amount).HasPrecision(18, 2);
+
+        // The Orders page looks up each listed order's settlement lines by order id.
+        builder.HasIndex(l => l.AmazonOrderId);
     }
 }

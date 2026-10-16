@@ -14,23 +14,6 @@ namespace AERai.Web.Infrastructure.Queries;
 internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueries
 {
     /// <inheritdoc/>
-    public Task<PagedResult<OrderSummary>> GetOrdersAsync(string marketplaceId, PageRequest request, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        var query = dbContext.OrderSummaries.AsNoTracking().Where(v => v.MarketplaceId == marketplaceId);
-        if (request.SafeSearch is { } search)
-        {
-            query = query.Where(o => o.AmazonOrderId.Contains(search) || o.OrderStatus.Contains(search));
-        }
-
-        return query
-            .OrderByDescending(o => o.PurchaseDate)
-            .ThenBy(o => o.AmazonOrderId)
-            .ToPagedResultAsync(request, cancellationToken);
-    }
-
-    /// <inheritdoc/>
     public async Task<PagedResult<SettlementSummary>> GetSettlementsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
