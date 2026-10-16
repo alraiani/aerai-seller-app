@@ -840,6 +840,9 @@ th .tip { text-transform: none; }
 .totals-row .amount-breakdown { margin-top: 0.4rem; }
 .totals-row .amount-breakdown > div { padding: 0.2rem 0.6rem; min-width: 0; }
 .totals-row .amount-breakdown dd { font-size: 0.8rem; }
+.order-payout { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+.order-payout .amount-breakdown > div { padding: 0.2rem 0.6rem; min-width: 0; }
+.order-payout .amount-breakdown dd { font-size: 0.8rem; }
 
 /* Order groups: a parent row per order that expands into its lines. Lines show without script;
    with it (html.js) they hide until the group is expanded. */
