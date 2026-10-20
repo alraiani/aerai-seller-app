@@ -1,6 +1,8 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Orders;
+using AERai.Web.Application.Settlements;
+using AERai.Web.Application.Tests.Fakes;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Reporting;
 using Microsoft.Extensions.Time.Testing;
@@ -34,7 +36,7 @@ public sealed class OrderServiceTests
         var canada = TestMarketplaces.Canada;
         canada.SettlementMarketplaceId = MarketplaceIds.UnitedStates;
 
-        var list = await new OrderService(queries, new FakeTimeProvider()).GetListAsync(canada, Page, OrderListFilter.Default, CancellationToken.None);
+        var list = await new OrderService(queries, new FakeDeferredPaymentQueries(), new FakeTimeProvider()).GetListAsync(canada, Page, OrderListFilter.Default, CancellationToken.None);
 
         Assert.Equal(MarketplaceIds.UnitedStates, queries.SettlementMarketplaceAsked);
         var row = Assert.Single(list.Orders.Items);
@@ -52,7 +54,7 @@ public sealed class OrderServiceTests
             Items = [new OrderItemRow("US-1", "SKU-1", null, null, null, null, 1, 40m, 10m)],
         };
 
-        var list = await new OrderService(queries, new FakeTimeProvider()).GetListAsync(TestMarketplaces.UnitedStates, Page, OrderListFilter.Default, CancellationToken.None);
+        var list = await new OrderService(queries, new FakeDeferredPaymentQueries(), new FakeTimeProvider()).GetListAsync(TestMarketplaces.UnitedStates, Page, OrderListFilter.Default, CancellationToken.None);
 
         Assert.Equal(MarketplaceIds.UnitedStates, queries.SettlementMarketplaceAsked);
         var row = Assert.Single(list.Orders.Items);
@@ -62,11 +64,31 @@ public sealed class OrderServiceTests
     }
 
     [Fact]
+    public async Task GetListAsync_UnpaidOrderAmazonHolds_CarriesItsDeferral()
+    {
+        var queries = new FakeOrderQueries
+        {
+            Orders = [Order("US-1", MarketplaceIds.UnitedStates, "USD"), Order("US-2", MarketplaceIds.UnitedStates, "USD")],
+        };
+        var deferred = new FakeDeferredPaymentQueries();
+        var maturity = new DateTimeOffset(2026, 10, 25, 0, 0, 0, TimeSpan.Zero);
+        deferred.Rows.Add((MarketplaceIds.UnitedStates, new DeferredPaymentRow("T-1", "US-1", "Order Payment", "DD7", null, maturity, 24.5m, "USD", DeferredTransactionStatus.Deferred, null)));
+        deferred.Rows.Add((MarketplaceIds.UnitedStates, new DeferredPaymentRow("T-2", "US-2", "Order Payment", "DD7", null, maturity, 9m, "USD", DeferredTransactionStatus.Released, maturity)));
+
+        var list = await new OrderService(queries, deferred, new FakeTimeProvider()).GetListAsync(TestMarketplaces.UnitedStates, Page, OrderListFilter.Default, CancellationToken.None);
+
+        Assert.Equal(maturity, list.Orders.Items.Single(r => r.Order.AmazonOrderId == "US-1").Deferral?.MaturityDate);
+
+        // A released deferral is no longer held: the order just waits for its settlement.
+        Assert.Null(list.Orders.Items.Single(r => r.Order.AmazonOrderId == "US-2").Deferral);
+    }
+
+    [Fact]
     public async Task GetListAsync_EmptyPage_SkipsTheItemAndSettlementQueries()
     {
         var queries = new FakeOrderQueries();
 
-        var list = await new OrderService(queries, new FakeTimeProvider()).GetListAsync(TestMarketplaces.UnitedStates, Page, OrderListFilter.Default, CancellationToken.None);
+        var list = await new OrderService(queries, new FakeDeferredPaymentQueries(), new FakeTimeProvider()).GetListAsync(TestMarketplaces.UnitedStates, Page, OrderListFilter.Default, CancellationToken.None);
 
         Assert.Empty(list.Orders.Items);
         Assert.Null(queries.SettlementMarketplaceAsked);
@@ -79,7 +101,7 @@ public sealed class OrderServiceTests
         var queries = new FakeOrderQueries { ExportRows = Enumerable.Repeat(row, OrderService.MaxExportRows + 1).ToList() };
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 16, 12, 0, 0, TimeSpan.Zero));
 
-        var export = await new OrderService(queries, time).ExportAsync(TestMarketplaces.UnitedStates, Page, OrderListFilter.Default, CancellationToken.None);
+        var export = await new OrderService(queries, new FakeDeferredPaymentQueries(), time).ExportAsync(TestMarketplaces.UnitedStates, Page, OrderListFilter.Default, CancellationToken.None);
 
         Assert.True(export.Truncated);
         Assert.Equal($"orders-US-2026-10-16-first-{OrderService.MaxExportRows}-rows.csv", export.FileName);
@@ -93,7 +115,7 @@ public sealed class OrderServiceTests
         // 02:00 UTC on the 17th is still the 16th in New York.
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 17, 2, 0, 0, TimeSpan.Zero));
 
-        var export = await new OrderService(queries, time).ExportAsync(TestMarketplaces.UnitedStates, Page, OrderListFilter.Default, CancellationToken.None);
+        var export = await new OrderService(queries, new FakeDeferredPaymentQueries(), time).ExportAsync(TestMarketplaces.UnitedStates, Page, OrderListFilter.Default, CancellationToken.None);
 
         Assert.False(export.Truncated);
         Assert.Equal("orders-US-2026-10-16.csv", export.FileName);

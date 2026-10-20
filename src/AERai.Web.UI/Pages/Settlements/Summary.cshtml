@@ -31,6 +31,18 @@
 
 <partial name="_SettlementRate" model="Model.RatePanel" />
 
+@if (Model.Deferrals.Orders > 0)
+{
+    @* Deferred sales arrive in a later settlement than the one they were sold in, which is why a payout can be larger than that period's sales suggest. *@
+    <div class="page-footnote mt-n2 mb-3">
+        <partial name="_Icon" model='"clock"' />
+        Includes @Model.Deferrals.Orders.ToString("N0", CultureInfo.InvariantCulture) order@(Model.Deferrals.Orders == 1 ? "" : "s") Amazon deferred earlier
+        (@string.Join(" + ", Model.Deferrals.Amounts.Select(a => SettlementFormat.Money(a.Amount, a.Currency))) released into this payout).
+        Their lines are marked on each row's orders.
+        <a asp-page="Deferred">What Amazon still holds</a>
+    </div>
+}
+
 @* ---------- Search, row filter ---------- *@
 <div class="list-toolbar mb-3">
     <form method="get" class="filters" role="search">

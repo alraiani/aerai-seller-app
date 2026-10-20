@@ -290,6 +290,7 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
         AmazonReportType.RestockRecommendations => "Restock recommendations",
         AmazonReportType.AwdInventory => "AWD inventory",
         AmazonReportType.OrdersApi => "Orders (live API)",
+        AmazonReportType.DeferredTransactions => "Deferred payments",
         _ => type.ToString(),
     };
 

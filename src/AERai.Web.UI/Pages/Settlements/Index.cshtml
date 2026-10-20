@@ -51,6 +51,9 @@
     </div>
 </div>
 
+@* ---------- What Amazon holds back and has not paid out (from the Finances API) ---------- *@
+<partial name="_DeferredTile" model="(Model.Deferred, Model.Zone)" />
+
 @if (t.AwaitingRate > 0)
 {
     <div class="page-footnote mt-n2 mb-3 d-flex flex-wrap align-items-center gap-2">

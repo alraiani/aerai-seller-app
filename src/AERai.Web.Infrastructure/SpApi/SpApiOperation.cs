@@ -22,10 +22,11 @@ internal static class SpApiOperation
     public const string SearchCatalogItems = "catalog.searchCatalogItems";
     public const string ListAwdInventory = "awd.listInventory";
     public const string SearchOrders = "orders.searchOrders";
+    public const string ListTransactions = "finances.listTransactions";
 
     /// <summary>
     /// (requests per second, burst) from the Reports API v2021-06-30, Catalog Items API v2022-04-01,
-    /// AWD API v2024-05-09, and Orders API v2026-01-01 usage plans. Unknown operations fall back to a
+    /// AWD API v2024-05-09, Orders API v2026-01-01, and Finances API v2024-06-19 usage plans. Unknown operations fall back to a
     /// conservative default.
     /// </summary>
     public static readonly FrozenDictionary<string, (double RatePerSecond, int Burst)> Limits =
@@ -38,6 +39,7 @@ internal static class SpApiOperation
             [SearchCatalogItems] = (2.0, 2),
             [ListAwdInventory] = (2.0, 2),
             [SearchOrders] = (0.0056, 20),
+            [ListTransactions] = (0.5, 10),
         }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Limit applied to operations missing from <see cref="Limits"/>.</summary>

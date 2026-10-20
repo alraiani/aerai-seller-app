@@ -27,6 +27,8 @@ public sealed class ReportIngestionServiceTests
     private readonly FakeAwdInventoryRepository _awdInventory = new();
     private readonly FakeAmazonOrdersGateway _ordersApi = new();
     private readonly FakeAmazonOrderRepository _apiOrders = new();
+    private readonly FakeAmazonFinancesGateway _finances = new();
+    private readonly FakeDeferredTransactionRepository _deferred = new();
     private readonly FakeRawFileStore _rawFiles = new();
     private readonly FakeStagingRepository _staged = new();
     private readonly FakePromotionService _promotion = new();
@@ -45,7 +47,7 @@ public sealed class ReportIngestionServiceTests
         // Zero poll interval by default: every check is due immediately, so RunToEndAsync needs no clock moves.
         var options = Options.Create(ingestion ?? new IngestionOptions { ReportPollInterval = TimeSpan.Zero, ReportMaxWait = TimeSpan.FromMinutes(5) });
 
-        return new ReportIngestionService(_gateway, _awd, _awdInventory, _ordersApi, _apiOrders, _rawFiles, staging, _promotion, _schedules, _runs, _marketplaces, options, _clock,
+        return new ReportIngestionService(_gateway, _awd, _awdInventory, _ordersApi, _apiOrders, _finances, _deferred, _rawFiles, staging, _promotion, _schedules, _runs, _marketplaces, options, _clock,
             NullLogger<ReportIngestionService>.Instance);
     }
 
@@ -106,6 +108,45 @@ public sealed class ReportIngestionServiceTests
         Assert.Empty(_gateway.Requests);
         Assert.Contains("2 SKUs", summary.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task RunAsync_DeferredTransactions_ReadsTheWholeListingBeforeApplyingIt()
+    {
+        AddSchedule(AmazonReportType.DeferredTransactions);
+        _finances.Pages.Add([Deferred("T-1", "111-1"), Deferred("T-2", "111-2")]);
+        _finances.Pages.Add([Deferred("T-3", "111-3"), Deferred("T-1", "111-1")]);
+        _deferred.Released = 4;
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
+
+        // Reaches back as far as Amazon allows, so nothing still held looks released.
+        Assert.All(_finances.PostedAfterSeen, after => Assert.Equal(Now - ReportIngestionService.DeferredListingAge, after));
+        Assert.Equal(2, _rawFiles.Files.Keys.Count(k => k.StartsWith("deferred/2026/10/02/", StringComparison.Ordinal)));
+        var applied = Assert.Single(_deferred.Applied);
+        Assert.Equal(MarketplaceIds.UnitedStates, applied.MarketplaceId);
+        Assert.Equal(["T-1", "T-2", "T-3"], applied.Items.Select(i => i.TransactionId).Order(StringComparer.Ordinal));
+        Assert.Contains("holds 3 deferred transactions; 4 released", summary.Message, StringComparison.Ordinal);
+        Assert.Empty(_gateway.Requests);
+        Assert.Empty(_staged.Saved);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeferredListingFails_AppliesNothing()
+    {
+        AddSchedule(AmazonReportType.DeferredTransactions);
+        _finances.Failure = new HttpRequestException("SP-API finances.listTransactions failed with HTTP 403");
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        // A partial listing would release transactions Amazon still holds, so a failed run writes nothing.
+        Assert.Equal(SyncRunStatus.Failed, summary.Status);
+        Assert.Empty(_deferred.Applied);
+    }
+
+    private static DeferredTransactionItem Deferred(string id, string orderId) =>
+        new(id, orderId, "Shipment", "Order Payment", Now.AddDays(-3), 12.34m, "USD", "DD7", Now.AddDays(5));
 
     [Fact]
     public async Task RunAsync_AwdInventoryEmpty_RecordsNoDataAndClearsTheDaysSnapshot()

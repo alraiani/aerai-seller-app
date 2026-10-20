@@ -175,6 +175,17 @@ public static class SettlementFormat
         _ => "pill pill-info",
     };
 
+    /// <summary>What an Amazon deferral policy means, for a tooltip.</summary>
+    /// <param name="reason">The policy code, e.g. <c>DD7</c>.</param>
+    /// <returns>e.g. "Held until 7 days after delivery".</returns>
+    public static string DeferralReasonTitle(string? reason) => reason?.ToUpperInvariant() switch
+    {
+        "DD7" => "Held until 7 days after delivery (Amazon's delivery-date policy)",
+        "B2B" => "Held until the invoiced business order is paid",
+        null or "" => "Amazon gave no reason",
+        _ => $"Amazon's deferral policy {reason}",
+    };
+
     /// <summary>The arrow for a sortable header given the effective direction.</summary>
     /// <param name="isSorted">Whether the column is the current sort.</param>
     /// <param name="descending">Whether it currently runs high to low.</param>

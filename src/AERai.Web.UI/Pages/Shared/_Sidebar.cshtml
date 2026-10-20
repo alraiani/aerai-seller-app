@@ -16,6 +16,7 @@
     string[] inventorySubPages = ["/Inventory/Worksheet", "/Inventory/HomeStock/Pending", "/Inventory/HomeStock/Ledger", "/Inventory/Pictures"];
     var inventoryOverviewCurrent = IsActive("/Inventory") && !inventorySubPages.Any(p => IsActive(p));
     var bookkeepingCurrent = IsActive("/Settlements") || IsActive("/Bookkeeping");
+    var settlementsOverviewCurrent = IsActive("/Settlements") && !IsActive("/Settlements/Deferred");
 
     // The label stays in the markup in rail mode (only visually hidden) so screen readers still read it;
     // data-bs-title gives sighted rail users the same label as a tooltip.
@@ -91,7 +92,17 @@
         <details class="nav-group nav-group-bookkeeping" data-nav-group="bookkeeping" open="@(bookkeepingCurrent)">
             @{ await GroupHead("receipt", "Bookkeeping"); }
             <div class="nav-group-items">
-                @{ await NavLink("/Settlements/Index", "wallet", "Settlements", IsActive("/Settlements")); }
+                @* Settlements keeps its own link; the chevron beside it folds the Deferred page away. *@
+                <div class="nav-subgroup">
+                    @{ await NavLink("/Settlements/Index", "wallet", "Settlements", settlementsOverviewCurrent); }
+                    <details data-nav-group="settlements" open>
+                        <summary class="nav-sub-toggle" data-bs-title="Settlements pages">
+                            <partial name="_Icon" model="@("chevron-down")" />
+                            <span class="visually-hidden">Settlements pages</span>
+                        </summary>
+                        @{ await NavLink("/Settlements/Deferred", "clock", "Deferred by Amazon", IsActive("/Settlements/Deferred"), "nav-sub"); }
+                    </details>
+                </div>
                 @if (isOperator)
                 {
                     await NavLink("/Bookkeeping/Index", "book", "QuickBooks export", IsActive("/Bookkeeping"));
