@@ -2,6 +2,7 @@ using AERai.Web.Application.Common;
 using AERai.Web.Application.Settlements;
 using AERai.Web.Application.Tests.Fakes;
 using AERai.Web.Domain.Core;
+using AERai.Web.Domain.Reporting;
 using Microsoft.Extensions.Time.Testing;
 
 namespace AERai.Web.Application.Tests.Settlements;
@@ -59,11 +60,60 @@ public sealed class DeferredPaymentServiceTests
     }
 
     [Fact]
-    public async Task GetPageAsync_ReleasedView_LooksBackThirtyDays()
+    public async Task GetGroupsAsync_AsksForTheMarketplacesListAndCapsRows()
     {
-        await CreateService().GetPageAsync(TestMarketplaces.UnitedStates, new PageRequest(), new DeferredListFilter(DeferredView.Released), CancellationToken.None);
+        var canada = TestMarketplaces.Canada;
+        canada.SettlementMarketplaceId = MarketplaceIds.UnitedStates;
 
-        Assert.Equal(Now - DeferredPaymentService.ReleasedWindow, _queries.ReleasedSinceSeen);
+        await CreateService().GetGroupsAsync(canada, new PageRequest(), DeferredView.All, CancellationToken.None);
+
+        // Canada's payouts are in the United States list, so that is where its groups' Summary links lead.
+        Assert.Equal((MarketplaceIds.Canada, MarketplaceIds.UnitedStates, DeferredPaymentService.MaxGroupRows), _queries.GroupsAsked);
+    }
+
+    [Fact]
+    public async Task GetDeferredOutAsync_InTheMarketplacesCurrency_ConvertsAtTheSettlementsRate()
+    {
+        _marketplaces.Marketplaces.Single(m => m.Code == "CA").SettlementMarketplaceId = MarketplaceIds.UnitedStates;
+        _queries.BySettlement.Add(new SettlementDeferral("S-CAD", "CAD", 100m, 4, 4, 40m, 2, Now.AddDays(-1), Now.AddDays(3)));
+        _queries.BySettlement.Add(new SettlementDeferral("S-USD", "USD", 55.5m, 3, 3, 0m, 0, Now.AddDays(-9), Now.AddDays(-2)));
+        var cad = new SettlementSummary { MarketplaceId = MarketplaceIds.UnitedStates, SettlementId = "S-CAD", Currency = "CAD", HomeCurrency = "USD", ExchangeRate = 0.7215m };
+        var usd = new SettlementSummary { MarketplaceId = MarketplaceIds.UnitedStates, SettlementId = "S-USD", Currency = "USD", HomeCurrency = "USD", ExchangeRate = 1m };
+        var none = new SettlementSummary { MarketplaceId = MarketplaceIds.UnitedStates, SettlementId = "S-NONE", Currency = "USD", HomeCurrency = "USD", ExchangeRate = 1m };
+
+        var home = await CreateService().GetDeferredOutAsync(TestMarketplaces.UnitedStates, [cad, usd, none], SettlementAmounts.Home, CancellationToken.None);
+        var asPaid = await CreateService().GetDeferredOutAsync(TestMarketplaces.UnitedStates, [cad], SettlementAmounts.Original, CancellationToken.None);
+
+        Assert.Equal(new DeferredOut(72.15m, 28.86m, "USD", 4, 4, 2, Now.AddDays(-1), Now.AddDays(3)), home["S-CAD"]);
+        Assert.True(home["S-USD"].IsAllReleased);
+        Assert.False(home.ContainsKey("S-NONE"));
+        Assert.Equal((100m, "CAD"), (asPaid["S-CAD"].Amount, asPaid["S-CAD"].Currency));
+
+        // The United States list holds Canada's payouts, so its deferrals are read too.
+        Assert.Equal([MarketplaceIds.UnitedStates, MarketplaceIds.Canada], _queries.MarketplacesAsked);
+    }
+
+    [Fact]
+    public async Task GetDeferredOutAsync_NoRateYet_StaysAsPaid()
+    {
+        _queries.BySettlement.Add(new SettlementDeferral("S-MXN", "MXN", 500m, 2, 2, 500m, 2, null, null));
+        var mxn = new SettlementSummary { MarketplaceId = MarketplaceIds.UnitedStates, SettlementId = "S-MXN", Currency = "MXN", HomeCurrency = "USD", ExchangeRate = null };
+
+        var shown = await CreateService().GetDeferredOutAsync(TestMarketplaces.UnitedStates, [mxn], SettlementAmounts.Home, CancellationToken.None);
+
+        Assert.Equal((500m, "MXN"), (shown["S-MXN"].Amount, shown["S-MXN"].Currency));
+    }
+
+    [Fact]
+    public async Task GetSkuDeferralsAsync_ConvertsAmountsButKeepsThePriceEachAsPaid()
+    {
+        _queries.BySku.Add(new SkuDeferral("SKU-1", 25.99m, 3, 50m, 3, "CAD"));
+        var cad = new SettlementSummary { MarketplaceId = MarketplaceIds.UnitedStates, SettlementId = "S-CAD", Currency = "CAD", HomeCurrency = "USD", ExchangeRate = 0.7m };
+
+        var rows = await CreateService().GetSkuDeferralsAsync(TestMarketplaces.UnitedStates, cad, SettlementAmounts.Home, CancellationToken.None);
+
+        // The price each still matches the summary rows' own (as paid) price each.
+        Assert.Equal(new SkuDeferral("SKU-1", 25.99m, 3, 35m, 3, "USD"), Assert.Single(rows));
     }
 
     [Fact]

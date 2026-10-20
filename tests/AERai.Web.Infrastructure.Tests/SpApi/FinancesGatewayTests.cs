@@ -1,4 +1,5 @@
 using System.Net;
+using AERai.Web.Application.Ingestion;
 using AERai.Web.Domain.Core;
 using AERai.Web.Infrastructure.SpApi;
 using Microsoft.Extensions.Options;
@@ -12,10 +13,15 @@ public sealed class FinancesGatewayTests : IDisposable
         {"payload":{"nextToken":"tok/+=","transactions":[
           {"transactionId":"T-1","transactionType":"Shipment","transactionStatus":"DEFERRED","description":"Order Payment",
            "postedDate":"2026-10-15T08:00:00Z","totalAmount":{"currencyCode":"USD","currencyAmount":18.42},
-           "relatedIdentifiers":[{"relatedIdentifierName":"SHIPMENT_ID","relatedIdentifierValue":"SH-1"},{"relatedIdentifierName":"ORDER_ID","relatedIdentifierValue":"113-1"}],
+           "relatedIdentifiers":[{"relatedIdentifierName":"SHIPMENT_ID","relatedIdentifierValue":"SH-1"},{"relatedIdentifierName":"SETTLEMENT_ID","relatedIdentifierValue":"27803717201"},{"relatedIdentifierName":"ORDER_ID","relatedIdentifierValue":"113-1"}],
            "marketplaceDetails":{"marketplaceId":"ATVPDKIKX0DER","marketplaceName":"Amazon.com"},
-           "contexts":[{"contextType":"ProductContext","asin":"B0"},{"contextType":"DeferredContext","deferralReason":"DD7","maturityDate":"2026-10-24T07:00:00Z"}]},
-          {"transactionId":"T-2","transactionStatus":"RELEASED","totalAmount":{"currencyCode":"USD","currencyAmount":5}},
+           "items":[{"description":"Microfiber cloth","totalAmount":{"currencyAmount":18.42,"currencyCode":"USD"},
+             "relatedIdentifiers":[{"itemRelatedIdentifierName":"ORDER_ADJUSTMENT_ITEM_ID","itemRelatedIdentifierValue":"1728"}],
+             "breakdowns":[{"breakdownType":"ProductCharges","breakdownAmount":{"currencyAmount":37.98,"currencyCode":"USD"},"breakdowns":[{"breakdownType":"OurPricePrincipal","breakdownAmount":{"currencyAmount":37.98,"currencyCode":"USD"},"breakdowns":[]}]},
+                           {"breakdownType":"Tax","breakdownAmount":{"currencyAmount":0.0,"currencyCode":"USD"}}],
+             "contexts":[{"asin":"B076CYV9SL","quantityShipped":2,"sku":"HH1006","fulfillmentNetwork":"AFN","contextType":"ProductContext"}]}],
+           "contexts":[{"contextType":"AddressContext"},{"contextType":"DeferredContext","deferralReason":"DD7","maturityDate":"2026-10-24T07:00:00Z"}]},
+          {"transactionId":"T-2","transactionStatus":"DEFERRED_RELEASED","totalAmount":{"currencyCode":"USD","currencyAmount":5}},
           {"transactionId":"","transactionStatus":"DEFERRED"}
         ]}}
         """;
@@ -46,7 +52,7 @@ public sealed class FinancesGatewayTests : IDisposable
     {
         _handler.Reply(HttpStatusCode.OK, Page1);
 
-        var page = await CreateGateway().ListTransactionsPageAsync(UnitedStates, PostedAfter, nextToken: null, CancellationToken.None);
+        var page = await CreateGateway().ListTransactionsPageAsync(UnitedStates, DeferredTransactionListing.StillDeferred, PostedAfter, null, CancellationToken.None);
 
         var request = Assert.Single(_handler.Requests);
         Assert.Equal(
@@ -60,8 +66,11 @@ public sealed class FinancesGatewayTests : IDisposable
         // Only still-deferred transactions with an id are kept; the order id and the deferral come from their own entries.
         var item = Assert.Single(page.Items);
         Assert.Equal(
-            ("T-1", "113-1", "Shipment", "Order Payment", 18.42m, "USD", "DD7"),
-            (item.TransactionId, item.AmazonOrderId, item.TransactionType, item.Description, item.Amount, item.Currency, item.DeferralReason));
+            ("T-1", "113-1", "27803717201", "Shipment", "Order Payment", 18.42m, "USD", "DD7"),
+            (item.TransactionId, item.AmazonOrderId, item.SettlementId, item.TransactionType, item.Description, item.Amount, item.Currency, item.DeferralReason));
+
+        // The product comes from the item's product context; the price from its product charges.
+        Assert.Equal(new AmazonDeferredProduct("HH1006", "B076CYV9SL", 2, 37.98m, 18.42m), Assert.Single(item.Products));
         Assert.Equal(new DateTimeOffset(2026, 10, 24, 7, 0, 0, TimeSpan.Zero), item.MaturityDate);
         Assert.Equal(new DateTimeOffset(2026, 10, 15, 8, 0, 0, TimeSpan.Zero), item.PostedDate);
         Assert.Equal("tok/+=", page.NextToken);
@@ -69,11 +78,26 @@ public sealed class FinancesGatewayTests : IDisposable
     }
 
     [Fact]
+    public async Task ListTransactionsPageAsync_Released_AsksForReleasedAndKeepsOnlyThose()
+    {
+        _handler.Reply(HttpStatusCode.OK, Page1);
+
+        var page = await CreateGateway().ListTransactionsPageAsync(UnitedStates, DeferredTransactionListing.Released, PostedAfter, null, CancellationToken.None);
+
+        Assert.Contains("transactionStatus=DEFERRED_RELEASED", Assert.Single(_handler.Requests).RequestUri!.Query, StringComparison.Ordinal);
+
+        // Only the transaction Amazon marked DEFERRED_RELEASED; it has no items, so no products.
+        var item = Assert.Single(page.Items);
+        Assert.Equal(("T-2", 5m), (item.TransactionId, item.Amount));
+        Assert.Empty(item.Products);
+    }
+
+    [Fact]
     public async Task ListTransactionsPageAsync_NextPageInEurope_KeepsTheArgumentsAndEscapesTheToken()
     {
         _handler.Reply(HttpStatusCode.OK, """{"payload":{"transactions":[]}}""");
 
-        var page = await CreateGateway().ListTransactionsPageAsync(UnitedKingdom, PostedAfter, "tok/+=", CancellationToken.None);
+        var page = await CreateGateway().ListTransactionsPageAsync(UnitedKingdom, DeferredTransactionListing.StillDeferred, PostedAfter, "tok/+=", CancellationToken.None);
 
         var uri = Assert.Single(_handler.Requests).RequestUri!;
         Assert.Equal("sellingpartnerapi-eu.amazon.com", uri.Host);
@@ -89,7 +113,7 @@ public sealed class FinancesGatewayTests : IDisposable
         _handler.Reply(HttpStatusCode.Forbidden, """{"errors":[{"code":"Unauthorized","message":"Access to requested resource is denied."}]}""");
 
         var error = await Assert.ThrowsAsync<HttpRequestException>(() =>
-            CreateGateway().ListTransactionsPageAsync(UnitedStates, PostedAfter, nextToken: null, CancellationToken.None));
+            CreateGateway().ListTransactionsPageAsync(UnitedStates, DeferredTransactionListing.StillDeferred, PostedAfter, null, CancellationToken.None));
 
         Assert.Equal(HttpStatusCode.Forbidden, error.StatusCode);
         Assert.Contains("finances.listTransactions", error.Message, StringComparison.Ordinal);
@@ -97,23 +121,29 @@ public sealed class FinancesGatewayTests : IDisposable
     }
 
     [Fact]
-    public async Task SimulatedGateway_PagesThroughHeldOrdersOnly()
+    public async Task SimulatedGateway_ListsHeldAndReleasedOrdersApart()
     {
         var now = new DateTimeOffset(2026, 10, 20, 12, 0, 0, TimeSpan.Zero);
         var gateway = new SimulatedFinancesGateway(new Microsoft.Extensions.Time.Testing.FakeTimeProvider(now));
 
-        var items = new List<Application.Ingestion.DeferredTransactionItem>();
+        var items = new List<AmazonDeferredTransaction>();
         string? token = null;
         do
         {
-            var page = await gateway.ListTransactionsPageAsync(UnitedStates, now.AddDays(-179), token, CancellationToken.None);
+            var page = await gateway.ListTransactionsPageAsync(UnitedStates, DeferredTransactionListing.StillDeferred, now.AddDays(-179), token, CancellationToken.None);
             items.AddRange(page.Items);
             token = page.NextToken;
         }
         while (token is not null);
 
+        var released = await gateway.ListTransactionsPageAsync(UnitedStates, DeferredTransactionListing.Released, now.AddDays(-179), null, CancellationToken.None);
+
         Assert.True(items.Count > SimulatedFinancesGateway.PageSize);
         Assert.All(items, i => Assert.True(i.MaturityDate > now));
         Assert.All(items, i => Assert.StartsWith("111-", i.AmazonOrderId, StringComparison.Ordinal));
+        Assert.All(items, i => Assert.StartsWith("SIM-", i.SettlementId, StringComparison.Ordinal));
+        Assert.All(items, i => Assert.Single(i.Products));
+        Assert.NotEmpty(released.Items);
+        Assert.All(released.Items, i => Assert.True(i.MaturityDate <= now));
     }
 }

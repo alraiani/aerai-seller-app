@@ -1,5 +1,6 @@
 using AERai.Web.Application.Dashboard;
 using AERai.Web.Application.Inventory;
+using AERai.Web.Application.Settlements;
 using AERai.Web.Application.Tests.Fakes;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
@@ -18,6 +19,7 @@ public sealed class DashboardServiceTests
 
     private readonly FakeDashboardQueries _queries = new();
     private readonly FakeInventoryQueries _inventory = new();
+    private readonly FakeDeferredPaymentQueries _deferred = new();
     private readonly FakeTimeProvider _clock = new(Now);
 
     public DashboardServiceTests()
@@ -30,7 +32,8 @@ public sealed class DashboardServiceTests
     }
 
     private DashboardService CreateService(DashboardOptions? options = null) =>
-        new(_queries, new InventoryService(_inventory, Options.Create(new InventoryOptions()), _clock), Options.Create(options ?? new DashboardOptions()), _clock);
+        new(_queries, new InventoryService(_inventory, Options.Create(new InventoryOptions()), _clock),
+            new DeferredPaymentService(_deferred, new FakeMarketplaceQueries(), _clock), Options.Create(options ?? new DashboardOptions()), _clock);
 
     private void Sale(DateTimeOffset at, string sku, decimal price, int quantity = 1, string order = "", string status = "Shipped") =>
         _queries.Lines.Add(new SalesLine
@@ -241,6 +244,19 @@ public sealed class DashboardServiceTests
 
         Assert.Equal(590m, snapshot.LatestPayout!.Net);
         Assert.Equal(0.4m, snapshot.LatestPayout.ExpenseRate);
+        Assert.Null(snapshot.LatestPayout.DeferredHeld);
+    }
+
+    [Fact]
+    public async Task LatestPayout_SalesStillHeld_ShowsTheHeldPartAndLastRelease()
+    {
+        _queries.LatestSettlement = new SettlementSummary { MarketplaceId = MarketplaceIds.UnitedStates, SettlementId = "S", Currency = "USD", HomeCurrency = "USD", ExchangeRate = 1m, Sales = 1000m, Net = 590m };
+        _deferred.BySettlement.Add(new SettlementDeferral("S", "USD", 300m, 30, 29, 120m, 12, Now.AddDays(-2), Now.AddDays(4)));
+
+        var snapshot = await CreateService().GetSnapshotAsync(Us, DashboardPeriod.Last7Days, CancellationToken.None);
+
+        // Only what Amazon still holds: the rest has been paid out in a later settlement.
+        Assert.Equal((120m, Now.AddDays(4)), (snapshot.LatestPayout!.DeferredHeld, snapshot.LatestPayout.DeferredUntil));
     }
 
     [Fact]

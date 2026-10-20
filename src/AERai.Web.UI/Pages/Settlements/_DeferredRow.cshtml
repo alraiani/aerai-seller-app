@@ -1,0 +1,44 @@
+@using AERai.Web.Application.Settlements
+@using AERai.Web.Domain.Core
+@using AERai.Web.UI.Models
+@model (DeferredPaymentRow Row, DeferredOverview Overview, TimeZoneInfo Zone, string Currency, bool Child)
+@* One deferred transaction: its order, policy, when it posted, and when Amazon releases (or released) it. *@
+@{
+    var r = Model.Row;
+    var released = r.Status == DeferredTransactionStatus.Released;
+}
+<tr class="@(Model.Child ? "group-child" : "")">
+    @if (Model.Child)
+    {
+        <td></td>
+    }
+    <td>
+        @if (r.AmazonOrderId is { } orderId)
+        {
+            <a asp-page="/Orders/Index" asp-route-q="@orderId" class="fw-semibold text-nowrap">@orderId</a>
+        }
+        else
+        {
+            <span class="fw-semibold">No order</span>
+        }
+        <div class="cell-sub">@r.Description</div>
+    </td>
+    <td><span class="pill pill-info" title="@SettlementFormat.DeferralReasonTitle(r.DeferralReason)">@(r.DeferralReason ?? "—")</span></td>
+    <td class="text-nowrap">@SettlementFormat.Day(r.PostedDate, Model.Zone)</td>
+    <td class="text-nowrap">
+        @SettlementFormat.Day(released ? r.ReleasedAt ?? r.MaturityDate : r.MaturityDate, Model.Zone)
+        @if (released)
+        {
+            <span class="pill pill-ok ms-1">Paid out</span>
+        }
+        else if (Model.Overview.IsDue(r.MaturityDate))
+        {
+            <span class="pill pill-ok ms-1" title="The release date has passed; Amazon pays it out with the next settlement.">Due</span>
+        }
+        else
+        {
+            <span class="pill pill-info ms-1">Held</span>
+        }
+    </td>
+    <td class="text-end money fw-semibold @SettlementFormat.AmountClass(r.Amount)">@SettlementFormat.Money(r.Amount, r.Currency ?? Model.Currency)</td>
+</tr>

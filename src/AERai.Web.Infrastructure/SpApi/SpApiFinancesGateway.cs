@@ -9,6 +9,7 @@ namespace AERai.Web.Infrastructure.SpApi;
 internal sealed class SpApiFinancesGateway(FinancesApiClient client) : IAmazonFinancesGateway
 {
     /// <inheritdoc/>
-    public Task<DeferredTransactionPage> ListTransactionsPageAsync(Marketplace marketplace, DateTimeOffset postedAfter, string? nextToken, CancellationToken cancellationToken) =>
-        client.ListDeferredAsync(marketplace, postedAfter, nextToken, cancellationToken);
+    public Task<DeferredTransactionPage> ListTransactionsPageAsync(
+        Marketplace marketplace, DeferredTransactionListing listing, DateTimeOffset postedAfter, string? nextToken, CancellationToken cancellationToken) =>
+        client.ListDeferredAsync(marketplace, listing, postedAfter, nextToken, cancellationToken);
 }

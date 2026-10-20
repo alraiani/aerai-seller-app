@@ -17,7 +17,8 @@ namespace AERai.Web.UI.Pages.Settlements;
 /// <param name="reporting">Reporting queries.</param>
 /// <param name="deferred">Payouts Amazon deferred (marks orders it held before paying them out).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
-public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentService deferred, ICurrentMarketplace currentMarketplace) : ListPageModel
+/// <param name="time">Clock (which release dates have passed).</param>
+public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentService deferred, ICurrentMarketplace currentMarketplace, TimeProvider time) : ListPageModel
 {
     /// <summary>The SKU of the summary row; blank selects the row of amounts that belong to no SKU.</summary>
     [BindProperty(SupportsGet = true, Name = "sku")]
@@ -54,6 +55,12 @@ public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentServ
 
     /// <summary>The deferral of each order on this page that Amazon deferred before paying it out.</summary>
     public IReadOnlyDictionary<string, DeferredPaymentRow> Deferrals { get; private set; } = new Dictionary<string, DeferredPaymentRow>();
+
+    /// <summary>The products of this row (SKU and price each) that Amazon deferred out of this payout.</summary>
+    public IReadOnlyList<DeferredLineItem> DeferredLines { get; private set; } = [];
+
+    /// <summary>When the page was read (release dates before it are due).</summary>
+    public DateTimeOffset Now { get; private set; }
 
     /// <summary>The marketplace's time zone, in which release dates are shown.</summary>
     public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
@@ -92,6 +99,8 @@ public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentServ
         Groups = await reporting.GetSettlementOrderGroupsAsync(
             marketplace.MarketplaceId, id, sku, price, ToPageRequest(), new SettlementLineFilter(Bucket, Sort, Descending, Amounts), cancellationToken);
         Zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
+        DeferredLines = await deferred.GetSkuLinesAsync(marketplace, settlement, sku, price, Amounts, cancellationToken);
+        Now = time.GetUtcNow();
         Deferrals = await deferred.GetOrderDeferralsAsync(
             marketplace, [.. Groups.Items.Where(g => g.AmazonOrderId is not null).Select(g => g.AmazonOrderId!)], cancellationToken); // Non-null: filtered just before.
         return Page();

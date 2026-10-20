@@ -9,6 +9,7 @@
     var rows = Model.Settlements.Items;
     var anyConverted = rows.Any(r => r.Currency is not null && r.Currency != r.HomeCurrency);
     var anyReserve = rows.Any(r => r.Reserve != 0);
+    var anyDeferred = Model.DeferredOut.Count > 0;
 }
 
 @* ---------- Totals for what the search and filters select (all pages) ---------- *@
@@ -156,6 +157,10 @@
                             <th class="text-end">Reserve <partial name="_Tip" model='"Account level reserve: money Amazon held back from a payout (negative) or released from an earlier hold (positive)."' /></th>
                         }
                         <th class="text-end"><a href="@Model.SortLink(SettlementSort.Net)" class="sort-link">Net payout @Model.SortArrow(SettlementSort.Net)</a></th>
+                        @if (anyDeferred)
+                        {
+                            <th class="text-end">Deferred <partial name="_Tip" model='"Sales made in this period that Amazon held back (about 7 days after delivery) and pays out in a later settlement. Not in Net payout. Hover an amount for how much is still held."' /></th>
+                        }
                         @if (anyConverted)
                         {
                             <th class="text-end">As paid <partial name="_Tip" model='"The net payout in the currency Amazon paid it in, before conversion."' /></th>
@@ -184,6 +189,17 @@
                                 <td class="text-end money @SettlementFormat.AmountClass(m.Reserve)">@SettlementFormat.Money(m.Reserve, m.Currency)</td>
                             }
                             <td class="text-end money fw-semibold @SettlementFormat.AmountClass(m.Net)">@SettlementFormat.Money(m.Net, m.Currency)</td>
+                            @if (anyDeferred)
+                            {
+                                <td class="text-end money text-nowrap">
+                                    @if (Model.DeferredOut.TryGetValue(s.SettlementId, out var held))
+                                    {
+                                        <a asp-page="Deferred" asp-route-settlement="@s.SettlementId" asp-route-view="All" class="deferred-amount" title="@SettlementFormat.DeferredTitle(held, Model.Zone)">
+                                            <partial name="_Icon" model='"clock"' />@SettlementFormat.Money(held.Amount, held.Currency)
+                                        </a>
+                                    }
+                                </td>
+                            }
                             @if (anyConverted)
                             {
                                 <td class="text-end money text-nowrap">

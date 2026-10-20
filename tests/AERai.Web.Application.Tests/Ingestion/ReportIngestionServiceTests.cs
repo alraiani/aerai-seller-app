@@ -110,26 +110,74 @@ public sealed class ReportIngestionServiceTests
     }
 
     [Fact]
-    public async Task RunAsync_DeferredTransactions_ReadsTheWholeListingBeforeApplyingIt()
+    public async Task RunAsync_DeferredTransactions_ReadsBothListingsBeforeApplyingThem()
     {
         AddSchedule(AmazonReportType.DeferredTransactions);
         _finances.Pages.Add([Deferred("T-1", "111-1"), Deferred("T-2", "111-2")]);
         _finances.Pages.Add([Deferred("T-3", "111-3"), Deferred("T-1", "111-1")]);
-        _deferred.Released = 4;
+        _finances.ReleasedPages.Add([Deferred("T-9", "111-9")]);
+        _deferred.NewlyReleased = 4;
 
         var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
 
         Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
 
-        // Reaches back as far as Amazon allows, so nothing still held looks released.
-        Assert.All(_finances.PostedAfterSeen, after => Assert.Equal(Now - ReportIngestionService.DeferredListingAge, after));
-        Assert.Equal(2, _rawFiles.Files.Keys.Count(k => k.StartsWith("deferred/2026/10/02/", StringComparison.Ordinal)));
+        // Still-deferred reaches back as far as Amazon allows, so nothing still held looks released; with no release
+        // history yet, the released listing does too.
+        Assert.All(_finances.Calls, call => Assert.Equal(Now - ReportIngestionService.DeferredListingAge, call.PostedAfter));
+        Assert.Equal(
+            [DeferredTransactionListing.StillDeferred, DeferredTransactionListing.StillDeferred, DeferredTransactionListing.Released],
+            _finances.Calls.Select(c => c.Listing));
+        Assert.Equal(3, _rawFiles.Files.Keys.Count(k => k.StartsWith("deferred/2026/10/02/", StringComparison.Ordinal)));
         var applied = Assert.Single(_deferred.Applied);
         Assert.Equal(MarketplaceIds.UnitedStates, applied.MarketplaceId);
-        Assert.Equal(["T-1", "T-2", "T-3"], applied.Items.Select(i => i.TransactionId).Order(StringComparer.Ordinal));
-        Assert.Contains("holds 3 deferred transactions; 4 released", summary.Message, StringComparison.Ordinal);
+        Assert.Equal(["T-1", "T-2", "T-3"], applied.Held.Select(i => i.TransactionId).Order(StringComparer.Ordinal));
+        Assert.Equal("T-9", Assert.Single(applied.Released).TransactionId);
+        Assert.Contains("holds 3 deferred transactions; 1 released", summary.Message, StringComparison.Ordinal);
+        Assert.Contains("(4 newly)", summary.Message, StringComparison.Ordinal);
         Assert.Empty(_gateway.Requests);
         Assert.Empty(_staged.Saved);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeferredWithReleaseHistory_ListsReleasesFromShortlyBeforeTheLastRun()
+    {
+        AddSchedule(AmazonReportType.DeferredTransactions);
+        _schedules.Schedules[1].LastSuccessfulDataEnd = Now.AddDays(-1);
+        _deferred.HasReleaseHistory = true;
+
+        await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        // Amazon filters releases by the date the sale posted, so the window reaches well before the last run.
+        var released = Assert.Single(_finances.Calls, c => c.Listing == DeferredTransactionListing.Released);
+        Assert.Equal(Now.AddDays(-1) - ReportIngestionService.ReleasedOverlap, released.PostedAfter);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeferredLastRunWithoutReleaseHistory_StillReadsTheFullHistory()
+    {
+        AddSchedule(AmazonReportType.DeferredTransactions);
+        _schedules.Schedules[1].LastSuccessfulDataEnd = Now.AddDays(-1);
+
+        await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        // A schedule that ran before releases were listed gets its history on its next run.
+        var released = Assert.Single(_finances.Calls, c => c.Listing == DeferredTransactionListing.Released);
+        Assert.Equal(Now - ReportIngestionService.DeferredListingAge, released.PostedAfter);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeferredReleasedListingFails_AppliesNothing()
+    {
+        AddSchedule(AmazonReportType.DeferredTransactions);
+        _finances.Pages.Add([Deferred("T-1", "111-1")]);
+        _finances.ReleasedFailure = new HttpRequestException("SP-API finances.listTransactions failed with HTTP 503");
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        // Without the released listing a held transaction gone from Amazon's list could not be told apart, so nothing is written.
+        Assert.Equal(SyncRunStatus.Failed, summary.Status);
+        Assert.Empty(_deferred.Applied);
     }
 
     [Fact]
@@ -145,8 +193,8 @@ public sealed class ReportIngestionServiceTests
         Assert.Empty(_deferred.Applied);
     }
 
-    private static DeferredTransactionItem Deferred(string id, string orderId) =>
-        new(id, orderId, "Shipment", "Order Payment", Now.AddDays(-3), 12.34m, "USD", "DD7", Now.AddDays(5));
+    private static AmazonDeferredTransaction Deferred(string id, string orderId) =>
+        new(id, orderId, "S-1", "Shipment", "Order Payment", Now.AddDays(-3), 12.34m, "USD", "DD7", Now.AddDays(5), [new AmazonDeferredProduct("SKU-1", "B0", 1, 19.99m, 12.34m)]);
 
     [Fact]
     public async Task RunAsync_AwdInventoryEmpty_RecordsNoDataAndClearsTheDaysSnapshot()

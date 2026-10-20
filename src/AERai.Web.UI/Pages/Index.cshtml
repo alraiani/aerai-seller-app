@@ -338,6 +338,15 @@
                         <span class="label">Expenses @(pay.ExpenseRate is { } rate ? $"({rate.ToString("P0", en)})" : "")</span>
                         <span>@DashboardFormat.Money(pay.Expenses, c)</span>
                     </div>
+                    @if (pay.DeferredHeld is { } deferredHeld)
+                    {
+                        @* Sales from this period Amazon still holds: paid in a later settlement, not in the payout above. *@
+                        <a class="stat-row deferred-amount" asp-page="/Settlements/Deferred" asp-route-settlement="@pay.SettlementId" asp-route-view="All"
+                           title="Sales from this period that Amazon is holding back (about 7 days after delivery); they are paid out in a later settlement.">
+                            <span class="label"><partial name="_Icon" model='"clock"' /> Still deferred@(SettlementFormat.Day(pay.DeferredUntil, Model.Zone) is { } until ? $" · until {until}" : "")</span>
+                            <span>+@DashboardFormat.Money(deferredHeld, c)</span>
+                        </a>
+                    }
                 }
                 else
                 {

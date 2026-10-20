@@ -21,12 +21,49 @@ public interface IDeferredPaymentQueries
     /// <summary>A page of a marketplace's deferred transactions.</summary>
     /// <param name="marketplaceId">Marketplace.</param>
     /// <param name="request">Page and search (every word must match the order id or description).</param>
-    /// <param name="filter">View and sort.</param>
-    /// <param name="releasedSince">For the released view: only transactions released at or after this instant.</param>
+    /// <param name="filter">View, sort, and settlement.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The page.</returns>
-    Task<PagedResult<DeferredPaymentRow>> GetPageAsync(
-        string marketplaceId, PageRequest request, DeferredListFilter filter, DateTimeOffset releasedSince, CancellationToken cancellationToken);
+    Task<PagedResult<DeferredPaymentRow>> GetPageAsync(string marketplaceId, PageRequest request, DeferredListFilter filter, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A page of a marketplace's deferred transactions grouped by the settlement they were sold in, newest first:
+    /// by period end, or for a settlement not imported (the open one) by its latest sale.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="listMarketplaceId">The marketplace whose settlements list holds this marketplace's payouts.</param>
+    /// <param name="request">Page (of groups) and search (every word must match a transaction's order id or description).</param>
+    /// <param name="view">Still held, released, or both.</param>
+    /// <param name="maxRowsPerGroup">At most this many transactions in each group's rows, soonest release first.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The page of groups.</returns>
+    Task<PagedResult<DeferredSettlementGroup>> GetGroupsAsync(
+        string marketplaceId, string listMarketplaceId, PageRequest request, DeferredView view, int maxRowsPerGroup, CancellationToken cancellationToken);
+
+    /// <summary>What Amazon deferred out of some settlements, per settlement and currency.</summary>
+    /// <param name="marketplaceIds">Marketplaces whose payouts the settlements list holds.</param>
+    /// <param name="settlementIds">Settlements.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>One row per settlement and currency with deferrals.</returns>
+    Task<IReadOnlyList<SettlementDeferral>> GetBySettlementsAsync(
+        IReadOnlyCollection<string> marketplaceIds, IReadOnlyCollection<string> settlementIds, CancellationToken cancellationToken);
+
+    /// <summary>What Amazon deferred out of a settlement, per SKU and price each.</summary>
+    /// <param name="marketplaceIds">Marketplaces whose payouts the settlements list holds.</param>
+    /// <param name="settlementId">Settlement.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>One row per SKU, price each, and currency.</returns>
+    Task<IReadOnlyList<SkuDeferral>> GetSkuDeferralsAsync(IReadOnlyCollection<string> marketplaceIds, string settlementId, CancellationToken cancellationToken);
+
+    /// <summary>The deferred products of one SKU at one price each in a settlement, one per order item.</summary>
+    /// <param name="marketplaceIds">Marketplaces whose payouts the settlements list holds.</param>
+    /// <param name="settlementId">Settlement.</param>
+    /// <param name="sku">SKU, or <see langword="null"/> for products without one.</param>
+    /// <param name="priceEach">Price each (as on <see cref="SkuDeferral.PriceEach"/>), or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The products, soonest release first.</returns>
+    Task<IReadOnlyList<DeferredLineItem>> GetSkuLinesAsync(
+        IReadOnlyCollection<string> marketplaceIds, string settlementId, string? sku, decimal? priceEach, CancellationToken cancellationToken);
 
     /// <summary>
     /// The released deferred transactions of the orders in one settlement. Read for every marketplace whose
