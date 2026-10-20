@@ -680,18 +680,34 @@ th .tip { text-transform: none; }
 /* Positioned so absolutely positioned children (e.g. .visually-hidden header labels) stay inside the
    scroll container instead of widening the page on phones. */
 .table-responsive { position: relative; }
+/* Inside a table, long titles are also capped by the table's own width (cqi), so a list that would only
+   just overflow fits its card and keeps its header stuck to the page (see sticky table headers below). */
+.table-responsive { container-type: inline-size; }
+.table-responsive .cell-truncate { max-width: min(28rem, 40vw, 32cqi); }
+
+/* Sticky table headers. A sticky header only sticks inside its nearest scroll container, and
+   .table-responsive is one (for sideways scrolling). site.js gives a table that fits its card .is-sticky,
+   which drops that overflow so the header row sticks to the window while the page scrolls, below the
+   card's toolbar when that sticks too (.has-sticky-head sets --sticky-head to the toolbar's height).
+   A table too wide to fit gets .table-scroll: a box about a screen tall that scrolls both ways, with the
+   header stuck inside it. Borders don't travel with sticky cells under border-collapse, so the header's
+   bottom rule is drawn as a shadow; the background must be opaque or rows would show through. */
+.table-responsive.is-sticky { overflow: visible; }
+.table-scroll { max-height: calc(100dvh - 6rem); overflow: auto; }
+.is-sticky > .table > thead th,
+.table-scroll > .table > thead th { position: sticky; top: var(--sticky-head, 0); z-index: 2; background-color: var(--sticky-th-bg, var(--surface)); box-shadow: inset 0 -1px 0 var(--border); }
+.table-scroll > .table > thead th { top: 0; }
+.data-table, .schedule-table { --sticky-th-bg: var(--surface-2); }
+.has-sticky-head > .card-toolbar {
+    position: sticky; top: 0; z-index: 3; background: var(--surface);
+    border-radius: var(--bs-card-inner-border-radius) var(--bs-card-inner-border-radius) 0 0;
+}
 
 /* ---------- Inventory ---------- */
 .inventory-table td, .inventory-table th { white-space: nowrap; }
 /* The product column stays put while the numbers scroll sideways on narrow screens. */
 .inventory-table .product-col { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 15rem; max-width: 22rem; white-space: normal; }
-.inventory-table thead .product-col { background: var(--surface-2); z-index: 3; }
-/* The header row stays in view while the list scrolls. A sticky header only sticks inside its nearest
-   scroll container, and .table-responsive already is one (for sideways scrolling), so the table scrolls
-   down inside it too, capped at about a screen. Borders don't travel with sticky cells under
-   border-collapse, so the header's bottom rule is drawn as a shadow. */
-.table-scroll { max-height: calc(100dvh - 6rem); overflow: auto; }
-.inventory-table thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--border); }
+.inventory-table thead th.product-col { background: var(--surface-2); z-index: 3; }
 .inventory-table tbody tr:hover .product-col { background: var(--surface-2); }
 .inventory-table .col-group { border-left: 1px solid var(--border); }
 .inventory-table .th-group { display: block; font-size: 0.65rem; letter-spacing: 0.06em; opacity: 0.75; }
@@ -715,7 +731,7 @@ th .tip { text-transform: none; }
 .bulk-bar-row { flex-wrap: wrap; margin: 0.5rem 0.75rem; }
 .bulk-input { width: 13rem; max-width: 100%; background-color: var(--surface); }
 .inventory-table .select-col { width: 2.5rem; position: sticky; left: 0; z-index: 1; background: var(--surface); }
-.inventory-table thead .select-col { background: var(--surface-2); z-index: 2; }
+.inventory-table thead th.select-col { background: var(--surface-2); z-index: 3; }
 .inventory-table.has-select .product-col { left: 2.5rem; }
 .inventory-table tbody tr:hover .select-col { background: var(--surface-2); }
 /* Pinned cells need an opaque background; layering the translucent highlight over the surface
@@ -777,9 +793,7 @@ th .tip { text-transform: none; }
 /* ---------- Inventory worksheet ---------- */
 .worksheet-table td, .worksheet-table th { white-space: nowrap; vertical-align: middle; }
 .worksheet-table .sku-cell { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 11rem; border-left: 4px solid var(--sku, transparent); }
-/* The header row stays in view while the sheet scrolls, as on the Inventory list (see .table-scroll). */
-.worksheet-table thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--border); }
-.worksheet-table thead .sku-cell { background: var(--surface-2); z-index: 3; border-left-color: transparent; }
+.worksheet-table thead th.sku-cell { background: var(--surface-2); z-index: 3; border-left-color: transparent; }
 .worksheet-table .sku-code { font-weight: 600; color: var(--sku, var(--text)); letter-spacing: 0.01em; }
 .worksheet-table .sku-title { display: block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; font-size: 0.75rem; color: var(--muted); }
 .worksheet-table tbody tr.sku-row:hover > td { background: var(--surface-2); }
@@ -835,7 +849,7 @@ th .tip { text-transform: none; }
     .card { border: 0; box-shadow: none; }
     .table-responsive { overflow: visible; }
     .table-scroll { max-height: none; }
-    .worksheet-table thead th { position: static; }
+    .table-responsive > .table > thead th, .has-sticky-head > .card-toolbar { position: static; }
     .worksheet-table { font-size: 10pt; }
     .worksheet-table .home-input { border: 0; box-shadow: none; padding: 0; width: auto; }
     .worksheet-table .sku-cell { position: static; }
