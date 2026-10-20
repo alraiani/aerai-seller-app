@@ -40,6 +40,9 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
     /// <summary>The settlement's totals.</summary>
     public SettlementSummary Settlement { get; private set; } = default!;
 
+    /// <summary>The marketplace's time zone, in which the period and deposit dates are shown.</summary>
+    public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
+
     /// <summary>The conversion banner (shown only for a settlement paid in another currency).</summary>
     public SettlementRatePanel RatePanel { get; private set; } = default!;
 
@@ -63,6 +66,7 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
         }
 
         Settlement = settlement;
+        Zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
         var rate = settlement.Currency is not null && settlement.Currency != settlement.HomeCurrency
             ? await rates.GetAsync(marketplace.MarketplaceId, id, cancellationToken)
             : null;

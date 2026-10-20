@@ -26,7 +26,7 @@
                             <span class="@AERai.Web.UI.Models.SettlementFormat.OriginPill(AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)) ms-1" title="Paid in @s.Currency; exported in @s.HomeCurrency">@AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)</span>
                         }
                     </td>
-                    <td>@s.PeriodStart?.ToString("yyyy-MM-dd") – @s.PeriodEnd?.ToString("yyyy-MM-dd")</td>
+                    <td>@AERai.Web.UI.Models.SettlementFormat.Period(s.PeriodStart, s.PeriodEnd, Model.Zone)</td>
                     <td class="text-end fw-semibold">
                         @if (s.HomeNet is { } homeNet)
                         {

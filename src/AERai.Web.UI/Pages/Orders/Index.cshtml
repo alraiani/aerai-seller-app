@@ -212,7 +212,7 @@
                                 <td></td>
                                 <td colspan="7">
                                     <div class="order-payout">
-                                        <partial name="/Pages/Settlements/_SettlementBreakdown.cshtml" model="(payout.Sales, payout.Fees, payout.Refunds, payout.Other, payout.Net, (string?)money)" />
+                                        <partial name="/Pages/Settlements/_SettlementBreakdown.cshtml" model="(payout.Sales, payout.Refunds, payout.Expenses, payout.Reserve, payout.Net, (string?)money)" />
                                         @if (row.Profit.CostOfGoods is { } cogs && row.Profit.Profit is { } profit)
                                         {
                                             <dl class="amount-breakdown">

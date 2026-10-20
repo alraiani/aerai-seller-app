@@ -25,6 +25,7 @@ internal sealed class BookkeepingRepository(AppDbContext dbContext) : IBookkeepi
                     s.PeriodStart,
                     s.PeriodEnd,
                     HomeCurrency = m.Currency,
+                    m.TimeZoneId,
                     Rate = dbContext.SettlementExchangeRates.FirstOrDefault(x => x.SettlementId == s.SettlementId && x.ToCurrency == m.Currency),
                 })
             .SingleOrDefaultAsync(cancellationToken)
@@ -53,7 +54,8 @@ internal sealed class BookkeepingRepository(AppDbContext dbContext) : IBookkeepi
             same || rate is null ? null
                 : rate.ManualRate is not null ? $"entered by {rate.ManualBy} {rate.ManualAt:yyyy-MM-dd}"
                 : $"{rate.MarketSource} {rate.MarketRateDate:yyyy-MM-dd}",
-            same ? null : rate?.ManualHomeAmount);
+            same ? null : rate?.ManualHomeAmount,
+            settlement.TimeZoneId);
     }
 
     /// <inheritdoc/>

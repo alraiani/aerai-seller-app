@@ -15,8 +15,8 @@ public enum SettlementSkuSort
     /// <summary>Most orders first.</summary>
     Orders = 3,
 
-    /// <summary>Largest fees first (the most negative first).</summary>
-    Fees = 4,
+    /// <summary>Largest expenses first (the most negative first).</summary>
+    Expenses = 4,
 
     /// <summary>Largest refunds first (the most negative first).</summary>
     Refunds = 5,

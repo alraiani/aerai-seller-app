@@ -46,6 +46,9 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
     /// <summary>The marketplace shown.</summary>
     public Domain.Core.Marketplace Marketplace { get; private set; } = default!;
 
+    /// <summary>The marketplace's time zone, in which periods are shown.</summary>
+    public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
+
     /// <summary>The current page of settlements.</summary>
     public PagedResult<SettlementSummary> Settlements { get; private set; } = default!;
 
@@ -81,6 +84,7 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
 
         // Dates are the marketplace's local days, like every other date filter in the app.
         var zone = TimeZoneInfo.FindSystemTimeZoneById(Marketplace.TimeZoneId);
+        Zone = zone;
         var filter = new SettlementListFilter(
             From is { } from ? LocalTime.StartOfDay(from, zone) : null,
             To is { } to ? LocalTime.StartOfDay(to.AddDays(1), zone) : null,

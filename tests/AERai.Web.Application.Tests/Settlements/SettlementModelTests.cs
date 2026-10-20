@@ -8,18 +8,18 @@ public sealed class SettlementModelTests
     [Fact]
     public void FeeRate_WithSales_IsFeesAsAPositiveShareOfSales()
     {
-        var totals = new SettlementTotals("USD", 2, AwaitingRate: 0, Sales: 200m, Fees: -30m, Refunds: -10m, Other: 0m, Net: 160m);
+        var totals = new SettlementTotals("USD", 2, AwaitingRate: 0, Sales: 200m, Expenses: -30m, Refunds: -10m, Reserve: 0m, Net: 160m);
 
-        Assert.Equal(0.15m, totals.FeeRate);
+        Assert.Equal(0.15m, totals.ExpenseRate);
         Assert.Equal(0.05m, totals.RefundRate);
     }
 
     [Fact]
     public void FeeRate_WithoutSales_IsUnknown()
     {
-        var totals = new SettlementTotals("USD", 1, AwaitingRate: 0, Sales: 0m, Fees: -39.99m, Refunds: 0m, Other: 0m, Net: -39.99m);
+        var totals = new SettlementTotals("USD", 1, AwaitingRate: 0, Sales: 0m, Expenses: -39.99m, Refunds: 0m, Reserve: 0m, Net: -39.99m);
 
-        Assert.Null(totals.FeeRate);
+        Assert.Null(totals.ExpenseRate);
         Assert.Null(totals.RefundRate);
     }
 
@@ -27,7 +27,7 @@ public sealed class SettlementModelTests
     [InlineData(SettlementSort.PeriodEnd, true)]
     [InlineData(SettlementSort.Sales, true)]
     [InlineData(SettlementSort.Net, true)]
-    [InlineData(SettlementSort.Fees, false)]
+    [InlineData(SettlementSort.Expenses, false)]
     [InlineData(SettlementSort.Refunds, false)]
     public void IsDescendingByDefault_SettlementSort_PutsTheLargestAmountFirst(SettlementSort sort, bool expected) =>
         Assert.Equal(expected, sort.IsDescendingByDefault());
@@ -38,7 +38,7 @@ public sealed class SettlementModelTests
     [InlineData(SettlementSkuSort.Orders, true)]
     [InlineData(SettlementSkuSort.Net, true)]
     [InlineData(SettlementSkuSort.Sku, false)]
-    [InlineData(SettlementSkuSort.Fees, false)]
+    [InlineData(SettlementSkuSort.Expenses, false)]
     [InlineData(SettlementSkuSort.Refunds, false)]
     public void IsDescendingByDefault_SkuSort_PutsTheLargestAmountFirst(SettlementSkuSort sort, bool expected) =>
         Assert.Equal(expected, sort.IsDescendingByDefault());

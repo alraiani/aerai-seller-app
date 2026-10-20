@@ -20,6 +20,9 @@ public sealed class IndexModel(IReportingQueries reporting, IBookkeepingService 
     /// <summary>The current page of settlements.</summary>
     public PagedResult<SettlementSummary> Settlements { get; private set; } = default!;
 
+    /// <summary>The marketplace's time zone, in which periods are shown.</summary>
+    public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
+
     /// <summary>Files already generated, newest first.</summary>
     public IReadOnlyList<BookkeepingExportSummary> Exports { get; private set; } = [];
 
@@ -32,6 +35,7 @@ public sealed class IndexModel(IReportingQueries reporting, IBookkeepingService 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        Zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
         Settlements = await reporting.GetSettlementsAsync(marketplace.MarketplaceId, ToPageRequest(), null, cancellationToken);
         Exports = await bookkeeping.GetExportsAsync(marketplace.MarketplaceId, cancellationToken);
         ExportedSettlementIds = Exports.Select(e => e.SettlementId).ToHashSet(StringComparer.Ordinal);

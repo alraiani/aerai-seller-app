@@ -100,7 +100,7 @@
                         <td></td>
                         <td colspan="3">
                             <div class="fw-semibold">Total · @g.LineCount.ToString("N0", CultureInfo.InvariantCulture) line@(g.LineCount == 1 ? "" : "s")@(g.OrderCount > 0 ? $" in {g.OrderCount:N0} order{(g.OrderCount == 1 ? "" : "s")}" : "")</div>
-                            <partial name="_SettlementBreakdown" model="(gm.Sales, gm.Fees, gm.Refunds, gm.Other, gm.Net, gm.Currency)" />
+                            <partial name="_SettlementBreakdown" model="(gm.Sales, gm.Refunds, gm.Expenses, gm.Reserve, gm.Net, gm.Currency)" />
                         </td>
                         <td class="text-end money fw-semibold">@g.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
                         <td class="text-end money fw-semibold @SettlementFormat.AmountClass(gm.Net)">@SettlementFormat.Money(gm.Net, gm.Currency)</td>

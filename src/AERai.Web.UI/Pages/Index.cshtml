@@ -317,7 +317,7 @@
             <div class="card-toolbar">
                 <span class="card-toolbar-title">
                     Latest payout
-                    <partial name="_Tip" model='"The most recent settlement Amazon paid out, with its sales, fees, and refunds, in the dashboard currency (a CAD or MXN payout is shown converted and tagged)."' />
+                    <partial name="_Tip" model='"The most recent settlement Amazon paid out, with its sales, refunds, and expenses as Seller Central groups them, in the dashboard currency (a CAD or MXN payout is shown converted and tagged)."' />
                 </span>
                 <a asp-page="/Settlements/Index" class="btn btn-sm btn-soft">Settlements</a>
             </div>
@@ -333,11 +333,11 @@
                         }
                     </div>
                     <div class="stat-row"><span class="label">Sales</span><span>@DashboardFormat.Money(pay.Sales, c)</span></div>
-                    <div class="stat-row">
-                        <span class="label">Amazon fees @(pay.FeeRate is { } rate ? $"({rate.ToString("P0", en)})" : "")</span>
-                        <span>@DashboardFormat.Money(pay.Fees, c)</span>
-                    </div>
                     <div class="stat-row"><span class="label">Refunds</span><span>@DashboardFormat.Money(pay.Refunds, c)</span></div>
+                    <div class="stat-row">
+                        <span class="label">Expenses @(pay.ExpenseRate is { } rate ? $"({rate.ToString("P0", en)})" : "")</span>
+                        <span>@DashboardFormat.Money(pay.Expenses, c)</span>
+                    </div>
                 }
                 else
                 {

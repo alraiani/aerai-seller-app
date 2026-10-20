@@ -17,9 +17,9 @@ public static class SettlementFormat
     [
         (null, "All amounts"),
         (SettlementBucket.Sales, "With sales"),
-        (SettlementBucket.Fees, "With fees"),
         (SettlementBucket.Refunds, "With refunds"),
-        (SettlementBucket.Other, "With other"),
+        (SettlementBucket.Expenses, "With expenses"),
+        (SettlementBucket.Reserve, "With reserve"),
     ];
 
     /// <summary>Sort choices for the Lines page.</summary>
@@ -89,20 +89,46 @@ public static class SettlementFormat
     /// <returns>e.g. "15%".</returns>
     public static string Percent(decimal rate) => rate.ToString("P0", Culture);
 
-    /// <summary>A settlement's period, as dates.</summary>
+    /// <summary>A settlement's period, as the marketplace's local dates (what Seller Central shows).</summary>
+    /// <remarks>
+    /// Amazon closes periods at a time of day that is already the next day in UTC (01:53 UTC is the
+    /// evening before in North America), so formatting the stored instants directly shows every period
+    /// a day late.
+    /// </remarks>
     /// <param name="start">Period start.</param>
     /// <param name="end">Period end.</param>
+    /// <param name="zone">The marketplace's time zone.</param>
     /// <returns>e.g. "Sep 4 – Sep 18, 2026".</returns>
-    public static string Period(DateTimeOffset? start, DateTimeOffset? end) => (start, end) switch
+    public static string Period(DateTimeOffset? start, DateTimeOffset? end, TimeZoneInfo zone)
     {
-        ({ } s, { } e) when s.Year == e.Year => $"{s.ToString("MMM d", Culture)} – {e.ToString("MMM d, yyyy", Culture)}",
-        ({ } s, { } e) => $"{s.ToString("MMM d, yyyy", Culture)} – {e.ToString("MMM d, yyyy", Culture)}",
-        (null, { } e) => $"until {e.ToString("MMM d, yyyy", Culture)}",
-        ({ } s, null) => $"from {s.ToString("MMM d, yyyy", Culture)}",
-        _ => "No period",
-    };
+        ArgumentNullException.ThrowIfNull(zone);
+        var localStart = start is { } s ? TimeZoneInfo.ConvertTime(s, zone) : (DateTimeOffset?)null;
+        var localEnd = end is { } e ? TimeZoneInfo.ConvertTime(e, zone) : (DateTimeOffset?)null;
+        return (localStart, localEnd) switch
+        {
+            ({ } ls, { } le) when ls.Year == le.Year => $"{ls.ToString("MMM d", Culture)} – {le.ToString("MMM d, yyyy", Culture)}",
+            ({ } ls, { } le) => $"{ls.ToString("MMM d, yyyy", Culture)} – {le.ToString("MMM d, yyyy", Culture)}",
+            (null, { } le) => $"until {le.ToString("MMM d, yyyy", Culture)}",
+            ({ } ls, null) => $"from {ls.ToString("MMM d, yyyy", Culture)}",
+            _ => "No period",
+        };
+    }
+
+    /// <summary>An instant as the marketplace's local date, e.g. a settlement's deposit date.</summary>
+    /// <param name="instant">The instant.</param>
+    /// <param name="zone">The marketplace's time zone.</param>
+    /// <returns>e.g. "Aug 11, 2026", or <see langword="null"/> without an instant.</returns>
+    public static string? Day(DateTimeOffset? instant, TimeZoneInfo zone)
+    {
+        ArgumentNullException.ThrowIfNull(zone);
+        return instant is { } i ? TimeZoneInfo.ConvertTime(i, zone).ToString("MMM d, yyyy", Culture) : null;
+    }
 
     /// <summary>A posting time in UTC (the time zone the settlement file reports).</summary>
+    /// <remarks>
+    /// Not converted to local time: most lines carry only a posted date, stored as midnight UTC, and
+    /// converting it would move it to the day before.
+    /// </remarks>
     /// <param name="posted">When the line posted.</param>
     /// <returns>e.g. "Sep 5, 14:02", or empty.</returns>
     public static string Posted(DateTimeOffset? posted) =>
@@ -120,22 +146,22 @@ public static class SettlementFormat
         return line switch
         {
             { Sales: not 0 } => SettlementBucket.Sales,
-            { Fees: not 0 } => SettlementBucket.Fees,
+            { Expenses: not 0 } => SettlementBucket.Expenses,
             { Refunds: not 0 } => SettlementBucket.Refunds,
-            { Other: not 0 } => SettlementBucket.Other,
+            { Reserve: not 0 } => SettlementBucket.Reserve,
             _ => null,
         };
     }
 
     /// <summary>The label of a bucket.</summary>
     /// <param name="bucket">Bucket.</param>
-    /// <returns>e.g. "Fee".</returns>
+    /// <returns>e.g. "Expense".</returns>
     public static string BucketLabel(SettlementBucket bucket) => bucket switch
     {
         SettlementBucket.Sales => "Sale",
-        SettlementBucket.Fees => "Fee",
+        SettlementBucket.Expenses => "Expense",
         SettlementBucket.Refunds => "Refund",
-        _ => "Other",
+        _ => "Reserve",
     };
 
     /// <summary>The pill class of a bucket.</summary>
@@ -144,7 +170,7 @@ public static class SettlementFormat
     public static string BucketPill(SettlementBucket bucket) => bucket switch
     {
         SettlementBucket.Sales => "pill pill-ok",
-        SettlementBucket.Fees => "pill pill-warn",
+        SettlementBucket.Expenses => "pill pill-warn",
         SettlementBucket.Refunds => "pill pill-bad",
         _ => "pill pill-info",
     };
