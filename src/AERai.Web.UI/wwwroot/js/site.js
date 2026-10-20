@@ -281,6 +281,60 @@
         hint.hidden = false;
     });
 
+    // ---------- Sticky table headers ----------
+    // A sticky header only sticks inside its nearest scroll container, and every .table-responsive is one
+    // (for sideways scrolling). So a table that fits its card gets .is-sticky, which drops the wrapper's
+    // overflow so the header (and the card's .card-toolbar above it, via .has-sticky-head) sticks to the
+    // window as the page scrolls. A table too wide to fit gets .table-scroll instead: a box about a screen
+    // tall that scrolls both ways with the header stuck inside it. Width changes (window, sidebar rail,
+    // expanded rows) re-decide. Without script the tables simply scroll sideways as before.
+    function updateStickyTable(wrapper) {
+        var table = wrapper.querySelector(":scope > table");
+        if (!table) { return; }
+        var fits = table.scrollWidth <= wrapper.clientWidth + 1;
+        wrapper.classList.toggle("is-sticky", fits);
+        wrapper.classList.toggle("table-scroll", !fits);
+
+        // The toolbar sticks only when its card holds just this table, and the header sits right below it.
+        var card = wrapper.parentElement;
+        var toolbar = card && card.classList.contains("card") ? card.querySelector(":scope > .card-toolbar") : null;
+        var withToolbar = fits && toolbar !== null && card.querySelectorAll(":scope > .table-responsive").length === 1;
+        if (card && card.classList.contains("card")) {
+            card.classList.toggle("has-sticky-head", withToolbar);
+            if (withToolbar) {
+                // Rounded down so the header tucks under the toolbar instead of leaving a sliver rows show through.
+                card.style.setProperty("--sticky-head", Math.floor(toolbar.getBoundingClientRect().height) + "px");
+            } else {
+                card.style.removeProperty("--sticky-head");
+            }
+        }
+    }
+
+    function setupStickyTables() {
+        var wrappers = document.querySelectorAll(".app-content .table-responsive");
+        if (wrappers.length === 0) { return; }
+        function updateAll() {
+            for (var i = 0; i < wrappers.length; i++) { updateStickyTable(wrappers[i]); }
+        }
+        updateAll();
+        if (!window.ResizeObserver) { return; }
+
+        // Deferred a frame so the class changes don't re-trigger the observer inside its own callback.
+        var pending = false;
+        var observer = new ResizeObserver(function () {
+            if (pending) { return; }
+            pending = true;
+            window.requestAnimationFrame(function () { pending = false; updateAll(); });
+        });
+        for (var j = 0; j < wrappers.length; j++) {
+            observer.observe(wrappers[j]);
+            var table = wrappers[j].querySelector(":scope > table");
+            if (table) { observer.observe(table); }
+            var toolbar = wrappers[j].parentElement && wrappers[j].parentElement.querySelector(":scope > .card-toolbar");
+            if (toolbar) { observer.observe(toolbar); }
+        }
+    }
+
     // ---------- Print buttons ----------
     document.addEventListener("click", function (event) {
         var button = event.target.closest && event.target.closest("[data-print]");
@@ -290,6 +344,7 @@
     document.addEventListener("DOMContentLoaded", function () {
         setupTooltips();
         updateNavRail();
+        setupStickyTables();
 
         var dirty = document.querySelectorAll("[data-dirty-form]");
         for (var d = 0; d < dirty.length; d++) { setupDirtyForm(dirty[d]); }
