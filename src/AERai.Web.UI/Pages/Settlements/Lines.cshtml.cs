@@ -71,7 +71,7 @@ public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentServ
     /// <summary>Loads the summary row and the requested page of its groups.</summary>
     /// <param name="id">Settlement id from the route.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The page, or 404 when the row does not exist in the current marketplace.</returns>
+    /// <returns>The page (or just its section for a partial reload), or 404 when the row does not exist in the current marketplace.</returns>
     public async Task<IActionResult> OnGetAsync(string id, CancellationToken cancellationToken)
     {
         var sku = string.IsNullOrWhiteSpace(Sku) ? null : Sku;
@@ -103,7 +103,7 @@ public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentServ
         Now = time.GetUtcNow();
         Deferrals = await deferred.GetOrderDeferralsAsync(
             marketplace, [.. Groups.Items.Where(g => g.AmazonOrderId is not null).Select(g => g.AmazonOrderId!)], cancellationToken); // Non-null: filtered just before.
-        return Page();
+        return this.PageOrFragment("_LinesBody");
     }
 
     /// <summary>A link back to this summary row with only its SKU and price (no search, filter, or sort).</summary>

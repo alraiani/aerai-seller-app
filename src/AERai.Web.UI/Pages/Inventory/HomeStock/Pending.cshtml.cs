@@ -52,8 +52,8 @@ public sealed class PendingModel(IPendingSendService pending, IInventoryItemServ
 
     /// <summary>Lists the open sends.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when the page is loaded.</returns>
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    /// <returns>The page, or just its section for a partial reload.</returns>
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
         Families = await items.ListFamiliesAsync(cancellationToken);
@@ -61,6 +61,7 @@ public sealed class PendingModel(IPendingSendService pending, IInventoryItemServ
         var filter = new PendingSendFilter(FamilyId, Search, View);
         List = await pending.ListAsync(Marketplace.MarketplaceId, filter, cancellationToken);
         Panel = new PendingSendsPanel(List.Items, CanEdit, zone, options.Value.PendingSendExpiryDays, FamilyId, IsFiltered, filter);
+        return this.PageOrFragment("_PendingBody");
     }
 
     /// <summary>Adds the FBA shipment id to a send logged without one.</summary>

@@ -349,6 +349,11 @@ html:not(.js) .nav-rail-toggle { display: none; }
 .segmented a.active .segmented-count { background: var(--surface); color: var(--brand); }
 .segmented a.has-warn .segmented-count { background: var(--warning-soft); color: var(--warning); }
 
+/* Partial reloads (site.js): the section being refreshed dims until its new content arrives. The delay
+   keeps quick answers from flickering. */
+[data-fragment] { scroll-margin-top: 1rem; }
+[data-fragment][aria-busy="true"] { opacity: 0.55; pointer-events: none; transition: opacity 0.15s ease 0.15s; }
+
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 .dot-ok { background: var(--positive); }
 .dot-warn { background: var(--warning); }

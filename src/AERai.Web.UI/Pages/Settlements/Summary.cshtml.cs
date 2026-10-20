@@ -65,7 +65,7 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
     /// <summary>Loads the settlement and the requested page of rows.</summary>
     /// <param name="id">Settlement id from the route.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The page, or 404 when the settlement is not in the current marketplace.</returns>
+    /// <returns>The page (or just its section for a partial reload), or 404 when the settlement is not in the current marketplace.</returns>
     public async Task<IActionResult> OnGetAsync(string id, CancellationToken cancellationToken)
     {
         var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
@@ -88,7 +88,7 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
             User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator));
         Rows = await reporting.GetSettlementSkuSummaryAsync(
             marketplace.MarketplaceId, id, ToPageRequest(), new SettlementSkuFilter(Kind, Sort, Descending, Amounts), cancellationToken);
-        return Page();
+        return this.PageOrFragment("_SummaryBody");
     }
 
     /// <summary>Link for a sortable column header: toggles direction when it's already the sort.</summary>
