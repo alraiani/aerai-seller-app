@@ -470,8 +470,9 @@
     // out (downloads, other pages). Anything unexpected falls back to loading the page normally.
     var fragmentRequest = 0;
 
+    // Only this page's own GET: a ?handler= link (CSV export, download) answers with something else.
     function fragmentTarget(url) {
-        return url.origin === window.location.origin && url.pathname === window.location.pathname;
+        return url.origin === window.location.origin && url.pathname === window.location.pathname && !url.searchParams.has("handler");
     }
 
     function restoreFocus(region, focused) {

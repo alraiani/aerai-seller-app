@@ -7,55 +7,10 @@
     <p class="text-body-secondary mb-0">Review a settlement, then download it as a QuickBooks Desktop IIF journal entry. Every kind of amount needs a QuickBooks account first.</p>
     <a asp-page="Mapping" class="btn btn-outline-secondary btn-sm">Account mapping</a>
 </div>
-<partial name="_SearchForm" model="Model.Search" />
-<div class="card mb-4">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
-            <thead>
-                <tr><th>Settlement</th><th>Period</th><th class="text-end">Net payout</th><th>Exported</th><th></th></tr>
-            </thead>
-            <tbody>
-            @foreach (var s in Model.Settlements.Items)
-            {
-                <tr>
-                    <td>
-                        @s.SettlementId
-                        @if (s.Currency is not null && s.Currency != s.HomeCurrency)
-                        {
-                            <span class="@AERai.Web.UI.Models.SettlementFormat.OriginPill(AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)) ms-1" title="Paid in @s.Currency; exported in @s.HomeCurrency">@AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)</span>
-                        }
-                    </td>
-                    <td>@AERai.Web.UI.Models.SettlementFormat.Period(s.PeriodStart, s.PeriodEnd, Model.Zone)</td>
-                    <td class="text-end fw-semibold">
-                        @if (s.HomeNet is { } homeNet)
-                        {
-                            @homeNet.ToString("N2") @s.HomeCurrency
-                        }
-                        else
-                        {
-                            <span class="pill pill-warn">No rate yet</span> @s.Net.ToString("N2") @s.Currency
-                        }
-                    </td>
-                    <td>
-                        @if (Model.ExportedSettlementIds.Contains(s.SettlementId))
-                        {
-                            <span class="pill pill-ok">Exported</span>
-                        }
-                    </td>
-                    <td class="text-end"><a asp-page="Settlement" asp-route-id="@s.SettlementId" class="btn btn-sm btn-outline-primary">Review &amp; export</a></td>
-                </tr>
-            }
-            @if (Model.Settlements.Items.Count == 0)
-            {
-                <tr><td colspan="5" class="text-body-secondary p-3">No settlements yet. They arrive with the Amazon settlements sync, or import a settlement file from Tools.</td></tr>
-            }
-            </tbody>
-        </table>
-        </div>
-    </div>
+@* Search and the pager reload only this list (site.js partial reloads). *@
+<div data-fragment="bookkeeping-settlements">
+    <partial name="_SettlementsBody" />
 </div>
-<partial name="_Pager" model="Model.Settlements.ToPager(Model.Search)" />
 
 <h2 class="h6 mt-4">Generated files</h2>
 <div class="card">

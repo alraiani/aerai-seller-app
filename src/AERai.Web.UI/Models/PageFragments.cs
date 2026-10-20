@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Net.Http.Headers;
 
 namespace AERai.Web.UI.Models;
 
@@ -40,7 +41,7 @@ public static class PageFragments
 
         // Both answers share one URL: the cache must key on the header, and a fragment must never be what
         // the browser shows when someone goes Back to the page or reopens it.
-        page.Response.Headers.Vary = Header;
+        page.Response.Headers.Append(HeaderNames.Vary, Header);
         if (!page.IsFragmentRequest())
         {
             return page.Page();

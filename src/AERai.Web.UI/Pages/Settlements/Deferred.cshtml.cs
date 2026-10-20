@@ -54,8 +54,8 @@ public sealed class DeferredModel(IDeferredPaymentService deferred, ICurrentMark
 
     /// <summary>Loads the overview and the requested groups or settlement.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when the page is loaded.</returns>
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    /// <returns>The page, or just its section for a partial reload.</returns>
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
         Zone = TimeZoneInfo.FindSystemTimeZoneById(Marketplace.TimeZoneId);
@@ -68,6 +68,8 @@ public sealed class DeferredModel(IDeferredPaymentService deferred, ICurrentMark
         {
             Groups = await deferred.GetGroupsAsync(Marketplace, new PageRequest(PageNumber, GroupsPerPage, Search), View, cancellationToken);
         }
+
+        return this.PageOrFragment("_DeferredBody");
     }
 
     /// <summary>Link to a view, keeping the search and settlement.</summary>

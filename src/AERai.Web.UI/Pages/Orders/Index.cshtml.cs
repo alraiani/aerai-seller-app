@@ -58,11 +58,12 @@ public sealed class IndexModel(IOrderService orders, ICurrentMarketplace current
 
     /// <summary>Loads the totals and the requested page.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when the page is loaded.</returns>
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    /// <returns>The page, or just its section for a partial reload.</returns>
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         var filter = await LoadFilterAsync(cancellationToken);
         List = await orders.GetListAsync(Marketplace, ToPageRequest(), filter, cancellationToken);
+        return this.PageOrFragment("_OrdersBody");
     }
 
     /// <summary>Downloads every order the search and filters select as a CSV, one row per item.</summary>

@@ -82,8 +82,8 @@ public sealed class IndexModel(IReportingQueries reporting, IDeferredPaymentServ
 
     /// <summary>Loads the totals and the requested page.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when the page is loaded.</returns>
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    /// <returns>The page, or just its section for a partial reload.</returns>
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         var selection = await currentMarketplace.GetAsync(cancellationToken);
         Marketplace = selection.Current;
@@ -107,6 +107,7 @@ public sealed class IndexModel(IReportingQueries reporting, IDeferredPaymentServ
         Settlements = await reporting.GetSettlementsAsync(Marketplace.MarketplaceId, request, filter, cancellationToken);
         Deferred = await deferred.GetOverviewAsync(Marketplace, cancellationToken);
         DeferredOut = await deferred.GetDeferredOutAsync(Marketplace, Settlements.Items, SettlementAmounts.Home, cancellationToken);
+        return this.PageOrFragment("_SettlementsBody");
     }
 
     /// <summary>Link for a sortable column header: toggles direction when it's already the sort.</summary>

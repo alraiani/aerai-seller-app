@@ -31,14 +31,15 @@ public sealed class IndexModel(IReportingQueries reporting, IBookkeepingService 
 
     /// <summary>Loads the requested page.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when the page is loaded.</returns>
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    /// <returns>The page, or just its section for a partial reload.</returns>
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
         Zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
         Settlements = await reporting.GetSettlementsAsync(marketplace.MarketplaceId, ToPageRequest(), null, cancellationToken);
         Exports = await bookkeeping.GetExportsAsync(marketplace.MarketplaceId, cancellationToken);
         ExportedSettlementIds = Exports.Select(e => e.SettlementId).ToHashSet(StringComparer.Ordinal);
+        return this.PageOrFragment("_SettlementsBody");
     }
 
     /// <summary>Downloads a generated IIF file.</summary>
