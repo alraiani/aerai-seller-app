@@ -100,7 +100,7 @@
                         <td></td>
                         <td colspan="3">
                             <div class="fw-semibold">Total · @g.LineCount.ToString("N0", CultureInfo.InvariantCulture) line@(g.LineCount == 1 ? "" : "s")@(g.OrderCount > 0 ? $" in {g.OrderCount:N0} order{(g.OrderCount == 1 ? "" : "s")}" : "")</div>
-                            <partial name="_SettlementBreakdown" model="(gm.Sales, gm.Fees, gm.Refunds, gm.Other, gm.Net, gm.Currency)" />
+                            <partial name="_SettlementBreakdown" model="(gm.Sales, gm.Refunds, gm.Expenses, gm.Reserve, gm.Net, gm.Currency)" />
                         </td>
                         <td class="text-end money fw-semibold">@g.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
                         <td class="text-end money fw-semibold @SettlementFormat.AmountClass(gm.Net)">@SettlementFormat.Money(gm.Net, gm.Currency)</td>
@@ -121,6 +121,14 @@
                             <td>
                                 <div class="fw-semibold text-nowrap">@(group.AmazonOrderId ?? group.TransactionType)</div>
                                 <div class="cell-sub">@group.Lines.Count line@(group.Lines.Count == 1 ? "" : "s")@(group.IsOrder ? "" : " without an order")</div>
+                                @if (group.AmazonOrderId is { } orderId && Model.Deferrals.TryGetValue(orderId, out var deferral))
+                                {
+                                    <span class="pill pill-info mt-1" title="@SettlementFormat.DeferralReasonTitle(deferral.DeferralReason)">
+                                        @(deferral.Status == AERai.Web.Domain.Core.DeferredTransactionStatus.Deferred
+                                            ? $"Deferred until {SettlementFormat.Day(deferral.MaturityDate, Model.Zone) ?? "unknown"}"
+                                            : $"Was deferred · released {SettlementFormat.Day(deferral.ReleasedAt ?? deferral.MaturityDate, Model.Zone) ?? "earlier"}")
+                                    </span>
+                                }
                             </td>
                             <td>
                                 @foreach (var type in group.TransactionTypes)

@@ -99,7 +99,7 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
             Inventory: stock,
             LatestPayout: settlement is null
                 ? null
-                : PayoutOf(settlement, marketplace.Currency),
+                : PayoutOf(settlement, marketplace.Currency, zone),
             Sync: sync,
             SalesCoverageStart: coverageStart,
             ComparisonAvailable: comparable);
@@ -108,13 +108,15 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
     /// <summary>
     /// The latest payout in the marketplace's currency. Amazon lists every North America payout with the
     /// United States, so it may have been paid in CAD or MXN; it is shown converted and tagged with where it
-    /// came from.
+    /// came from. Its period is in local time, so it reads as the dates Seller Central shows.
     /// </summary>
-    private static PayoutGlance PayoutOf(SettlementSummary settlement, string currency)
+    private static PayoutGlance PayoutOf(SettlementSummary settlement, string currency, TimeZoneInfo zone)
     {
         var money = SettlementMoney.Of(settlement, SettlementAmounts.Home);
         return new PayoutGlance(
-            settlement.SettlementId, settlement.PeriodStart, settlement.PeriodEnd, money.Net, money.Sales, money.Fees, money.Refunds, currency,
+            settlement.SettlementId,
+            settlement.PeriodStart is { } start ? TimeZoneInfo.ConvertTime(start, zone) : null,
+            settlement.PeriodEnd is { } end ? TimeZoneInfo.ConvertTime(end, zone) : null, money.Net, money.Sales, money.Expenses, money.Refunds, currency,
             money.IsConverted ? SettlementOrigin.FromCurrency(settlement.Currency) : null);
     }
 
@@ -288,6 +290,7 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
         AmazonReportType.RestockRecommendations => "Restock recommendations",
         AmazonReportType.AwdInventory => "AWD inventory",
         AmazonReportType.OrdersApi => "Orders (live API)",
+        AmazonReportType.DeferredTransactions => "Deferred payments",
         _ => type.ToString(),
     };
 

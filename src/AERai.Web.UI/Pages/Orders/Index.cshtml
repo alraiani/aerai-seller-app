@@ -92,7 +92,7 @@
         <span class="card-toolbar-title list-count">
             <span class="text-nowrap">@Model.List.Orders.TotalCount.ToString("N0", CultureInfo.InvariantCulture) order@(Model.List.Orders.TotalCount == 1 ? "" : "s")</span>
             <span class="text-muted-token fw-normal">in @Model.Marketplace.Name · times in @Model.Marketplace.Code local time</span>
-            <partial name="_Tip" model='"One row per Amazon order. Expand one to see its items and what Amazon paid out for it. Paid out adds up the order’s lines in every settlement so far (a sale and a later refund are often in different ones). Est. profit is that payout less the cost of goods set on Products, so it shows once the order is paid out and every item has a cost."' />
+            <partial name="_Tip" model='"One row per Amazon order. Expand one to see its items and what Amazon paid out for it. Paid out adds up the order’s lines in every settlement so far (a sale and a later refund are often in different ones); an order Amazon is still holding shows when it will be released. Est. profit is that payout less the cost of goods set on Products, so it shows once the order is paid out and every item has a cost."' />
         </span>
         @if (rows.Count > 0)
         {
@@ -167,6 +167,13 @@
                                 {
                                     <span class="fw-semibold @SettlementFormat.AmountClass(paid.Net)">@SettlementFormat.Money(paid.Net, money)</span>
                                 }
+                                else if (!cancelled && row.Deferral is { } deferral)
+                                {
+                                    @* Amazon holds the payout (its delivery-date policy); the amount is what it will pay out. *@
+                                    <span class="pill pill-info" title="@SettlementFormat.DeferralReasonTitle(deferral.DeferralReason): @SettlementFormat.Money(deferral.Amount, deferral.Currency ?? money) to be paid out">
+                                        Deferred until @(SettlementFormat.Day(deferral.MaturityDate, Model.Zone) ?? "unknown")
+                                    </span>
+                                }
                                 else if (!cancelled)
                                 {
                                     <span class="pill pill-info">Not paid out</span>
@@ -212,7 +219,7 @@
                                 <td></td>
                                 <td colspan="7">
                                     <div class="order-payout">
-                                        <partial name="/Pages/Settlements/_SettlementBreakdown.cshtml" model="(payout.Sales, payout.Fees, payout.Refunds, payout.Other, payout.Net, (string?)money)" />
+                                        <partial name="/Pages/Settlements/_SettlementBreakdown.cshtml" model="(payout.Sales, payout.Refunds, payout.Expenses, payout.Reserve, payout.Net, (string?)money)" />
                                         @if (row.Profit.CostOfGoods is { } cogs && row.Profit.Profit is { } profit)
                                         {
                                             <dl class="amount-breakdown">

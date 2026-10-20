@@ -8,6 +8,7 @@
     var currency = Model.Marketplace.Currency;
     var rows = Model.Settlements.Items;
     var anyConverted = rows.Any(r => r.Currency is not null && r.Currency != r.HomeCurrency);
+    var anyReserve = rows.Any(r => r.Reserve != 0);
 }
 
 @* ---------- Totals for what the search and filters select (all pages) ---------- *@
@@ -15,7 +16,7 @@
     <div class="col-6 col-xl-3">
         <a class="card tile h-100" href="@Model.SortLink(SettlementSort.Net)">
             <div class="kpi">
-                <div class="kpi-label">Net payouts <partial name="_Tip" model='"What Amazon paid out for the settlements listed (every page): sales, less fees and refunds, plus everything else. Payouts in CAD or MXN count at their converted amount. Click to sort by payout."' /></div>
+                <div class="kpi-label">Net payouts <partial name="_Tip" model='"What Amazon paid out for the settlements listed (every page): sales, less refunds and expenses, plus or minus the account level reserve. Payouts in CAD or MXN count at their converted amount. Click to sort by payout."' /></div>
                 <div class="kpi-value">@DashboardFormat.Money(t.Net, currency)</div>
                 <div class="kpi-foot">@t.Count.ToString("N0", CultureInfo.InvariantCulture) settlement@(t.Count == 1 ? "" : "s"), in @currency</div>
             </div>
@@ -24,31 +25,34 @@
     <div class="col-6 col-xl-3">
         <a class="card tile h-100" href="@Model.SortLink(SettlementSort.Sales)">
             <div class="kpi">
-                <div class="kpi-label">Sales <partial name="_Tip" model='"Item price amounts on orders in these settlements. Click to sort by sales."' /></div>
+                <div class="kpi-label">Sales <partial name="_Tip" model='"What Seller Central counts as sales: item price and shipping charged on orders (the tax Amazon collects cancels against the tax it withholds) and FBA inventory reimbursements. Click to sort by sales."' /></div>
                 <div class="kpi-value">@DashboardFormat.Money(t.Sales, currency)</div>
-                <div class="kpi-foot">Other: @DashboardFormat.Money(t.Other, currency)</div>
-            </div>
-        </a>
-    </div>
-    <div class="col-6 col-xl-3">
-        <a class="card tile h-100" href="@Model.SortLink(SettlementSort.Fees)">
-            <div class="kpi">
-                <div class="kpi-label">Fees <partial name="_Tip" model='"Selling and fulfillment fees Amazon kept. Click to sort by fees, largest first."' /></div>
-                <div class="kpi-value">@DashboardFormat.Money(t.Fees, currency)</div>
-                <div class="kpi-foot">@(t.FeeRate is { } fr ? $"{SettlementFormat.Percent(fr)} of sales" : "No sales")</div>
+                <div class="kpi-foot">@(t.Reserve != 0 ? $"Account level reserve: {DashboardFormat.Money(t.Reserve, currency)}" : "Before refunds and expenses")</div>
             </div>
         </a>
     </div>
     <div class="col-6 col-xl-3">
         <a class="card tile h-100 @(t.RefundRate > 0.1m ? "tile-bad" : "")" href="@Model.SortLink(SettlementSort.Refunds)">
             <div class="kpi">
-                <div class="kpi-label">Refunds <partial name="_Tip" model='"Money returned to customers. Click to sort by refunds, largest first."' /></div>
+                <div class="kpi-label">Refunds <partial name="_Tip" model='"Money returned to customers, less the fees Amazon gave back. Click to sort by refunds, largest first."' /></div>
                 <div class="kpi-value">@DashboardFormat.Money(t.Refunds, currency)</div>
                 <div class="kpi-foot">@(t.RefundRate is { } rr ? $"{SettlementFormat.Percent(rr)} of sales" : "No sales")</div>
             </div>
         </a>
     </div>
+    <div class="col-6 col-xl-3">
+        <a class="card tile h-100" href="@Model.SortLink(SettlementSort.Expenses)">
+            <div class="kpi">
+                <div class="kpi-label">Expenses <partial name="_Tip" model='"Everything Amazon charged: selling and fulfillment fees, promotions, FBA and storage fees, advertising, subscriptions, and other charges. Click to sort by expenses, largest first."' /></div>
+                <div class="kpi-value">@DashboardFormat.Money(t.Expenses, currency)</div>
+                <div class="kpi-foot">@(t.ExpenseRate is { } er ? $"{SettlementFormat.Percent(er)} of sales" : "No sales")</div>
+            </div>
+        </a>
+    </div>
 </div>
+
+@* ---------- What Amazon holds back and has not paid out (from the Finances API) ---------- *@
+<partial name="_DeferredTile" model="(Model.Deferred, Model.Zone)" />
 
 @if (t.AwaitingRate > 0)
 {
@@ -145,9 +149,12 @@
                         <th>Settlement</th>
                         <th><a href="@Model.SortLink(SettlementSort.PeriodEnd)" class="sort-link">Period @Model.SortArrow(SettlementSort.PeriodEnd)</a></th>
                         <th class="text-end"><a href="@Model.SortLink(SettlementSort.Sales)" class="sort-link">Sales @Model.SortArrow(SettlementSort.Sales)</a></th>
-                        <th class="text-end"><a href="@Model.SortLink(SettlementSort.Fees)" class="sort-link">Fees @Model.SortArrow(SettlementSort.Fees)</a></th>
                         <th class="text-end"><a href="@Model.SortLink(SettlementSort.Refunds)" class="sort-link">Refunds @Model.SortArrow(SettlementSort.Refunds)</a></th>
-                        <th class="text-end">Other</th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSort.Expenses)" class="sort-link">Expenses @Model.SortArrow(SettlementSort.Expenses)</a></th>
+                        @if (anyReserve)
+                        {
+                            <th class="text-end">Reserve <partial name="_Tip" model='"Account level reserve: money Amazon held back from a payout (negative) or released from an earlier hold (positive)."' /></th>
+                        }
                         <th class="text-end"><a href="@Model.SortLink(SettlementSort.Net)" class="sort-link">Net payout @Model.SortArrow(SettlementSort.Net)</a></th>
                         @if (anyConverted)
                         {
@@ -168,11 +175,14 @@
                                     <span class="@SettlementFormat.OriginPill(SettlementOrigin.FromCurrency(s.Currency)) ms-1" title="Paid in @s.Currency">@SettlementOrigin.FromCurrency(s.Currency)</span>
                                 }
                             </td>
-                            <td class="text-nowrap">@SettlementFormat.Period(s.PeriodStart, s.PeriodEnd)</td>
+                            <td class="text-nowrap">@SettlementFormat.Period(s.PeriodStart, s.PeriodEnd, Model.Zone)</td>
                             <td class="text-end money">@SettlementFormat.Money(m.Sales, m.Currency)</td>
-                            <td class="text-end money @SettlementFormat.AmountClass(m.Fees)">@SettlementFormat.Money(m.Fees, m.Currency)</td>
                             <td class="text-end money @SettlementFormat.AmountClass(m.Refunds)">@SettlementFormat.Money(m.Refunds, m.Currency)</td>
-                            <td class="text-end money @SettlementFormat.AmountClass(m.Other)">@SettlementFormat.Money(m.Other, m.Currency)</td>
+                            <td class="text-end money @SettlementFormat.AmountClass(m.Expenses)">@SettlementFormat.Money(m.Expenses, m.Currency)</td>
+                            @if (anyReserve)
+                            {
+                                <td class="text-end money @SettlementFormat.AmountClass(m.Reserve)">@SettlementFormat.Money(m.Reserve, m.Currency)</td>
+                            }
                             <td class="text-end money fw-semibold @SettlementFormat.AmountClass(m.Net)">@SettlementFormat.Money(m.Net, m.Currency)</td>
                             @if (anyConverted)
                             {

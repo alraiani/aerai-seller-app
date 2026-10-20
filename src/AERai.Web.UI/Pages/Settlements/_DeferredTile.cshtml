@@ -1,0 +1,52 @@
+@using System.Globalization
+@using AERai.Web.Application.Settlements
+@using AERai.Web.UI.Models
+@model (DeferredOverview Overview, TimeZoneInfo Zone)
+@* The Settlements list's tile for payouts Amazon still holds (sales deferred until about 7 days after delivery). *@
+@{
+    var o = Model.Overview;
+    var en = CultureInfo.GetCultureInfo("en-US");
+}
+<a class="card tile deferred-tile mb-3" asp-page="Deferred">
+    <div class="kpi deferred-tile-body">
+        <div>
+            <div class="kpi-label">
+                <partial name="_Icon" model='"clock"' />
+                Deferred by Amazon, not paid out yet
+                <partial name="_Tip" model='"Sales Amazon is holding back under its delivery-date policy (paid out about 7 days after delivery) or until an invoiced order is paid. They are in no settlement yet, so they are not in the totals above or in the bank. Click to see each order and when it releases."' />
+            </div>
+            @if (!o.IsSynced)
+            {
+                <div class="kpi-foot">
+                    Not synced yet. Turn on the <strong>Deferred payments</strong> schedule in Tools → Amazon sync, or run it now.
+                </div>
+            }
+            else if (o.Held.Count == 0)
+            {
+                <div class="kpi-value">Nothing held</div>
+            }
+            else
+            {
+                <div class="kpi-value">
+                    @for (var i = 0; i < o.Held.Count; i++)
+                    {
+                        <span class="text-nowrap">@(i > 0 ? " + " : "")@SettlementFormat.Money(o.Held[i].Amount, o.Held[i].Currency)</span>
+                    }
+                </div>
+            }
+        </div>
+        @if (o.IsSynced)
+        {
+            <div class="kpi-foot deferred-tile-foot">
+                @if (o.Held.Count > 0)
+                {
+                    <div>@o.Orders.ToString("N0", en) order@(o.Orders == 1 ? "" : "s")@(o.ReleaseDue ? " · some due with the next payout" : SettlementFormat.Day(o.NextMaturity, Model.Zone) is { } next ? $" · next release {next}" : "")</div>
+                }
+                @if (o.Sync.LastSuccessAt is { } asOf)
+                {
+                    <div class="text-muted-token">As of @TimeZoneInfo.ConvertTime(asOf, Model.Zone).ToString("MMM d, h:mm tt", en)@(o.Sync.IsEnabled ? "" : " · schedule off")</div>
+                }
+            </div>
+        }
+    </div>
+</a>

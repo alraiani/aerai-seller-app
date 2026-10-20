@@ -6,13 +6,13 @@ namespace AERai.Web.Application.Orders;
 /// </summary>
 /// <param name="SettlementIds">The settlements, in the order their lines were found.</param>
 /// <param name="Sales">Item price amounts.</param>
-/// <param name="Fees">Selling and fulfillment fees (negative).</param>
+/// <param name="Expenses">Fees and other charges on the order (negative).</param>
 /// <param name="Refunds">Money returned to the customer (usually negative).</param>
-/// <param name="Other">Everything else.</param>
-public sealed record OrderPayout(IReadOnlyList<string> SettlementIds, decimal Sales, decimal Fees, decimal Refunds, decimal Other)
+/// <param name="Reserve">Account level reserve (never on an order's own lines; kept so the columns match the settlement pages).</param>
+public sealed record OrderPayout(IReadOnlyList<string> SettlementIds, decimal Sales, decimal Expenses, decimal Refunds, decimal Reserve)
 {
     /// <summary>What was received for the order.</summary>
-    public decimal Net => Sales + Fees + Refunds + Other;
+    public decimal Net => Sales + Expenses + Refunds + Reserve;
 
     /// <summary>Adds up an order's settlement amounts.</summary>
     /// <param name="amounts">The order's amounts, one per settlement.</param>
@@ -28,8 +28,8 @@ public sealed record OrderPayout(IReadOnlyList<string> SettlementIds, decimal Sa
         return new OrderPayout(
             amounts.Select(a => a.SettlementId).Distinct(StringComparer.Ordinal).ToList(),
             amounts.Sum(a => a.Sales),
-            amounts.Sum(a => a.Fees),
+            amounts.Sum(a => a.Expenses),
             amounts.Sum(a => a.Refunds),
-            amounts.Sum(a => a.Other));
+            amounts.Sum(a => a.Reserve));
     }
 }

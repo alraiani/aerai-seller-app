@@ -9,8 +9,8 @@ public enum SettlementSort
     /// <summary>Largest sales first.</summary>
     Sales = 1,
 
-    /// <summary>Largest fees first (fees are negative, so the most negative first).</summary>
-    Fees = 2,
+    /// <summary>Largest expenses first (expenses are negative, so the most negative first).</summary>
+    Expenses = 2,
 
     /// <summary>Largest refunds first (refunds are negative, so the most negative first).</summary>
     Refunds = 3,

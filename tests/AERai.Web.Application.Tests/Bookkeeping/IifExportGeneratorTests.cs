@@ -89,4 +89,22 @@ public sealed class IifExportGeneratorTests
 
         Assert.Throws<InvalidOperationException>(() => IifExportGenerator.Generate(preview));
     }
+
+    [Fact]
+    public void Generate_PeriodEndingAfterMidnightUtc_IsDatedTheMarketplacesLocalDay()
+    {
+        // Amazon closes North America periods at 01:53 UTC, which is still the evening before in New York.
+        var books = new SettlementBooks(
+            "S3", MarketplaceIds.UnitedStates, "USD", null, new DateTimeOffset(2026, 8, 10, 1, 53, 2, TimeSpan.Zero),
+            [new SettlementCategoryTotal("ItemPrice", "Principal", 10m, 1)],
+            "USD", 1m, TimeZoneId: "America/New_York");
+        var preview = SettlementPreviewBuilder.Build(
+            books,
+            [new BookkeepingAccountMapping { AmountType = "ItemPrice", AmountDescription = "Principal", QuickBooksAccountName = "Sales", UpdatedBy = "t" }],
+            "Checking");
+
+        var lines = IifExportGenerator.Generate(preview).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal("TRNS\t1\tGENERAL JOURNAL\t08/09/2026\tChecking\t\t\t10.00\tS3\tAmazon settlement S3", lines[3]);
+    }
 }

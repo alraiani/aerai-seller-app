@@ -12,9 +12,9 @@ namespace AERai.Web.Application.Settlements;
 /// <param name="Units">Units on the group's price lines.</param>
 /// <param name="Amount">Sum of the group's amounts.</param>
 /// <param name="Sales">The part of <paramref name="Amount"/> that counts as sales.</param>
-/// <param name="Fees">The part that counts as fees.</param>
+/// <param name="Expenses">The part that counts as expenses.</param>
 /// <param name="Refunds">The part that counts as refunds.</param>
-/// <param name="Other">The part that counts as other.</param>
+/// <param name="Reserve">The part that counts toward the account level reserve.</param>
 /// <param name="Currency">ISO 4217 currency of the totals (see <see cref="SettlementLineFilter.Amounts"/>).</param>
 /// <param name="Lines">Every line in the group, earliest posted first.</param>
 public sealed record SettlementOrderGroup(
@@ -24,9 +24,9 @@ public sealed record SettlementOrderGroup(
     int Units,
     decimal Amount,
     decimal Sales,
-    decimal Fees,
+    decimal Expenses,
     decimal Refunds,
-    decimal Other,
+    decimal Reserve,
     string? Currency,
     IReadOnlyList<SettlementLineDetail> Lines)
 {

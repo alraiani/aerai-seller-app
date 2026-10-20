@@ -18,8 +18,9 @@ namespace AERai.Web.UI.Pages.Settlements;
 /// </summary>
 /// <param name="reporting">Reporting queries.</param>
 /// <param name="rates">Settlement exchange rates.</param>
+/// <param name="deferred">Payouts Amazon deferred (which orders in this settlement it held first).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
-public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchangeRateService rates, ICurrentMarketplace currentMarketplace) : ListPageModel
+public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchangeRateService rates, IDeferredPaymentService deferred, ICurrentMarketplace currentMarketplace) : ListPageModel
 {
     /// <summary>Which currency amounts are shown in, from <c>?amounts=original</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "amounts")]
@@ -39,6 +40,12 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
 
     /// <summary>The settlement's totals.</summary>
     public SettlementSummary Settlement { get; private set; } = default!;
+
+    /// <summary>The marketplace's time zone, in which the period and deposit dates are shown.</summary>
+    public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
+
+    /// <summary>The orders in this settlement that Amazon deferred before paying them out here.</summary>
+    public SettlementDeferrals Deferrals { get; private set; } = SettlementDeferrals.None;
 
     /// <summary>The conversion banner (shown only for a settlement paid in another currency).</summary>
     public SettlementRatePanel RatePanel { get; private set; } = default!;
@@ -63,6 +70,8 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
         }
 
         Settlement = settlement;
+        Zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
+        Deferrals = await deferred.GetSettlementDeferralsAsync(marketplace, id, cancellationToken);
         var rate = settlement.Currency is not null && settlement.Currency != settlement.HomeCurrency
             ? await rates.GetAsync(marketplace.MarketplaceId, id, cancellationToken)
             : null;

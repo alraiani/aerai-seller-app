@@ -6,6 +6,7 @@
     var s = Model.Settlement;
     var total = SettlementMoney.Of(s, Model.Amounts);
     var rows = Model.Rows.Items;
+    var anyReserve = s.Reserve != 0;
     var amountsRoute = Model.Amounts == SettlementAmounts.Home ? null : Model.Amounts.ToString();
     ViewData["Title"] = $"Settlement {s.SettlementId}";
 }
@@ -20,15 +21,27 @@
 <div class="card mb-3">
     <div class="settlement-head">
         <div>
-            <div class="kpi-label">Net payout · @SettlementFormat.Period(s.PeriodStart, s.PeriodEnd)</div>
+            <div class="kpi-label">Net payout · @SettlementFormat.Period(s.PeriodStart, s.PeriodEnd, Model.Zone)</div>
             <div class="kpi-value @SettlementFormat.AmountClass(total.Net)">@SettlementFormat.Money(total.Net, total.Currency)</div>
-            <div class="kpi-foot">@s.Units.ToString("N0", CultureInfo.InvariantCulture) unit@(s.Units == 1 ? "" : "s") sold@(s.DepositDate is { } deposit ? " · paid out " + deposit.ToString("MMM d, yyyy", CultureInfo.InvariantCulture) : "")</div>
+            <div class="kpi-foot">@s.Units.ToString("N0", CultureInfo.InvariantCulture) unit@(s.Units == 1 ? "" : "s") sold@(SettlementFormat.Day(s.DepositDate, Model.Zone) is { } deposit ? " · paid out " + deposit : "")</div>
         </div>
-        <partial name="_SettlementBreakdown" model="(total.Sales, total.Fees, total.Refunds, total.Other, total.Net, total.Currency)" />
+        <partial name="_SettlementBreakdown" model="(total.Sales, total.Refunds, total.Expenses, total.Reserve, total.Net, total.Currency)" />
     </div>
 </div>
 
 <partial name="_SettlementRate" model="Model.RatePanel" />
+
+@if (Model.Deferrals.Orders > 0)
+{
+    @* Deferred sales arrive in a later settlement than the one they were sold in, which is why a payout can be larger than that period's sales suggest. *@
+    <div class="page-footnote mt-n2 mb-3">
+        <partial name="_Icon" model='"clock"' />
+        Includes @Model.Deferrals.Orders.ToString("N0", CultureInfo.InvariantCulture) order@(Model.Deferrals.Orders == 1 ? "" : "s") Amazon deferred earlier
+        (@string.Join(" + ", Model.Deferrals.Amounts.Select(a => SettlementFormat.Money(a.Amount, a.Currency))) released into this payout).
+        Their lines are marked on each row's orders.
+        <a asp-page="Deferred">What Amazon still holds</a>
+    </div>
+}
 
 @* ---------- Search, row filter ---------- *@
 <div class="list-toolbar mb-3">
@@ -86,9 +99,12 @@
                         <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Units)" class="sort-link">Units @Model.SortArrow(SettlementSkuSort.Units)</a></th>
                         <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Orders)" class="sort-link">Orders @Model.SortArrow(SettlementSkuSort.Orders)</a></th>
                         <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Sales)" class="sort-link">Sales @Model.SortArrow(SettlementSkuSort.Sales)</a></th>
-                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Fees)" class="sort-link">Fees @Model.SortArrow(SettlementSkuSort.Fees)</a></th>
                         <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Refunds)" class="sort-link">Refunds @Model.SortArrow(SettlementSkuSort.Refunds)</a></th>
-                        <th class="text-end">Other</th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Expenses)" class="sort-link">Expenses @Model.SortArrow(SettlementSkuSort.Expenses)</a></th>
+                        @if (anyReserve)
+                        {
+                            <th class="text-end">Reserve</th>
+                        }
                         <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Net)" class="sort-link">Net @Model.SortArrow(SettlementSkuSort.Net)</a></th>
                     </tr>
                 </thead>
@@ -108,9 +124,12 @@
                             <td class="text-end money">@r.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
                             <td class="text-end money">@r.OrderCount.ToString("N0", CultureInfo.InvariantCulture)</td>
                             <td class="text-end money">@SettlementFormat.Money(m.Sales, m.Currency)</td>
-                            <td class="text-end money @SettlementFormat.AmountClass(m.Fees)">@SettlementFormat.Money(m.Fees, m.Currency)</td>
                             <td class="text-end money @SettlementFormat.AmountClass(m.Refunds)">@SettlementFormat.Money(m.Refunds, m.Currency)</td>
-                            <td class="text-end money @SettlementFormat.AmountClass(m.Other)">@SettlementFormat.Money(m.Other, m.Currency)</td>
+                            <td class="text-end money @SettlementFormat.AmountClass(m.Expenses)">@SettlementFormat.Money(m.Expenses, m.Currency)</td>
+                            @if (anyReserve)
+                            {
+                                <td class="text-end money @SettlementFormat.AmountClass(m.Reserve)">@SettlementFormat.Money(m.Reserve, m.Currency)</td>
+                            }
                             <td class="text-end money fw-semibold @SettlementFormat.AmountClass(m.Net)">@SettlementFormat.Money(m.Net, m.Currency)</td>
                         </tr>
                     }
@@ -124,9 +143,12 @@
                             <td class="text-end money">@s.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
                             <td></td>
                             <td class="text-end money">@SettlementFormat.Money(total.Sales, total.Currency)</td>
-                            <td class="text-end money">@SettlementFormat.Money(total.Fees, total.Currency)</td>
                             <td class="text-end money">@SettlementFormat.Money(total.Refunds, total.Currency)</td>
-                            <td class="text-end money">@SettlementFormat.Money(total.Other, total.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(total.Expenses, total.Currency)</td>
+                            @if (anyReserve)
+                            {
+                                <td class="text-end money">@SettlementFormat.Money(total.Reserve, total.Currency)</td>
+                            }
                             <td class="text-end money">@SettlementFormat.Money(total.Net, total.Currency)</td>
                         </tr>
                     </tfoot>

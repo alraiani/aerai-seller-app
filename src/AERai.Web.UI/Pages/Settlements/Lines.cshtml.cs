@@ -15,8 +15,9 @@ namespace AERai.Web.UI.Pages.Settlements;
 /// order grouped by transaction type) that expands into its lines, each with one signed amount.
 /// </summary>
 /// <param name="reporting">Reporting queries.</param>
+/// <param name="deferred">Payouts Amazon deferred (marks orders it held before paying them out).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
-public sealed class LinesModel(IReportingQueries reporting, ICurrentMarketplace currentMarketplace) : ListPageModel
+public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentService deferred, ICurrentMarketplace currentMarketplace) : ListPageModel
 {
     /// <summary>The SKU of the summary row; blank selects the row of amounts that belong to no SKU.</summary>
     [BindProperty(SupportsGet = true, Name = "sku")]
@@ -51,6 +52,12 @@ public sealed class LinesModel(IReportingQueries reporting, ICurrentMarketplace 
     /// <summary>The current page of order groups.</summary>
     public PagedResult<SettlementOrderGroup> Groups { get; private set; } = default!;
 
+    /// <summary>The deferral of each order on this page that Amazon deferred before paying it out.</summary>
+    public IReadOnlyDictionary<string, DeferredPaymentRow> Deferrals { get; private set; } = new Dictionary<string, DeferredPaymentRow>();
+
+    /// <summary>The marketplace's time zone, in which release dates are shown.</summary>
+    public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
+
     /// <summary>Whether a search or bucket filter is applied.</summary>
     public bool IsFiltered => !string.IsNullOrWhiteSpace(Search) || Bucket is not null;
 
@@ -84,6 +91,9 @@ public sealed class LinesModel(IReportingQueries reporting, ICurrentMarketplace 
         RatePanel = new SettlementRatePanel(settlement, Amounts, LinkWith(("amounts", null)), LinkWith(("amounts", SettlementAmounts.Original.ToString())));
         Groups = await reporting.GetSettlementOrderGroupsAsync(
             marketplace.MarketplaceId, id, sku, price, ToPageRequest(), new SettlementLineFilter(Bucket, Sort, Descending, Amounts), cancellationToken);
+        Zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
+        Deferrals = await deferred.GetOrderDeferralsAsync(
+            marketplace, [.. Groups.Items.Where(g => g.AmazonOrderId is not null).Select(g => g.AmazonOrderId!)], cancellationToken); // Non-null: filtered just before.
         return Page();
     }
 

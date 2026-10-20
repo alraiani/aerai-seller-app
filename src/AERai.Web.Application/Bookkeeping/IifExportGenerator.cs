@@ -51,7 +51,7 @@ public static class IifExportGenerator
         }
 
         // The deposit lands after the period ends; the bank date is not part of the imported data, so the
-        // period end is the date used.
+        // period end is the date used, on the local calendar the preview expressed it in.
         var date = (preview.PeriodEnd ?? preview.PeriodStart ?? DateTimeOffset.UtcNow).ToString(DateFormat, CultureInfo.InvariantCulture);
         var memo = $"Amazon settlement {preview.SettlementId}";
         if (preview.IsConverted)

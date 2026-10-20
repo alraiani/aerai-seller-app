@@ -1,17 +1,19 @@
 using System.Globalization;
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
+using AERai.Web.Application.Settlements;
 using AERai.Web.Domain.Core;
 
 namespace AERai.Web.Application.Orders;
 
 /// <summary>
-/// Default <see cref="IOrderService"/>: reads one page of orders, then their items and settlement amounts
-/// in two queries, and combines them into payouts and profit estimates.
+/// Default <see cref="IOrderService"/>: reads one page of orders, then their items, settlement amounts, and
+/// deferred payouts, and combines them into payouts and profit estimates.
 /// </summary>
 /// <param name="queries">Order queries.</param>
+/// <param name="deferred">Deferred transactions (for orders Amazon has not paid out yet).</param>
 /// <param name="time">Clock (for the export's file name).</param>
-public sealed class OrderService(IOrderQueries queries, TimeProvider time) : IOrderService
+public sealed class OrderService(IOrderQueries queries, IDeferredPaymentQueries deferred, TimeProvider time) : IOrderService
 {
     /// <summary>The CSV holds at most this many rows, keeping the download and its query bounded.</summary>
     public const int MaxExportRows = 50_000;
@@ -37,6 +39,9 @@ public sealed class OrderService(IOrderQueries queries, TimeProvider time) : IOr
             .ToLookup(i => i.AmazonOrderId, StringComparer.Ordinal);
         var settled = (await queries.GetSettlementAmountsAsync(marketplace.SettlementMarketplaceId ?? marketplace.MarketplaceId, ids, cancellationToken).ConfigureAwait(false))
             .ToLookup(a => a.AmazonOrderId, StringComparer.Ordinal);
+        var held = (await deferred.GetByOrdersAsync([marketplace.MarketplaceId], ids, cancellationToken).ConfigureAwait(false))
+            .Where(d => d.Status == DeferredTransactionStatus.Deferred && d.AmazonOrderId is not null)
+            .ToLookup(d => d.AmazonOrderId!, StringComparer.Ordinal); // Non-null: filtered just above.
 
         var rows = page.Items.Select(order =>
         {
@@ -48,7 +53,12 @@ public sealed class OrderService(IOrderQueries queries, TimeProvider time) : IOr
                 .Where(a => order.Currency is null || a.Currency is null || string.Equals(a.Currency, order.Currency, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             var payout = OrderPayout.From(amounts);
-            return new OrderListItem(order, orderItems, payout, OrderProfit.Estimate(order.OrderStatus, orderItems, payout));
+
+            // Only an order not paid out yet shows what Amazon holds; once paid, the payout tells the story.
+            var deferral = payout is null
+                ? held[order.AmazonOrderId].OrderBy(d => d.MaturityDate ?? DateTimeOffset.MaxValue).FirstOrDefault()
+                : null;
+            return new OrderListItem(order, orderItems, payout, OrderProfit.Estimate(order.OrderStatus, orderItems, payout), deferral);
         }).ToList();
 
         return new OrderList(new PagedResult<OrderListItem>(rows, page.TotalCount, page.Page, page.PageSize), totals, statuses);

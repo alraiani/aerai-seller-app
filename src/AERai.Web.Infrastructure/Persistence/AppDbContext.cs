@@ -79,6 +79,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Curated AWD inventory snapshots.</summary>
     public DbSet<AwdInventorySnapshot> AwdInventorySnapshots => Set<AwdInventorySnapshot>();
 
+    /// <summary>Payouts Amazon deferred, from the Finances API (<c>core.DeferredTransaction</c>).</summary>
+    public DbSet<DeferredTransaction> DeferredTransactions => Set<DeferredTransaction>();
+
     /// <summary>Curated settlements.</summary>
     public DbSet<Settlement> Settlements => Set<Settlement>();
 

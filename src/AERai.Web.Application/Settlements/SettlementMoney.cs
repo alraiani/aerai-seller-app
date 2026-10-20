@@ -4,13 +4,13 @@ namespace AERai.Web.Application.Settlements;
 
 /// <summary>A settlement row's amounts in the currency a page shows them in.</summary>
 /// <param name="Sales">Sales.</param>
-/// <param name="Fees">Fees (negative).</param>
+/// <param name="Expenses">Expenses (negative).</param>
 /// <param name="Refunds">Refunds (usually negative).</param>
-/// <param name="Other">Everything else.</param>
+/// <param name="Reserve">Account level reserve.</param>
 /// <param name="Net">The four together.</param>
 /// <param name="Currency">ISO 4217 currency of the amounts.</param>
 /// <param name="IsConverted">Whether they were converted from the currency the settlement was paid in.</param>
-public sealed record SettlementMoney(decimal Sales, decimal Fees, decimal Refunds, decimal Other, decimal Net, string? Currency, bool IsConverted)
+public sealed record SettlementMoney(decimal Sales, decimal Expenses, decimal Refunds, decimal Reserve, decimal Net, string? Currency, bool IsConverted)
 {
     /// <summary>
     /// A settlement's amounts as asked for. Converted amounts are only shown when the settlement has a
@@ -23,8 +23,8 @@ public sealed record SettlementMoney(decimal Sales, decimal Fees, decimal Refund
     {
         ArgumentNullException.ThrowIfNull(row);
         return UseHome(amounts, row.ExchangeRate)
-            ? new(row.HomeSales ?? 0, row.HomeFees ?? 0, row.HomeRefunds ?? 0, row.HomeOther ?? 0, row.HomeNet ?? 0, row.HomeCurrency, Differs(row.Currency, row.HomeCurrency))
-            : new(row.Sales, row.Fees, row.Refunds, row.Other, row.Net, row.Currency, false);
+            ? new(row.HomeSales ?? 0, row.HomeExpenses ?? 0, row.HomeRefunds ?? 0, row.HomeReserve ?? 0, row.HomeNet ?? 0, row.HomeCurrency, Differs(row.Currency, row.HomeCurrency))
+            : new(row.Sales, row.Expenses, row.Refunds, row.Reserve, row.Net, row.Currency, false);
     }
 
     /// <summary>A per-SKU summary row's amounts as asked for (see <see cref="Of(SettlementSummary, SettlementAmounts)"/>).</summary>
@@ -35,8 +35,8 @@ public sealed record SettlementMoney(decimal Sales, decimal Fees, decimal Refund
     {
         ArgumentNullException.ThrowIfNull(row);
         return UseHome(amounts, row.ExchangeRate)
-            ? new(row.HomeSales ?? 0, row.HomeFees ?? 0, row.HomeRefunds ?? 0, row.HomeOther ?? 0, row.HomeNet ?? 0, row.HomeCurrency, Differs(row.Currency, row.HomeCurrency))
-            : new(row.Sales, row.Fees, row.Refunds, row.Other, row.Net, row.Currency, false);
+            ? new(row.HomeSales ?? 0, row.HomeExpenses ?? 0, row.HomeRefunds ?? 0, row.HomeReserve ?? 0, row.HomeNet ?? 0, row.HomeCurrency, Differs(row.Currency, row.HomeCurrency))
+            : new(row.Sales, row.Expenses, row.Refunds, row.Reserve, row.Net, row.Currency, false);
     }
 
     /// <summary>A settlement line's amount as asked for (see <see cref="Of(SettlementSummary, SettlementAmounts)"/>).</summary>
