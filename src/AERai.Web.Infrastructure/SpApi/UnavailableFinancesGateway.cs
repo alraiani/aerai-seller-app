@@ -11,6 +11,7 @@ namespace AERai.Web.Infrastructure.SpApi;
 internal sealed class UnavailableFinancesGateway : IAmazonFinancesGateway
 {
     /// <inheritdoc/>
-    public Task<DeferredTransactionPage> ListTransactionsPageAsync(Marketplace marketplace, DateTimeOffset postedAfter, string? nextToken, CancellationToken cancellationToken) =>
+    public Task<DeferredTransactionPage> ListTransactionsPageAsync(
+        Marketplace marketplace, DeferredTransactionListing listing, DateTimeOffset postedAfter, string? nextToken, CancellationToken cancellationToken) =>
         throw new InvalidOperationException("Amazon SP-API is disabled. Set SpApi:Mode to Live (with credentials) or Simulated.");
 }

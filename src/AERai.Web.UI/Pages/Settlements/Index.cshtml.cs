@@ -53,6 +53,9 @@ public sealed class IndexModel(IReportingQueries reporting, IDeferredPaymentServ
     /// <summary>What Amazon holds back for the marketplace and has not paid out yet.</summary>
     public DeferredOverview Deferred { get; private set; } = new([], new DeferredSyncState(false, false, null), DateTimeOffset.MinValue);
 
+    /// <summary>What Amazon deferred out of each listed settlement's payout, by settlement id, in the marketplace's currency.</summary>
+    public IReadOnlyDictionary<string, DeferredOut> DeferredOut { get; private set; } = new Dictionary<string, DeferredOut>();
+
     /// <summary>The current page of settlements.</summary>
     public PagedResult<SettlementSummary> Settlements { get; private set; } = default!;
 
@@ -103,6 +106,7 @@ public sealed class IndexModel(IReportingQueries reporting, IDeferredPaymentServ
 
         Settlements = await reporting.GetSettlementsAsync(Marketplace.MarketplaceId, request, filter, cancellationToken);
         Deferred = await deferred.GetOverviewAsync(Marketplace, cancellationToken);
+        DeferredOut = await deferred.GetDeferredOutAsync(Marketplace, Settlements.Items, SettlementAmounts.Home, cancellationToken);
     }
 
     /// <summary>Link for a sortable column header: toggles direction when it's already the sort.</summary>

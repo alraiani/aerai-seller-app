@@ -47,6 +47,12 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
     /// <summary>The orders in this settlement that Amazon deferred before paying them out here.</summary>
     public SettlementDeferrals Deferrals { get; private set; } = SettlementDeferrals.None;
 
+    /// <summary>What Amazon deferred out of this payout (sales made in its period, paid in a later one), or <see langword="null"/>.</summary>
+    public DeferredOut? DeferredOut { get; private set; }
+
+    /// <summary>What Amazon deferred out of this payout per SKU and price each (amounts in the page's currency, price each as paid).</summary>
+    public IReadOnlyList<SkuDeferral> SkuDeferrals { get; private set; } = [];
+
     /// <summary>The conversion banner (shown only for a settlement paid in another currency).</summary>
     public SettlementRatePanel RatePanel { get; private set; } = default!;
 
@@ -72,6 +78,8 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
         Settlement = settlement;
         Zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
         Deferrals = await deferred.GetSettlementDeferralsAsync(marketplace, id, cancellationToken);
+        DeferredOut = (await deferred.GetDeferredOutAsync(marketplace, [settlement], Amounts, cancellationToken)).GetValueOrDefault(id);
+        SkuDeferrals = await deferred.GetSkuDeferralsAsync(marketplace, settlement, Amounts, cancellationToken);
         var rate = settlement.Currency is not null && settlement.Currency != settlement.HomeCurrency
             ? await rates.GetAsync(marketplace.MarketplaceId, id, cancellationToken)
             : null;
@@ -98,4 +106,13 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
     /// <param name="kind">Which rows.</param>
     /// <returns>A relative URL.</returns>
     public string KindLink(SettlementRowKind kind) => LinkWith(("kind", kind == SettlementRowKind.All ? null : kind.ToString()));
+
+    /// <summary>What Amazon deferred out of this payout for one summary row (its SKU at its price each as paid).</summary>
+    /// <param name="row">A summary row.</param>
+    /// <returns>The deferral, or <see langword="null"/> when none of that SKU and price was held back.</returns>
+    public SkuDeferral? DeferredFor(SettlementSkuSummary row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return SkuDeferrals.FirstOrDefault(d => d.Sku == row.Sku && d.PriceEach == row.SalePrice);
+    }
 }

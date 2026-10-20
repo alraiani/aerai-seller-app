@@ -21,6 +21,15 @@ public sealed class DeferredTransaction
     /// <summary>The Amazon order the transaction belongs to, when it has one.</summary>
     public string? AmazonOrderId { get; set; }
 
+    /// <summary>
+    /// The settlement the sale was made in (Amazon's <c>SETTLEMENT_ID</c>): its period holds the sale, but its
+    /// payout does not. It may be a settlement not imported yet (the one still open).
+    /// </summary>
+    public string? SettlementId { get; set; }
+
+    /// <summary>The products the transaction pays for.</summary>
+    public List<DeferredTransactionItem> Items { get; set; } = [];
+
     /// <summary>Amazon's transaction type, e.g. <c>Shipment</c>.</summary>
     public string? TransactionType { get; set; }
 

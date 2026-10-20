@@ -540,6 +540,16 @@ a.tile:hover { border-color: var(--brand); }
 .deferred-tile .kpi-label .icon { width: 1em; height: 1em; vertical-align: -0.125em; }
 .deferred-tile-foot { text-align: right; }
 @media (max-width: 575.98px) { .deferred-tile-foot { text-align: left; } }
+
+/* Deferred amounts beside settlement money: muted, with a clock, never part of the totals. */
+.deferred-amount { color: var(--muted); text-decoration: none; }
+a.deferred-amount:hover { color: var(--brand); }
+.deferred-amount .icon { width: 0.9em; height: 0.9em; margin-right: 0.25em; vertical-align: -0.1em; }
+.deferred-out { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; font-size: 0.875rem; color: inherit; text-decoration: none; }
+.deferred-out .icon { width: 1em; height: 1em; }
+a.deferred-out:hover strong { color: var(--brand); }
+.deferred-by-sku > summary { cursor: pointer; list-style: none; }
+.deferred-by-sku > summary .icon { width: 1em; height: 1em; vertical-align: -0.125em; }
 .kpi-of { font-size: 0.95rem; font-weight: 500; color: var(--muted); letter-spacing: 0; }
 .kpi-value-sm { font-size: 1.35rem; }
 .kpi-foot .text-truncate { min-width: 0; }

@@ -4,15 +4,25 @@
 @model AERai.Web.UI.Pages.Settlements.DeferredModel
 @{
     ViewData["Title"] = "Deferred by Amazon";
-    var rows = Model.Rows.Items;
-    var released = Model.View == DeferredView.Released;
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var viewLabel = Model.View switch { DeferredView.Released => "paid out since", DeferredView.All => "held or paid out since", _ => "still held" };
     var isFiltered = !string.IsNullOrWhiteSpace(Model.Search);
+    var currency = Model.Marketplace.Currency;
 }
 
 <nav class="crumbs" aria-label="Breadcrumb">
     <a asp-page="Index">Settlements</a>
     <span aria-hidden="true">/</span>
-    <span>Deferred by Amazon</span>
+    @if (Model.IsSingleSettlement)
+    {
+        <a href="@Model.AllSettlementsLink()">Deferred by Amazon</a>
+        <span aria-hidden="true">/</span>
+        <span>@(Model.Settlement == DeferredListFilter.NoSettlement ? "No settlement" : $"Settlement {Model.Settlement}")</span>
+    }
+    else
+    {
+        <span>Deferred by Amazon</span>
+    }
 </nav>
 
 <partial name="_DeferredTile" model="(Model.Overview, Model.Zone)" />
@@ -35,86 +45,174 @@
         }
     </form>
     <nav class="segmented" aria-label="View">
-        <a href="@Model.ViewLink(DeferredView.Deferred)" class="@(released ? "" : "active")"
+        <a href="@Model.ViewLink(DeferredView.Deferred)" class="@(Model.View == DeferredView.Deferred ? "active" : "")"
            data-bs-toggle="tooltip" data-bs-title="What Amazon still holds back.">Still held</a>
-        <a href="@Model.ViewLink(DeferredView.Released)" class="@(released ? "active" : "")"
-           data-bs-toggle="tooltip" data-bs-title="Released into a settlement in the last 30 days.">Released (30 days)</a>
+        <a href="@Model.ViewLink(DeferredView.Released)" class="@(Model.View == DeferredView.Released ? "active" : "")"
+           data-bs-toggle="tooltip" data-bs-title="Deferred sales Amazon has since paid out in a later settlement.">Paid out since</a>
+        <a href="@Model.ViewLink(DeferredView.All)" class="@(Model.View == DeferredView.All ? "active" : "")">All</a>
     </nav>
 </div>
 
-<div class="card">
-    <div class="card-toolbar">
-        <span class="card-toolbar-title list-count">
-            <span class="text-nowrap">@Model.Rows.TotalCount.ToString("N0", CultureInfo.InvariantCulture) transaction@(Model.Rows.TotalCount == 1 ? "" : "s")</span>
-            <span class="text-muted-token fw-normal">in @Model.Marketplace.Name · @(released ? "released" : "still held")</span>
-            <partial name="_Tip" model='"One row per Amazon transaction (usually one per shipped order). Amount is what Amazon will pay out for it, after its fees. DD7 = held until 7 days after delivery; B2B = held until an invoiced business order is paid."' />
-        </span>
-    </div>
-    @if (rows.Count == 0)
-    {
-        <div class="empty-state">
-            @if (isFiltered)
+@if (Model.Rows is { } single)
+{
+    @* ---------- One settlement in full ---------- *@
+    <div class="card">
+        <div class="card-toolbar">
+            <span class="card-toolbar-title list-count">
+                <span class="text-nowrap">@single.TotalCount.ToString("N0", en) transaction@(single.TotalCount == 1 ? "" : "s")</span>
+                <span class="text-muted-token fw-normal">sold in @(Model.Settlement == DeferredListFilter.NoSettlement ? "no settlement" : $"settlement {Model.Settlement}") · @viewLabel</span>
+            </span>
+            @if (Model.Settlement != DeferredListFilter.NoSettlement)
             {
-                <div class="empty-title">No transactions match</div>
-                <div class="empty-detail">Try a different order id.</div>
-            }
-            else if (!Model.Overview.IsSynced)
-            {
-                <div class="empty-title">Not synced yet</div>
-                <div class="empty-detail">Turn on the Deferred payments schedule for @Model.Marketplace.Name, or run it now.</div>
-                <a asp-page="/Tools/Schedules/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"plug"' /> Amazon sync</a>
-            }
-            else
-            {
-                <div class="empty-title">@(released ? "Nothing released in the last 30 days" : "Amazon holds nothing back")</div>
-                <div class="empty-detail">@(released ? "Deferred payouts show here once Amazon pays them into a settlement." : "Every sale so far has been paid out or is in an open settlement.")</div>
+                <a asp-page="Summary" asp-route-id="@Model.Settlement" class="btn btn-sm btn-soft">Settlement summary</a>
             }
         </div>
-    }
-    else
-    {
-        <div class="table-responsive">
-            <table class="table data-table align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Order</th>
-                        <th>Reason</th>
-                        <th><a href="@Model.SortLink(DeferredSort.Posted)" class="sort-link">Posted @Model.SortArrow(DeferredSort.Posted)</a></th>
-                        <th><a href="@Model.SortLink(DeferredSort.Maturity)" class="sort-link">@(released ? "Released" : "Releases on") @Model.SortArrow(DeferredSort.Maturity)</a></th>
-                        <th class="text-end"><a href="@Model.SortLink(DeferredSort.Amount)" class="sort-link">Amount @Model.SortArrow(DeferredSort.Amount)</a></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var r in rows)
-                    {
+        @if (single.Items.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-title">Nothing @viewLabel in this settlement</div>
+                <a href="@Model.ViewLink(DeferredView.All)" class="btn btn-sm btn-soft">Show all</a>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table data-table align-middle mb-0">
+                    <thead>
                         <tr>
-                            <td>
-                                @if (r.AmazonOrderId is { } orderId)
-                                {
-                                    <a asp-page="/Orders/Index" asp-route-q="@orderId" class="fw-semibold text-nowrap">@orderId</a>
-                                }
-                                else
-                                {
-                                    <span class="fw-semibold">No order</span>
-                                }
-                                <div class="cell-sub">@r.Description</div>
-                            </td>
-                            <td><span class="pill pill-info" title="@SettlementFormat.DeferralReasonTitle(r.DeferralReason)">@(r.DeferralReason ?? "—")</span></td>
-                            <td class="text-nowrap">@SettlementFormat.Day(r.PostedDate, Model.Zone)</td>
-                            <td class="text-nowrap">
-                                @SettlementFormat.Day(released ? r.ReleasedAt ?? r.MaturityDate : r.MaturityDate, Model.Zone)
-                                @if (!released && Model.Overview.IsDue(r.MaturityDate))
-                                {
-                                    <span class="pill pill-ok ms-1" title="The release date has passed; Amazon pays it out with the next settlement.">Due</span>
-                                }
-                            </td>
-                            <td class="text-end money fw-semibold @SettlementFormat.AmountClass(r.Amount)">@SettlementFormat.Money(r.Amount, r.Currency ?? Model.Marketplace.Currency)</td>
+                            <th>Order</th>
+                            <th>Reason</th>
+                            <th><a href="@Model.SortLink(DeferredSort.Posted)" class="sort-link">Posted @Model.SortArrow(DeferredSort.Posted)</a></th>
+                            <th><a href="@Model.SortLink(DeferredSort.Maturity)" class="sort-link">Releases on @Model.SortArrow(DeferredSort.Maturity)</a></th>
+                            <th class="text-end"><a href="@Model.SortLink(DeferredSort.Amount)" class="sort-link">Amount @Model.SortArrow(DeferredSort.Amount)</a></th>
                         </tr>
-                    }
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in single.Items)
+                        {
+                            <partial name="_DeferredRow" model="(r, Model.Overview, Model.Zone, currency, false)" />
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+    <partial name="_Pager" model="single.ToPager(Model.Search, Model.CurrentFilters())" />
+}
+else if (Model.Groups is { } groups)
+{
+    @* ---------- One collapsible group per settlement the sales were made in ---------- *@
+    <div class="card">
+        <div class="card-toolbar">
+            <span class="card-toolbar-title list-count">
+                <span class="text-nowrap">@groups.TotalCount.ToString("N0", en) settlement@(groups.TotalCount == 1 ? "" : "s")</span>
+                <span class="text-muted-token fw-normal">in @Model.Marketplace.Name · @viewLabel</span>
+                <partial name="_Tip" model='"Grouped by the settlement the sales were made in (Amazon’s settlement id). That settlement’s payout left them out; Amazon pays them in a later one, about 7 days after delivery. Amount is what Amazon pays out, after its fees."' />
+            </span>
+            @if (groups.Items.Count > 0)
+            {
+                <div class="card-toolbar-group expand-controls">
+                    <button type="button" class="btn btn-sm btn-soft" data-expand-all="true">Expand all</button>
+                    <button type="button" class="btn btn-sm btn-soft" data-expand-all="false">Collapse all</button>
+                </div>
+            }
         </div>
-    }
-</div>
-
-<partial name="_Pager" model="Model.Rows.ToPager(Model.Search, Model.CurrentFilters())" />
+        @if (groups.Items.Count == 0)
+        {
+            <div class="empty-state">
+                @if (isFiltered)
+                {
+                    <div class="empty-title">No transactions match</div>
+                    <div class="empty-detail">Try a different order id.</div>
+                }
+                else if (!Model.Overview.IsSynced)
+                {
+                    <div class="empty-title">Not synced yet</div>
+                    <div class="empty-detail">Turn on the Deferred payments schedule for @Model.Marketplace.Name, or run it now.</div>
+                    <a asp-page="/Tools/Schedules/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"plug"' /> Amazon sync</a>
+                }
+                else
+                {
+                    <div class="empty-title">Nothing @viewLabel</div>
+                    <div class="empty-detail">Every sale so far has been paid out or is in an open settlement.</div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table data-table group-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="toggle-col"><span class="visually-hidden">Expand</span></th>
+                            <th>Settlement · order</th>
+                            <th>Reason</th>
+                            <th>Posted</th>
+                            <th>Releases on</th>
+                            <th class="text-end">Amount</th>
+                        </tr>
+                    </thead>
+                    @for (var i = 0; i < groups.Items.Count; i++)
+                    {
+                        var g = groups.Items[i];
+                        var groupId = $"settlement-{i}";
+                        var first = SettlementFormat.Day(g.FirstRelease, Model.Zone);
+                        var last = SettlementFormat.Day(g.LastRelease, Model.Zone);
+                        <tbody class="order-group" id="@groupId">
+                            <tr class="group-row">
+                                <td class="toggle-col">
+                                    <button type="button" class="btn btn-sm btn-icon group-toggle" data-expand-row aria-expanded="false" aria-controls="@groupId"
+                                            aria-label="Show the @g.Count deferred transactions of @(g.SettlementId ?? "no settlement")">
+                                        <partial name="_Icon" model='"chevron-down"' />
+                                    </button>
+                                </td>
+                                <td colspan="2">
+                                    <div class="fw-semibold">
+                                        @if (g.SettlementId is { } settlementId && g.IsListed)
+                                        {
+                                            <a asp-page="Summary" asp-route-id="@settlementId">Settlement @settlementId</a>
+                                        }
+                                        else
+                                        {
+                                            <span>@(g.SettlementId is { } id ? $"Settlement {id}" : "No settlement")</span>
+                                        }
+                                        @if (g.IsOpen)
+                                        {
+                                            <span class="pill pill-warn ms-1">Open</span>
+                                        }
+                                    </div>
+                                    <div class="cell-sub">
+                                        @Model.GroupPeriod(g)
+                                        · @g.Count.ToString("N0", en) sale@(g.Count == 1 ? "" : "s")
+                                        @if (Model.View != DeferredView.Deferred)
+                                        {
+                                            <span>· @(g.HeldCount == 0 ? "all paid out" : $"{g.HeldCount:N0} still held ({SettlementFormat.Money(g.HeldAmount, g.Currency)})")</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td></td>
+                                <td class="text-nowrap">@(first == last ? first : $"{first} – {last}")</td>
+                                <td class="text-end money fw-semibold @SettlementFormat.AmountClass(g.Amount)">@SettlementFormat.Money(g.Amount, g.Currency)</td>
+                            </tr>
+                            @foreach (var r in g.Rows)
+                            {
+                                <partial name="_DeferredRow" model="(r, Model.Overview, Model.Zone, g.Currency, true)" />
+                            }
+                            @if (g.HasMoreRows)
+                            {
+                                <tr class="group-child">
+                                    <td></td>
+                                    <td colspan="5" class="text-muted-token">
+                                        Showing the first @g.Rows.Count.ToString("N0", en) of @g.Count.ToString("N0", en).
+                                        <a href="@Model.SettlementLink(g.SettlementId)">See all of them</a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    }
+                </table>
+            </div>
+        }
+    </div>
+    <partial name="_Pager" model="groups.ToPager(Model.Search, Model.CurrentFilters())" />
+}

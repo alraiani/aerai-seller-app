@@ -69,17 +69,20 @@ internal sealed class SimulatedOrdersGateway : IAmazonOrdersGateway
         return slots;
     }
 
-    /// <summary>The simulated order placed at a slot: its id, total, and whether it was cancelled.</summary>
+    /// <summary>The simulated order placed at a slot: its id, product, total, and whether it was cancelled.</summary>
     /// <param name="marketplace">Marketplace.</param>
     /// <param name="placed">A time from <see cref="Slots"/>.</param>
-    /// <returns>The order's id, item total, and whether it was cancelled.</returns>
-    internal static (string OrderId, decimal Total, bool Cancelled) Describe(Marketplace marketplace, DateTimeOffset placed)
+    /// <returns>The order's id, its one product and quantity, item total, and whether it was cancelled.</returns>
+    internal static (string OrderId, string Sku, string Asin, int Quantity, decimal Total, bool Cancelled) Describe(Marketplace marketplace, DateTimeOffset placed)
     {
         var seed = Seed(marketplace, placed);
-        var price = SimulatedReportsGateway.Catalog[(int)(seed % (uint)SimulatedReportsGateway.Catalog.Length)].Price;
+        var (sku, asin, _, price) = SimulatedReportsGateway.Catalog[(int)(seed % (uint)SimulatedReportsGateway.Catalog.Length)];
         var quantity = 1 + (int)(seed % 3);
         var prefix = marketplace.Code switch { "US" => "111", "CA" => "701", _ => "203" };
         return (FormattableString.Invariant($"{prefix}-{(seed % 9_000_000) + 1_000_000}-{placed:HHmmss}"),
+            sku,
+            asin,
+            quantity,
             price * (marketplace.Code == "UK" ? 0.8m : 1m) * quantity,
             seed % 17 == 0);
     }

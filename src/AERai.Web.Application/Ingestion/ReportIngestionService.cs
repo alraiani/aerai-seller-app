@@ -74,9 +74,17 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     public static readonly TimeSpan DeferredListingAge = TimeSpan.FromDays(179);
 
     /// <summary>
-    /// Stops a run whose next-page tokens never end (an Amazon fault) instead of looping forever.
+    /// How far before the last successful run the released listing starts once the release history has been
+    /// read. Amazon filters by the date the sale posted, not the release, and an invoiced (B2B) order can be
+    /// held for weeks, so the window reaches well past the delivery-date policy's week.
     /// </summary>
-    private const int MaxDeferredPages = 1_000;
+    public static readonly TimeSpan ReleasedOverlap = TimeSpan.FromDays(60);
+
+    /// <summary>
+    /// Stops a run whose next-page tokens never end (an Amazon fault) instead of looping forever. At 500
+    /// transactions a page this allows 1,000,000.
+    /// </summary>
+    private const int MaxDeferredPages = 2_000;
 
     /// <summary>Raw landing-zone folder for Orders API pages.</summary>
     public const string OrdersApiRawFolder = "ordersapi";
@@ -589,29 +597,56 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     }
 
     /// <summary>
-    /// Lists every transaction Amazon still defers for the marketplace, lands each page in raw storage, and
-    /// records the complete listing.
+    /// Lists every transaction Amazon still defers for the marketplace and those it released recently, lands
+    /// each page in raw storage, and records both listings together.
     /// </summary>
     /// <remarks>
-    /// Like AWD, all pages are read before anything is written: a stored deferral missing from the listing
-    /// is taken as released, so a partial listing would release transactions Amazon still holds.
+    /// Like AWD, all pages are read before anything is written: a stored deferral missing from both listings is
+    /// taken as released, so a partial listing would release transactions Amazon still holds. The released
+    /// listing reaches back as far as Amazon allows until the marketplace's release history has been read once,
+    /// then only <see cref="ReleasedOverlap"/> before the last successful run.
     /// </remarks>
     private async Task IngestDeferredTransactionsAsync(RunContext context, CancellationToken cancellationToken)
     {
         var startedAt = context.Run.StartedAt;
-        var postedAfter = startedAt - DeferredListingAge;
-        var items = new Dictionary<string, DeferredTransactionItem>(StringComparer.Ordinal);
+        var earliest = startedAt - DeferredListingAge;
+        var held = await ListDeferredAsync(context, DeferredTransactionListing.StillDeferred, earliest, "deferred-held", cancellationToken).ConfigureAwait(false);
+
+        var releasedAfter = earliest;
+        if (context.Schedule.LastSuccessfulDataEnd is { } previousEnd
+            && previousEnd - ReleasedOverlap > earliest
+            && await _deferred.HasReleaseHistoryAsync(context.Schedule.MarketplaceId, cancellationToken).ConfigureAwait(false))
+        {
+            releasedAfter = previousEnd - ReleasedOverlap;
+        }
+
+        var released = await ListDeferredAsync(context, DeferredTransactionListing.Released, releasedAfter, "deferred-released", cancellationToken).ConfigureAwait(false);
+
+        context.Run.DataStart = earliest;
+        context.Run.DataEnd = startedAt;
+        var result = await _deferred.ApplyAsync(context.Schedule.MarketplaceId, held.Items, released.Items, _clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        context.RowsWritten = result.Deferred + result.Released;
+        context.Notes.Add(string.Create(CultureInfo.InvariantCulture,
+            $"Amazon holds {result.Deferred:N0} deferred transaction{(result.Deferred == 1 ? "" : "s")}; {result.Released:N0} released since {releasedAfter:yyyy-MM-dd} ({result.NewlyReleased:N0} newly). {held.Pages + released.Pages:N0} pages."));
+        context.CoveredUntil = startedAt;
+    }
+
+    /// <summary>Reads every page of one deferred listing, landing each page in raw storage.</summary>
+    private async Task<(IReadOnlyCollection<AmazonDeferredTransaction> Items, int Pages)> ListDeferredAsync(
+        RunContext context, DeferredTransactionListing listing, DateTimeOffset postedAfter, string filePrefix, CancellationToken cancellationToken)
+    {
+        var items = new Dictionary<string, AmazonDeferredTransaction>(StringComparer.Ordinal);
         string? nextToken = null;
         var pages = 0;
         do
         {
             if (++pages > MaxDeferredPages)
             {
-                throw new InvalidOperationException($"Deferred transactions listing did not end after {MaxDeferredPages} pages.");
+                throw new InvalidOperationException($"Deferred transactions listing ({listing}) did not end after {MaxDeferredPages} pages.");
             }
 
-            var page = await _financesGateway.ListTransactionsPageAsync(context.Marketplace, postedAfter, nextToken, cancellationToken).ConfigureAwait(false);
-            await LandJsonPageAsync(context, DeferredRawFolder, "deferred-transactions", page.RawJson, pages, cancellationToken).ConfigureAwait(false);
+            var page = await _financesGateway.ListTransactionsPageAsync(context.Marketplace, listing, postedAfter, nextToken, cancellationToken).ConfigureAwait(false);
+            await LandJsonPageAsync(context, DeferredRawFolder, filePrefix, page.RawJson, pages, cancellationToken).ConfigureAwait(false);
             foreach (var item in page.Items)
             {
                 items[item.TransactionId] = item;
@@ -621,13 +656,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         }
         while (nextToken is not null);
 
-        context.Run.DataStart = postedAfter;
-        context.Run.DataEnd = startedAt;
-        var result = await _deferred.ApplyAsync(context.Schedule.MarketplaceId, items.Values, _clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-        context.RowsWritten = result.Deferred;
-        context.Notes.Add(string.Create(CultureInfo.InvariantCulture,
-            $"Amazon holds {result.Deferred:N0} deferred transaction{(result.Deferred == 1 ? "" : "s")}; {result.NewlyReleased:N0} released since the last run ({pages:N0} page{(pages == 1 ? "" : "s")})."));
-        context.CoveredUntil = startedAt;
+        return (items.Values, pages);
     }
 
     /// <summary>

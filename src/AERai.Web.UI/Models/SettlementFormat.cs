@@ -175,6 +175,23 @@ public static class SettlementFormat
         _ => "pill pill-info",
     };
 
+    /// <summary>A tooltip describing what Amazon deferred out of a payout.</summary>
+    /// <param name="deferred">The settlement's deferrals.</param>
+    /// <param name="zone">The marketplace's time zone.</param>
+    /// <returns>e.g. "1,007 sales from this period held out of this payout · $245.10 still held · released Oct 18 – Oct 29".</returns>
+    public static string DeferredTitle(DeferredOut deferred, TimeZoneInfo zone)
+    {
+        ArgumentNullException.ThrowIfNull(deferred);
+        var held = deferred.IsAllReleased ? "all paid out since" : $"{Money(deferred.HeldAmount, deferred.Currency)} still held";
+        var range = (Day(deferred.FirstRelease, zone), Day(deferred.LastRelease, zone)) switch
+        {
+            ({ } first, { } last) when first == last => $" · releases {first}",
+            ({ } first, { } last) => $" · releases {first} – {last}",
+            _ => string.Empty,
+        };
+        return $"{deferred.Count.ToString("N0", Culture)} sale{(deferred.Count == 1 ? "" : "s")} from this period held out of this payout (not in Net) · {held}{range}";
+    }
+
     /// <summary>What an Amazon deferral policy means, for a tooltip.</summary>
     /// <param name="reason">The policy code, e.g. <c>DD7</c>.</param>
     /// <returns>e.g. "Held until 7 days after delivery".</returns>

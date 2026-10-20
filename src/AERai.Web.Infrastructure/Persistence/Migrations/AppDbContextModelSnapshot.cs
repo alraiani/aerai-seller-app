@@ -325,6 +325,10 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ReleasedAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("SettlementId")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -338,9 +342,50 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AmazonOrderId");
 
+                    b.HasIndex("SettlementId");
+
                     b.HasIndex("MarketplaceId", "Status");
 
                     b.ToTable("DeferredTransaction", "core");
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.DeferredTransactionItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Asin")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<decimal>("Principal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Sku")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("TransactionId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TransactionId");
+
+                    b.ToTable("DeferredTransactionItem", "core");
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Core.HomeStock", b =>
@@ -2521,6 +2566,15 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.DeferredTransactionItem", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.DeferredTransaction", null)
+                        .WithMany("Items")
+                        .HasForeignKey("TransactionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.HomeStock", b =>
                 {
                     b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
@@ -2838,6 +2892,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.DeferredTransaction", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Core.Order", b =>

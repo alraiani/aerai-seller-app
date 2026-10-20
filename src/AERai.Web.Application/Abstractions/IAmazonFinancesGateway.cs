@@ -10,12 +10,13 @@ namespace AERai.Web.Application.Abstractions;
 /// </summary>
 public interface IAmazonFinancesGateway
 {
-    /// <summary>Gets one page of the transactions Amazon still holds (<c>transactionStatus=DEFERRED</c>).</summary>
+    /// <summary>Gets one page of the transactions Amazon still holds, or of those it deferred and has since released.</summary>
     /// <param name="marketplace">Marketplace being synced; its region selects the endpoint and credentials.</param>
+    /// <param name="listing">Still held, or released.</param>
     /// <param name="postedAfter">Only transactions posted on or after this instant (Amazon allows a window of up to 180 days).</param>
     /// <param name="nextToken">Token from the previous page, or <see langword="null"/> for the first page.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The page, with the token for the next one.</returns>
     Task<DeferredTransactionPage> ListTransactionsPageAsync(
-        Marketplace marketplace, DateTimeOffset postedAfter, string? nextToken, CancellationToken cancellationToken);
+        Marketplace marketplace, DeferredTransactionListing listing, DateTimeOffset postedAfter, string? nextToken, CancellationToken cancellationToken);
 }

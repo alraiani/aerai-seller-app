@@ -22,9 +22,11 @@ namespace AERai.Web.Application.Dashboard;
 /// </remarks>
 /// <param name="queries">Dashboard read queries.</param>
 /// <param name="inventory">Stock, velocity, and days of inventory (shared with the Inventory page).</param>
+/// <param name="deferred">What Amazon deferred out of the latest payout.</param>
 /// <param name="options">Dashboard settings.</param>
 /// <param name="clock">Clock that defines "now".</param>
-public sealed class DashboardService(IDashboardQueries queries, IInventoryService inventory, IOptions<DashboardOptions> options, TimeProvider clock) : IDashboardService
+public sealed class DashboardService(
+    IDashboardQueries queries, IInventoryService inventory, IDeferredPaymentService deferred, IOptions<DashboardOptions> options, TimeProvider clock) : IDashboardService
 {
     /// <summary>Window for "selling" SKUs and for SKUs missing a cost.</summary>
     private const int SellingWindowDays = 30;
@@ -63,6 +65,10 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
         var missingCost = await queries.GetSoldSkusMissingCostAsync(id, now.AddDays(-SellingWindowDays), cancellationToken).ConfigureAwait(false);
         var awaitingPromotion = await queries.CountBatchesAwaitingPromotionAsync(id, cancellationToken).ConfigureAwait(false);
         var sync = await queries.GetSyncHealthAsync(id, cancellationToken).ConfigureAwait(false);
+        var latestDeferred = settlement is null
+            ? null
+            : (await deferred.GetDeferredOutAsync(marketplace, [settlement], SettlementAmounts.Home, cancellationToken).ConfigureAwait(false))
+                .GetValueOrDefault(settlement.SettlementId);
         var syncPaused = await queries.IsSyncPausedAsync(cancellationToken).ConfigureAwait(false);
         var coverageStart = await queries.GetOrdersCoverageStartAsync(id, cancellationToken).ConfigureAwait(false);
 
@@ -99,7 +105,7 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
             Inventory: stock,
             LatestPayout: settlement is null
                 ? null
-                : PayoutOf(settlement, marketplace.Currency, zone),
+                : PayoutOf(settlement, marketplace.Currency, zone, latestDeferred),
             Sync: sync,
             SalesCoverageStart: coverageStart,
             ComparisonAvailable: comparable);
@@ -108,16 +114,21 @@ public sealed class DashboardService(IDashboardQueries queries, IInventoryServic
     /// <summary>
     /// The latest payout in the marketplace's currency. Amazon lists every North America payout with the
     /// United States, so it may have been paid in CAD or MXN; it is shown converted and tagged with where it
-    /// came from. Its period is in local time, so it reads as the dates Seller Central shows.
+    /// came from. Its period is in local time, so it reads as the dates Seller Central shows. The part of the
+    /// period's sales Amazon still holds is shown beside it.
     /// </summary>
-    private static PayoutGlance PayoutOf(SettlementSummary settlement, string currency, TimeZoneInfo zone)
+    private static PayoutGlance PayoutOf(SettlementSummary settlement, string currency, TimeZoneInfo zone, DeferredOut? deferredOut)
     {
         var money = SettlementMoney.Of(settlement, SettlementAmounts.Home);
         return new PayoutGlance(
             settlement.SettlementId,
             settlement.PeriodStart is { } start ? TimeZoneInfo.ConvertTime(start, zone) : null,
             settlement.PeriodEnd is { } end ? TimeZoneInfo.ConvertTime(end, zone) : null, money.Net, money.Sales, money.Expenses, money.Refunds, currency,
-            money.IsConverted ? SettlementOrigin.FromCurrency(settlement.Currency) : null);
+            money.IsConverted ? SettlementOrigin.FromCurrency(settlement.Currency) : null)
+        {
+            DeferredHeld = deferredOut is { HeldCount: > 0 } held ? held.HeldAmount : null,
+            DeferredUntil = deferredOut is { HeldCount: > 0 } ? deferredOut.LastRelease : null,
+        };
     }
 
     private static decimal Revenue(IEnumerable<SalesLine> lines) => lines.Sum(l => l.ItemPrice);

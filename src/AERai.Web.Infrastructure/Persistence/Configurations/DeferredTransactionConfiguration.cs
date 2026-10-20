@@ -21,10 +21,15 @@ internal sealed class DeferredTransactionConfiguration : IEntityTypeConfiguratio
         builder.Property(t => t.Currency).HasMaxLength(3);
         builder.Property(t => t.DeferralReason).HasMaxLength(32);
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(16);
+        builder.Property(t => t.SettlementId).HasMaxLength(32);
+        builder.HasMany(t => t.Items).WithOne().HasForeignKey(i => i.TransactionId).OnDelete(DeleteBehavior.Cascade);
 
         // The tile and the sync read a marketplace's held transactions; the settlement and order markers look up by order.
         builder.HasIndex(t => new { t.MarketplaceId, t.Status });
         builder.HasIndex(t => t.AmazonOrderId);
+
+        // The settlement pages add up what each settlement's sales had held back.
+        builder.HasIndex(t => t.SettlementId);
         builder.HasOne<Marketplace>().WithMany().HasForeignKey(t => t.MarketplaceId).OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -172,3 +172,69 @@
     }
 </div>
 <partial name="_Pager" model="Model.Groups.ToPager(Model.Search, Model.CurrentFilters())" />
+
+@if (Model.DeferredLines.Count > 0)
+{
+    var deferredTotal = Model.DeferredLines.Sum(d => d.Amount);
+    var deferredCurrency = Model.DeferredLines[0].Currency;
+    @* Units of this SKU and price sold in this period that Amazon held back: paid in a later settlement, so not in the totals above. *@
+    <div class="card mt-3">
+        <div class="card-toolbar">
+            <span class="card-toolbar-title list-count">
+                <partial name="_Icon" model='"clock"' />
+                Deferred out of this payout
+                <span class="text-muted-token fw-normal">· @Model.DeferredLines.Count.ToString("N0", CultureInfo.InvariantCulture) item@(Model.DeferredLines.Count == 1 ? "" : "s") · @SettlementFormat.Money(deferredTotal, deferredCurrency) · not in the totals above</span>
+                <partial name="_Tip" model='"Units of this SKU and price sold in this period that Amazon held back (about 7 days after delivery). Amazon pays them out in a later settlement, where they appear as ordinary order lines."' />
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="table data-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Reason</th>
+                        <th>Releases on</th>
+                        <th class="text-end">Units</th>
+                        <th class="text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in Model.DeferredLines)
+                    {
+                        var released = d.Status == AERai.Web.Domain.Core.DeferredTransactionStatus.Released;
+                        <tr>
+                            <td>
+                                @if (d.AmazonOrderId is { } orderId)
+                                {
+                                    <a asp-page="/Orders/Index" asp-route-q="@orderId" class="fw-semibold text-nowrap">@orderId</a>
+                                }
+                                else
+                                {
+                                    <span class="fw-semibold">No order</span>
+                                }
+                            </td>
+                            <td><span class="pill pill-info" title="@SettlementFormat.DeferralReasonTitle(d.DeferralReason)">@(d.DeferralReason ?? "—")</span></td>
+                            <td class="text-nowrap">
+                                @SettlementFormat.Day(released ? d.ReleasedAt ?? d.MaturityDate : d.MaturityDate, Model.Zone)
+                                @if (released)
+                                {
+                                    <span class="pill pill-ok ms-1">Paid out</span>
+                                }
+                                else if (d.MaturityDate <= Model.Now)
+                                {
+                                    <span class="pill pill-ok ms-1" title="The release date has passed; Amazon pays it out with the next settlement.">Due</span>
+                                }
+                                else
+                                {
+                                    <span class="pill pill-info ms-1">Held</span>
+                                }
+                            </td>
+                            <td class="text-end money">@d.Quantity.ToString("N0", CultureInfo.InvariantCulture)</td>
+                            <td class="text-end money fw-semibold">@SettlementFormat.Money(d.Amount, d.Currency)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
