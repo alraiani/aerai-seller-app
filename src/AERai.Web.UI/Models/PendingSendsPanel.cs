@@ -12,6 +12,12 @@ namespace AERai.Web.UI.Models;
 /// <param name="Query">The search and view, kept on the way back after each action.</param>
 public sealed record PendingSendsPanel(IReadOnlyList<PendingSendItem> Items, bool CanEdit, TimeZoneInfo Zone, int ExpiryDays, int? FamilyId, bool Filtered = false, PendingSendFilter? Query = null)
 {
+    /// <summary>The listed sends grouped by the save they were logged in, oldest first.</summary>
+    public IReadOnlyList<PendingSendGroup> Groups { get; } = PendingSendGroup.GroupBySend(Items);
+
+    /// <summary>Distinct SKUs across the listed sends.</summary>
+    public int SkuCount => Items.Select(i => i.Send.Sku).Distinct(StringComparer.Ordinal).Count();
+
     /// <summary>Units pending across the listed sends.</summary>
     public int Units => Items.Sum(i => i.Send.Pending);
 

@@ -45,9 +45,9 @@
 <div class="card">
     <div class="card-toolbar">
         <span class="card-toolbar-title list-count">
-            <span class="text-nowrap">@panel.Items.Count.ToString("N0", en) send@(panel.Items.Count == 1 ? "" : "s")</span>
-            <span class="text-muted-token fw-normal">@panel.Units.ToString("N0", en) units in @Model.Marketplace.Name</span>
-            <partial name="_Tip" model='$"Units sent from home stock that Amazon’s numbers don’t show yet. They count as Amazon stock so the Worksheet doesn’t suggest sending them again, and clear on their own once an inventory sync shows them (a send with an FBA shipment id is matched by its inbound units). After {panel.ExpiryDays} days a send is flagged for someone to check."' />
+            <span class="text-nowrap">@panel.Groups.Count.ToString("N0", en) send@(panel.Groups.Count == 1 ? "" : "s")</span>
+            <span class="text-muted-token fw-normal">@panel.SkuCount.ToString("N0", en) SKU@(panel.SkuCount == 1 ? "" : "s") · @panel.Units.ToString("N0", en) units in @Model.Marketplace.Name</span>
+            <partial name="_Tip" model='$"Units sent from home stock that Amazon’s numbers don’t show yet. Each group is one send (everything logged in one save); expand it for its SKUs. They count as Amazon stock so the Worksheet doesn’t suggest sending them again, and clear on their own once an inventory sync shows them (a send with an FBA shipment id is matched by its inbound units). After {panel.ExpiryDays} days a send is flagged for someone to check."' />
         </span>
         <nav class="segmented segmented-sm" aria-label="Which sends">
             <a href="@ViewLink(PendingSendView.All)" class="@(Model.View == PendingSendView.All ? "active" : "")">All <span class="segmented-count">@list.Total</span></a>

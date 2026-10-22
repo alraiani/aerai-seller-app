@@ -238,6 +238,36 @@
         update();
     }
 
+    // A [data-select-group] box ticks or clears every [data-select-row] in its <tbody> (e.g. all the sends of one
+    // shipment) and shows whether all, some, or none of them are ticked. The rows' own change events keep the
+    // bulk bar's count right.
+    function syncSelectGroup(group) {
+        var box = group.querySelector("[data-select-group]");
+        if (!box) { return; }
+        var rows = group.querySelectorAll("[data-select-row]");
+        var ticked = 0;
+        rows.forEach(function (row) { if (row.checked) { ticked++; } });
+        box.checked = rows.length > 0 && ticked === rows.length;
+        box.indeterminate = ticked > 0 && ticked < rows.length;
+    }
+    document.addEventListener("change", function (event) {
+        var target = event.target;
+        if (!target.matches) { return; }
+        var group = target.closest("tbody");
+        if (target.matches("[data-select-group]") && group) {
+            // Read once: each row's change re-syncs this box, which would flip it partway through.
+            var on = target.checked;
+            group.querySelectorAll("[data-select-row]").forEach(function (row) {
+                row.checked = on;
+                row.dispatchEvent(new Event("change", { bubbles: true }));
+            });
+        } else if (target.matches("[data-select-row]") && group) {
+            syncSelectGroup(group);
+        } else if (target.matches("[data-select-all]")) {
+            document.querySelectorAll("[data-select-group]").forEach(function (box) { syncSelectGroup(box.closest("tbody")); });
+        }
+    });
+
     // ---------- Unsaved-changes bar ----------
     // In a [data-dirty-form], inputs marked [data-original] are compared with their starting value:
     // changed ones get .is-changed, the [data-save-bar] shows how many, and leaving the page asks first.
@@ -479,8 +509,8 @@
     }
     document.addEventListener("click", function (event) {
         var row = event.target.closest && event.target.closest("[data-expand-row]");
-        // A click anywhere on a group's parent row (other than a link) toggles it too.
-        var parent = !row && event.target.closest && !event.target.closest("a, button") && event.target.closest(".group-row");
+        // A click anywhere on a group's parent row (other than a link or a form control) toggles it too.
+        var parent = !row && event.target.closest && !event.target.closest("a, button, input, select, textarea, label") && event.target.closest(".group-row");
         if (parent) { row = parent.querySelector("[data-expand-row]"); }
         if (row) {
             setExpanded(row, row.getAttribute("aria-expanded") !== "true");
