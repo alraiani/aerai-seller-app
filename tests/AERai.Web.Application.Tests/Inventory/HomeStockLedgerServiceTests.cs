@@ -262,4 +262,44 @@ public sealed class HomeStockLedgerServiceTests
         Assert.Equal(new AmazonBaseline(0, null), _repository.Entries[1].AmazonBaseline); // Nothing at Amazon yet.
         Assert.Single(_refresh.Requests);
     }
+
+    private static HomeStockLedgerGroup Group(HomeStockMovementType type, int count) =>
+        new(type, count, 1, 0, 0, new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero), []);
+
+    [Fact]
+    public async Task GetGroupsAsync_OrdersByActionAndDropsEmptyKinds()
+    {
+        _repository.Groups.AddRange(
+        [
+            Group(HomeStockMovementType.OpeningBalance, 3),
+            Group(HomeStockMovementType.CountCorrection, 2),
+            Group(HomeStockMovementType.Other, 0),
+            Group(HomeStockMovementType.ReceivedFromSupplier, 4),
+            Group(HomeStockMovementType.ShippedToAmazon, 5),
+        ]);
+
+        var groups = await CreateService().GetGroupsAsync(Us, new HomeStockLedgerFilter(), "  FOB  ", CancellationToken.None);
+
+        Assert.Equal(
+            [HomeStockMovementType.ShippedToAmazon, HomeStockMovementType.ReceivedFromSupplier, HomeStockMovementType.CountCorrection, HomeStockMovementType.OpeningBalance],
+            groups.Select(g => g.Type));
+        Assert.Equal(("FOB", HomeStockLedgerService.MaxGroupRows), _repository.LastGroupsCall);
+    }
+
+    [Fact]
+    public async Task GetGroupsAsync_BlankSearch_SearchesNothing()
+    {
+        await CreateService().GetGroupsAsync(Us, new HomeStockLedgerFilter(), " ", CancellationToken.None);
+
+        Assert.Null(_repository.LastGroupsCall?.Search);
+    }
+
+    [Fact]
+    public void HomeStockLedgerGroup_NetsUnitsAndKnowsWhenEntriesAreCapped()
+    {
+        var entry = new HomeStockLedgerEntry(1, "FOB00BL", null, null, _clock.GetUtcNow(), HomeStockMovementType.CountCorrection, 5, 5, null, null, null, null, _clock.GetUtcNow(), User);
+        var group = new HomeStockLedgerGroup(HomeStockMovementType.CountCorrection, 2, 1, 12, -5, _clock.GetUtcNow(), [entry]);
+
+        Assert.Equal((7, true), (group.NetUnits, group.IsCapped));
+    }
 }

@@ -29,8 +29,18 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
     /// <summary>Families for the filter.</summary>
     public IReadOnlyList<ProductFamily> Families { get; private set; } = [];
 
-    /// <summary>The page of entries.</summary>
+    /// <summary>The page of entries (the All entries view).</summary>
     public PagedResult<HomeStockLedgerEntry> Entries { get; private set; } = default!;
+
+    /// <summary>One group per kind of movement (the By movement view).</summary>
+    public IReadOnlyList<HomeStockLedgerGroup> Groups { get; private set; } = [];
+
+    /// <summary>Grouped by movement (the default) or every entry in order, from <c>?view=</c>.</summary>
+    [BindProperty(SupportsGet = true, Name = "view")]
+    public HomeStockLedgerView View { get; set; }
+
+    /// <summary>The <c>view</c> value for links and redirects; absent for the default view.</summary>
+    public string? ViewParam => View == HomeStockLedgerView.ByMovement ? null : View.ToString();
 
     /// <summary>Exactly this SKU, from <c>?sku=</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "sku")]
@@ -83,6 +93,7 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
         ["type"] = Type?.ToString(),
         ["from"] = From?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
         ["to"] = To?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+        ["view"] = ViewParam,
     }.Where(kv => kv.Value is not null).ToDictionary(kv => kv.Key, kv => kv.Value!); // Non-null: filtered.
 
     /// <summary>Label for a movement type.</summary>
@@ -112,6 +123,23 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
     /// <param name="instant">The instant.</param>
     /// <returns>The same instant with the local offset.</returns>
     public DateTimeOffset Local(DateTimeOffset instant) => TimeZoneInfo.ConvertTime(instant, Zone);
+
+    /// <summary>
+    /// A link to every entry of one kind of movement in the All entries view, keeping the other filters
+    /// (for a group that lists only its newest entries).
+    /// </summary>
+    /// <param name="type">The kind of movement.</param>
+    /// <returns>The link.</returns>
+    public string AllEntriesLink(HomeStockMovementType type) => Url.Page("Ledger", new
+    {
+        q = Search,
+        sku = Sku,
+        family = FamilyId,
+        type,
+        from = From?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+        to = To?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+        view = nameof(HomeStockLedgerView.Entries),
+    })!; // Non-null: this page always resolves.
 
     /// <summary>Lists entries.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
@@ -149,7 +177,7 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
             if (result.IsSuccess)
             {
                 TempData[StatusMessage.Success] = result.Value;
-                return RedirectToPage(new { sku = Sku, family = FamilyId });
+                return RedirectToPage(new { sku = Sku, family = FamilyId, view = ViewParam });
             }
 
             ModelState.AddModelError(string.Empty, result.Error);
@@ -174,7 +202,7 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
         await LoadMarketplaceAsync(cancellationToken);
         var result = await ledger.ReverseAsync(Marketplace.MarketplaceId, id, User.Identity!.Name!, cancellationToken);
         TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? $"Entry #{id} reversed." : result.Error;
-        return RedirectToPage(new { sku = Sku, family = FamilyId, p = PageNumber });
+        return RedirectToPage(new { sku = Sku, family = FamilyId, view = ViewParam, p = PageNumber });
     }
 
     private async Task LoadMarketplaceAsync(CancellationToken cancellationToken)
@@ -193,7 +221,14 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
             Type,
             From is { } from ? LocalTime.StartOfDay(from, Zone) : null,
             To is { } to ? LocalTime.StartOfDay(to.AddDays(1), Zone) : null);
-        Entries = await ledger.ListAsync(Marketplace.MarketplaceId, filter, new PageRequest(PageNumber, 50, Search), cancellationToken);
+        if (View == HomeStockLedgerView.Entries)
+        {
+            Entries = await ledger.ListAsync(Marketplace.MarketplaceId, filter, new PageRequest(PageNumber, 50, Search), cancellationToken);
+        }
+        else
+        {
+            Groups = await ledger.GetGroupsAsync(Marketplace.MarketplaceId, filter, Search, cancellationToken);
+        }
     }
 
     /// <summary>The Log movement form fields.</summary>

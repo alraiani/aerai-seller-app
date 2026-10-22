@@ -702,6 +702,9 @@ th .tip { text-transform: none; }
 .is-sticky > .table > thead th,
 .table-scroll > .table > thead th { position: sticky; top: var(--sticky-head, 0); z-index: 2; background-color: var(--sticky-th-bg, var(--surface)); box-shadow: inset 0 -1px 0 var(--border); }
 .table-scroll > .table > thead th { top: 0; }
+/* A second header row (the Worksheet's totals) sticks under the first; site.js sets --sticky-row1 to its height. */
+.is-sticky > .table > thead tr + tr th { top: calc(var(--sticky-head, 0px) + var(--sticky-row1, 0px)); }
+.table-scroll > .table > thead tr + tr th { top: var(--sticky-row1, 0px); }
 .data-table, .schedule-table { --sticky-th-bg: var(--surface-2); }
 .has-sticky-head > .card-toolbar {
     position: sticky; top: 0; z-index: 3; background: var(--surface);
@@ -805,7 +808,8 @@ th .tip { text-transform: none; }
 .worksheet-table tr.group-head > th { background: color-mix(in srgb, var(--sku, var(--muted)) 10%, var(--surface)); color: var(--text); font-size: 0.8rem; text-transform: none; letter-spacing: 0; border-top: 1px solid var(--border); }
 .worksheet-table tr.group-head .group-name { display: inline-flex; align-items: center; gap: 0.45rem; font-weight: 700; color: var(--sku, var(--text)); }
 .worksheet-table tr.group-head .group-sub { font-weight: 600; color: var(--muted); }
-.worksheet-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); background: var(--surface-2); }
+.worksheet-table thead tr.totals-row > th { font-size: 0.85rem; font-weight: 700; color: var(--text); text-transform: none; letter-spacing: 0; background: var(--surface-2); box-shadow: inset 0 -2px 0 var(--border); }
+.worksheet-table thead tr.totals-row .cell-sub { font-weight: 600; }
 .worksheet-table .col-send { background: color-mix(in srgb, var(--brand) 5%, transparent); }
 .worksheet-table .home-input { width: 6.5rem; margin-left: auto; text-align: right; }
 .worksheet-table .home-input.is-changed { border-color: var(--brand); box-shadow: 0 0 0 0.15rem var(--brand-soft); }
@@ -859,6 +863,9 @@ th .tip { text-transform: none; }
     .worksheet-table .home-input { border: 0; box-shadow: none; padding: 0; width: auto; }
     .worksheet-table .sku-cell { position: static; }
     .worksheet-table tr { break-inside: avoid; }
+    /* Printing one row group ([data-print-group]): the others are left out, and the toggles mean nothing on paper. */
+    .printing-group .group-table tbody.order-group:not(.is-printing) { display: none; }
+    .group-table .group-toggle, .expand-controls { display: none !important; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 

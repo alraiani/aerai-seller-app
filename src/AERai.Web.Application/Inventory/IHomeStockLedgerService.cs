@@ -55,4 +55,15 @@ public interface IHomeStockLedgerService
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The page.</returns>
     Task<PagedResult<HomeStockLedgerEntry>> ListAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Entries grouped by kind of movement, in a fixed order (shipped to Amazon, received from supplier,
+    /// count correction, other, opening balance); kinds without a matching entry are left out.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="filter">Filters.</param>
+    /// <param name="search">Text matched against SKU, title, reference, or note; blank for none.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The groups, each with its newest entries.</returns>
+    Task<IReadOnlyList<HomeStockLedgerGroup>> GetGroupsAsync(string marketplaceId, HomeStockLedgerFilter filter, string? search, CancellationToken cancellationToken);
 }

@@ -57,4 +57,13 @@ public interface IHomeStockLedgerRepository
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The page.</returns>
     Task<PagedResult<HomeStockLedgerEntry>> ListAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, CancellationToken cancellationToken);
+
+    /// <summary>A marketplace's entries grouped by kind of movement, in no particular order.</summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="filter">SKU, family, type, and date range.</param>
+    /// <param name="search">Text matched against SKU, title, reference, or note; <see langword="null"/> for none.</param>
+    /// <param name="maxRows">Most entries to return per group (the newest).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>One group per kind that has a matching entry.</returns>
+    Task<IReadOnlyList<HomeStockLedgerGroup>> ListGroupsAsync(string marketplaceId, HomeStockLedgerFilter filter, string? search, int maxRows, CancellationToken cancellationToken);
 }

@@ -31,6 +31,11 @@ public sealed partial class HomeStockLedgerService(
     /// <summary>Longest note accepted.</summary>
     public const int MaxNoteLength = 500;
 
+    /// <summary>
+    /// Most entries one group of the ledger's grouped view lists; the page links to the full list for the rest.
+    /// </summary>
+    public const int MaxGroupRows = 250;
+
     private static readonly IReadOnlyDictionary<string, AmazonBaseline> NoBaselines = new Dictionary<string, AmazonBaseline>();
 
     /// <summary>How far ahead a movement may be dated (clock skew between browser and server).</summary>
@@ -219,6 +224,26 @@ public sealed partial class HomeStockLedgerService(
 
         return repository.ListAsync(marketplaceId, filter, request, cancellationToken);
     }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<HomeStockLedgerGroup>> GetGroupsAsync(string marketplaceId, HomeStockLedgerFilter filter, string? search, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var groups = await repository.ListGroupsAsync(marketplaceId, filter, string.IsNullOrWhiteSpace(search) ? null : search.Trim(), MaxGroupRows, cancellationToken).ConfigureAwait(false);
+        return [.. groups.Where(g => g.EntryCount > 0).OrderBy(g => GroupOrder(g.Type))];
+    }
+
+    // Day-to-day movements first: sends and deliveries are what people look for, the opening balance least.
+    private static int GroupOrder(HomeStockMovementType type) => type switch
+    {
+        HomeStockMovementType.ShippedToAmazon => 0,
+        HomeStockMovementType.ReceivedFromSupplier => 1,
+        HomeStockMovementType.CountCorrection => 2,
+        HomeStockMovementType.Other => 3,
+        _ => 4,
+    };
 
     private static string? Validate(HomeStockMovementInput input, string sku, string? reference, string? note, DateTimeOffset now)
     {

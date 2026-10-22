@@ -38,14 +38,27 @@
         <button type="submit" class="btn btn-sm btn-soft" data-bulk-button><partial name="_Icon" model='"check"' /> Add to ticked</button>
     </form>
 }
+@* One group per send (the sends logged in one save); a few groups, or a search, open at once. *@
+@{
+    var groups = Model.Groups;
+    var openAll = groups.Count <= 3 || !string.IsNullOrWhiteSpace(Model.Query?.Search);
+}
+@if (groups.Count > 3)
+{
+    <div class="expand-controls d-flex justify-content-end gap-2 px-3 pt-2">
+        <button type="button" class="btn btn-sm btn-soft" data-expand-all="true">Expand all</button>
+        <button type="button" class="btn btn-sm btn-soft" data-expand-all="false">Collapse all</button>
+    </div>
+}
 <div class="table-responsive">
-    <table class="table data-table pending-table align-middle mb-0">
+    <table class="table data-table pending-table group-table align-middle mb-0">
         <thead>
             <tr>
                 @if (bulk)
                 {
                     <th class="select-col"><input type="checkbox" class="form-check-input" data-select-all aria-label="Select every send without a shipment id" /></th>
                 }
+                <th class="toggle-col"><span class="visually-hidden">Expand</span></th>
                 <th>Sent</th>
                 <th class="sku-cell">SKU</th>
                 <th class="text-end">Awaiting <partial name="_Tip" model='"Units of the send that Amazon’s numbers don’t show yet, out of the units sent. They count as Amazon stock for the suggested send until then."' /></th>
@@ -56,82 +69,151 @@
                 }
             </tr>
         </thead>
-        <tbody>
-            @foreach (var item in Model.Items)
-            {
-                var s = item.Send;
-                <tr class="@(item.Overdue ? "pending-overdue" : "")">
+        @for (var g = 0; g < groups.Count; g++)
+        {
+            var group = groups[g];
+            var groupId = $"send-{group.Items[0].Send.Id}";
+            var missing = group.NeedsShipmentId;
+            var skus = group.Items.Count;
+            <tbody class="order-group @(openAll ? "is-expanded" : "")" id="@groupId">
+                <tr class="group-row @(group.Overdue ? "pending-overdue" : "")">
                     @if (bulk)
                     {
                         <td class="select-col">
-                            @if (s.Reference is null)
+                            @if (missing.Count > 0)
                             {
-                                <input type="checkbox" class="form-check-input" name="ids" value="@s.Id" form="pending-bulk-form" data-select-row aria-label="Select the @s.Sku send" />
+                                <input type="checkbox" class="form-check-input" data-select-group aria-label="Select the sends of this group without a shipment id" />
                             }
                         </td>
                     }
+                    <td class="toggle-col">
+                        <button type="button" class="btn btn-sm btn-icon group-toggle" data-expand-row aria-expanded="@(openAll ? "true" : "false")" aria-controls="@groupId"
+                                aria-label="Show the @skus SKU@(skus == 1 ? "" : "s") of this send">
+                            <partial name="_Icon" model='"chevron-down"' />
+                        </button>
+                    </td>
                     <td>
-                        <div class="text-nowrap">@Model.Local(s.OccurredAt).ToString("MMM d, h:mm tt", en)</div>
-                        @if (item.Overdue)
+                        <div class="fw-semibold text-nowrap">@Model.Local(group.SentAt).ToString("MMM d, h:mm tt", en)</div>
+                        @if (group.Overdue)
                         {
-                            <div class="cell-sub text-warn pending-note">Amazon hasn’t shown it after @item.AgeDays days — check the shipment</div>
+                            <div class="cell-sub text-warn pending-note">Amazon hasn’t shown all of it after @group.AgeDays days — check the shipment</div>
                         }
                         else
                         {
-                            <div class="cell-sub">@(item.AgeDays == 0 ? "today" : $"{item.AgeDays} day{(item.AgeDays == 1 ? "" : "s")} ago")</div>
+                            <div class="cell-sub">@(group.AgeDays == 0 ? "today" : $"{group.AgeDays} day{(group.AgeDays == 1 ? "" : "s")} ago") · @group.LoggedBy</div>
                         }
                     </td>
                     <td class="sku-cell">
-                        <span class="sku-code">@s.Sku</span>
-                        @if (s.Title is { } title)
-                        {
-                            <span class="sku-title" title="@title">@title</span>
-                        }
+                        <span class="fw-semibold">@skus SKU@(skus == 1 ? "" : "s")</span>
+                        <span class="sku-title" title="@string.Join(", ", group.Items.Select(i => i.Send.Sku))">@string.Join(", ", group.Items.Select(i => i.Send.Sku))</span>
                     </td>
                     <td class="text-end">
-                        <span class="fw-semibold">@s.Pending.ToString("N0", en)</span>
-                        @if (s.Pending != s.UnitsSent)
+                        <span class="fw-semibold">@group.Pending.ToString("N0", en)</span>
+                        @if (group.Pending != group.UnitsSent)
                         {
-                            <div class="cell-sub">of @s.UnitsSent.ToString("N0", en) sent</div>
+                            <div class="cell-sub">of @group.UnitsSent.ToString("N0", en) sent</div>
                         }
                     </td>
                     <td>
-                        @if (s.Reference is { } reference)
+                        @foreach (var reference in group.References)
                         {
-                            <span class="@(s.HasShipmentId ? "sku-code" : "cell-sub")">@reference</span>
+                            <div class="@(AERai.Web.Application.Inventory.PendingSend.IsShipmentId(reference) ? "sku-code" : "cell-sub")">@reference</div>
                         }
-                        else if (Model.CanEdit)
+                        @if (missing.Count > 1 && Model.CanEdit)
                         {
-                            <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="ShipmentId" asp-route-id="@s.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="shipment-id-form">
-                                <input type="text" name="shipmentId" class="form-control form-control-sm shipment-ref" placeholder="Add FBA shipment id" maxlength="100" required aria-label="FBA shipment id for the @s.Sku send" />
-                                <button type="submit" class="btn btn-sm btn-soft btn-icon" aria-label="Save the shipment id" title="Save the shipment id"><partial name="_Icon" model='"check"' /></button>
+                            @* The whole send usually went out as one FBA shipment: one box gives every SKU without an id the same one. *@
+                            <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="ShipmentIds" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="shipment-id-form">
+                                @foreach (var item in missing)
+                                {
+                                    <input type="hidden" name="ids" value="@item.Send.Id" />
+                                }
+                                <input type="text" name="shipmentId" class="form-control form-control-sm shipment-ref" placeholder="FBA shipment id for all @missing.Count" maxlength="100" required autocomplete="off"
+                                       aria-label="FBA shipment id for the @missing.Count sends of this group without one" />
+                                <button type="submit" class="btn btn-sm btn-soft btn-icon" aria-label="Save the shipment id for all of them" title="Save the shipment id for all of them"><partial name="_Icon" model='"check"' /></button>
                             </form>
                         }
-                        else
+                        else if (missing.Count == 1 && group.References.Count == 0)
                         {
-                            <span class="cell-sub">—</span>
+                            <span class="cell-sub">No shipment id yet</span>
                         }
                     </td>
                     @if (Model.CanEdit)
                     {
-                        <td class="text-end text-nowrap">
-                            <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="Reconciled" asp-route-id="@s.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="d-inline"
-                                  data-confirm="Mark the @s.Sku send as received by Amazon? Its @s.Pending.ToString("N0", en) awaiting units stop counting as Amazon stock.">
-                                <button type="submit" class="btn btn-sm btn-soft" aria-label="Mark the @s.Sku send as received by Amazon"
-                                        data-bs-toggle="tooltip" data-bs-title="Amazon has it: stop counting it as pending">Received</button>
-                            </form>
-                            @if (s.ReconciledUnits == 0)
-                            {
-                                <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="Cancel" asp-route-id="@s.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="d-inline"
-                                      data-confirm="Cancel the @s.Sku send? A reversing ledger entry puts its @s.UnitsSent.ToString("N0", en) units back in home stock.">
-                                    <button type="submit" class="btn btn-sm btn-soft-bad btn-icon" aria-label="Cancel the @s.Sku send"
-                                            data-bs-toggle="tooltip" data-bs-title="It never went out: put the units back in home stock"><partial name="_Icon" model='"x"' /></button>
-                                </form>
-                            }
-                        </td>
+                        <td></td>
                     }
                 </tr>
-            }
-        </tbody>
+                @foreach (var item in group.Items)
+                {
+                    var s = item.Send;
+                    <tr class="group-child @(item.Overdue ? "pending-overdue" : "")">
+                        @if (bulk)
+                        {
+                            <td class="select-col">
+                                @if (s.Reference is null)
+                                {
+                                    <input type="checkbox" class="form-check-input" name="ids" value="@s.Id" form="pending-bulk-form" data-select-row aria-label="Select the @s.Sku send" />
+                                }
+                            </td>
+                        }
+                        <td class="toggle-col"></td>
+                        <td>
+                            @if (s.OccurredAt != group.SentAt)
+                            {
+                                <div class="cell-sub text-nowrap">@Model.Local(s.OccurredAt).ToString("MMM d, h:mm tt", en)</div>
+                            }
+                        </td>
+                        <td class="sku-cell">
+                            <span class="sku-code">@s.Sku</span>
+                            @if (s.Title is { } title)
+                            {
+                                <span class="sku-title" title="@title">@title</span>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <span class="fw-semibold">@s.Pending.ToString("N0", en)</span>
+                            @if (s.Pending != s.UnitsSent)
+                            {
+                                <div class="cell-sub">of @s.UnitsSent.ToString("N0", en) sent</div>
+                            }
+                        </td>
+                        <td>
+                            @if (s.Reference is { } reference)
+                            {
+                                <span class="@(s.HasShipmentId ? "sku-code" : "cell-sub")">@reference</span>
+                            }
+                            else if (Model.CanEdit)
+                            {
+                                <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="ShipmentId" asp-route-id="@s.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="shipment-id-form">
+                                    <input type="text" name="shipmentId" class="form-control form-control-sm shipment-ref" placeholder="Add FBA shipment id" maxlength="100" required aria-label="FBA shipment id for the @s.Sku send" />
+                                    <button type="submit" class="btn btn-sm btn-soft btn-icon" aria-label="Save the shipment id" title="Save the shipment id"><partial name="_Icon" model='"check"' /></button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span class="cell-sub">—</span>
+                            }
+                        </td>
+                        @if (Model.CanEdit)
+                        {
+                            <td class="text-end text-nowrap">
+                                <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="Reconciled" asp-route-id="@s.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="d-inline"
+                                      data-confirm="Mark the @s.Sku send as received by Amazon? Its @s.Pending.ToString("N0", en) awaiting units stop counting as Amazon stock.">
+                                    <button type="submit" class="btn btn-sm btn-soft" aria-label="Mark the @s.Sku send as received by Amazon"
+                                            data-bs-toggle="tooltip" data-bs-title="Amazon has it: stop counting it as pending">Received</button>
+                                </form>
+                                @if (s.ReconciledUnits == 0)
+                                {
+                                    <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="Cancel" asp-route-id="@s.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam" class="d-inline"
+                                          data-confirm="Cancel the @s.Sku send? A reversing ledger entry puts its @s.UnitsSent.ToString("N0", en) units back in home stock.">
+                                        <button type="submit" class="btn btn-sm btn-soft-bad btn-icon" aria-label="Cancel the @s.Sku send"
+                                                data-bs-toggle="tooltip" data-bs-title="It never went out: put the units back in home stock"><partial name="_Icon" model='"x"' /></button>
+                                    </form>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        }
     </table>
 </div>

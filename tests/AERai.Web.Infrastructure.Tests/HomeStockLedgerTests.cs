@@ -124,4 +124,42 @@ public sealed class HomeStockLedgerTests(SqlDatabaseFixture fixture) : IClassFix
             [(HomeStockMovementType.ShippedToAmazon, -30, "PO-1"), (HomeStockMovementType.ReceivedFromSupplier, 30, "PO-1")],
             types.Select(t => (t.Type, t.Units, t.Reference)));
     }
+
+    [SqlFact]
+    public async Task ListGroups_TotalsEachKindAndListsItsNewestEntries()
+    {
+        await AddProductAsync("T-GRP-A");
+        await AddProductAsync("T-GRP-B");
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var ledger = scope.ServiceProvider.GetRequiredService<IHomeStockLedgerRepository>();
+        foreach (var (sku, type, units) in new[]
+        {
+            ("T-GRP-A", HomeStockMovementType.ReceivedFromSupplier, 20),
+            ("T-GRP-B", HomeStockMovementType.ReceivedFromSupplier, 10),
+            ("T-GRP-A", HomeStockMovementType.ShippedToAmazon, -5),
+            ("T-GRP-B", HomeStockMovementType.ShippedToAmazon, -3),
+            ("T-GRP-A", HomeStockMovementType.ShippedToAmazon, -2),
+            ("T-GRP-A", HomeStockMovementType.Other, 4),
+            ("T-GRP-A", HomeStockMovementType.Other, -1),
+        })
+        {
+            await ledger.RecordAsync(Write(sku, type, units), CancellationToken.None);
+        }
+
+        // Other test methods share the database, so the search keeps to this test's SKUs.
+        var groups = (await ledger.ListGroupsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(), "T-GRP-", 2, CancellationToken.None))
+            .ToDictionary(g => g.Type);
+
+        Assert.Equal(
+            [HomeStockMovementType.ReceivedFromSupplier, HomeStockMovementType.ShippedToAmazon, HomeStockMovementType.Other],
+            groups.Keys.Order());
+        var shipped = groups[HomeStockMovementType.ShippedToAmazon];
+        Assert.Equal((3, 2, 0, -10), (shipped.EntryCount, shipped.SkuCount, shipped.UnitsIn, shipped.UnitsOut));
+        Assert.Equal([("T-GRP-A", -2), ("T-GRP-B", -3)], shipped.Entries.Select(e => (e.Sku, e.Units)));
+        Assert.True(shipped.IsCapped);
+        Assert.Equal((4, -1, 3), (groups[HomeStockMovementType.Other].UnitsIn, groups[HomeStockMovementType.Other].UnitsOut, groups[HomeStockMovementType.Other].NetUnits));
+
+        var onlyB = await ledger.ListGroupsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-GRP-B", Type: HomeStockMovementType.ShippedToAmazon), null, 10, CancellationToken.None);
+        Assert.Equal([(HomeStockMovementType.ShippedToAmazon, 1)], onlyB.Select(g => (g.Type, g.EntryCount)));
+    }
 }
