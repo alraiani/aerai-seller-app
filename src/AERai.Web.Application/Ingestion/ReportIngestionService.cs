@@ -63,6 +63,29 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// </summary>
     private const int MaxAwdPages = 500;
 
+    /// <summary>Raw landing-zone folder for deferred transactions pages.</summary>
+    public const string DeferredRawFolder = "deferred";
+
+    /// <summary>
+    /// How far back the deferred listing reaches. Amazon returns nothing for a window over 180 days, and a
+    /// transaction posted before the window would look released, so the listing goes as far back as allowed;
+    /// only transactions still held are returned, so it stays small.
+    /// </summary>
+    public static readonly TimeSpan DeferredListingAge = TimeSpan.FromDays(179);
+
+    /// <summary>
+    /// How far before the last successful run the released listing starts once the release history has been
+    /// read. Amazon filters by the date the sale posted, not the release, and an invoiced (B2B) order can be
+    /// held for weeks, so the window reaches well past the delivery-date policy's week.
+    /// </summary>
+    public static readonly TimeSpan ReleasedOverlap = TimeSpan.FromDays(60);
+
+    /// <summary>
+    /// Stops a run whose next-page tokens never end (an Amazon fault) instead of looping forever. At 500
+    /// transactions a page this allows 1,000,000.
+    /// </summary>
+    private const int MaxDeferredPages = 2_000;
+
     /// <summary>Raw landing-zone folder for Orders API pages.</summary>
     public const string OrdersApiRawFolder = "ordersapi";
 
@@ -77,6 +100,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     private readonly IAwdInventoryRepository _awdInventory;
     private readonly IAmazonOrdersGateway _ordersGateway;
     private readonly IAmazonOrderRepository _apiOrders;
+    private readonly IAmazonFinancesGateway _financesGateway;
+    private readonly IDeferredTransactionRepository _deferred;
     private readonly IRawFileStore _rawFiles;
     private readonly IStagingImportService _staging;
     private readonly IPromotionService _promotion;
@@ -93,6 +118,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// <param name="awdInventory">AWD snapshot persistence.</param>
     /// <param name="ordersGateway">SP-API Orders API gateway.</param>
     /// <param name="apiOrders">Orders API order persistence.</param>
+    /// <param name="financesGateway">SP-API Finances gateway (deferred transactions).</param>
+    /// <param name="deferred">Deferred transaction persistence.</param>
     /// <param name="rawFiles">Raw landing zone.</param>
     /// <param name="staging">Staging use cases.</param>
     /// <param name="promotion">Promotion into core.</param>
@@ -108,6 +135,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         IAwdInventoryRepository awdInventory,
         IAmazonOrdersGateway ordersGateway,
         IAmazonOrderRepository apiOrders,
+        IAmazonFinancesGateway financesGateway,
+        IDeferredTransactionRepository deferred,
         IRawFileStore rawFiles,
         IStagingImportService staging,
         IPromotionService promotion,
@@ -125,6 +154,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         _awdInventory = awdInventory;
         _ordersGateway = ordersGateway;
         _apiOrders = apiOrders;
+        _financesGateway = financesGateway;
+        _deferred = deferred;
         _rawFiles = rawFiles;
         _staging = staging;
         _promotion = promotion;
@@ -171,6 +202,10 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             else if (schedule.ReportType == AmazonReportType.OrdersApi)
             {
                 await IngestOrdersApiAsync(context, cancellationToken).ConfigureAwait(false);
+            }
+            else if (schedule.ReportType == AmazonReportType.DeferredTransactions)
+            {
+                await IngestDeferredTransactionsAsync(context, cancellationToken).ConfigureAwait(false);
             }
             else if (schedule.ReportType == AmazonReportType.Settlements)
             {
@@ -559,6 +594,69 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             ? $"AWD snapshot for {snapshotDate:yyyy-MM-dd}: {context.RowsWritten:N0} SKUs ({pages:N0} page{(pages == 1 ? "" : "s")})."
             : "Amazon lists no AWD stock.");
         context.CoveredUntil = startedAt;
+    }
+
+    /// <summary>
+    /// Lists every transaction Amazon still defers for the marketplace and those it released recently, lands
+    /// each page in raw storage, and records both listings together.
+    /// </summary>
+    /// <remarks>
+    /// Like AWD, all pages are read before anything is written: a stored deferral missing from both listings is
+    /// taken as released, so a partial listing would release transactions Amazon still holds. The released
+    /// listing reaches back as far as Amazon allows until the marketplace's release history has been read once,
+    /// then only <see cref="ReleasedOverlap"/> before the last successful run.
+    /// </remarks>
+    private async Task IngestDeferredTransactionsAsync(RunContext context, CancellationToken cancellationToken)
+    {
+        var startedAt = context.Run.StartedAt;
+        var earliest = startedAt - DeferredListingAge;
+        var held = await ListDeferredAsync(context, DeferredTransactionListing.StillDeferred, earliest, "deferred-held", cancellationToken).ConfigureAwait(false);
+
+        var releasedAfter = earliest;
+        if (context.Schedule.LastSuccessfulDataEnd is { } previousEnd
+            && previousEnd - ReleasedOverlap > earliest
+            && await _deferred.HasReleaseHistoryAsync(context.Schedule.MarketplaceId, cancellationToken).ConfigureAwait(false))
+        {
+            releasedAfter = previousEnd - ReleasedOverlap;
+        }
+
+        var released = await ListDeferredAsync(context, DeferredTransactionListing.Released, releasedAfter, "deferred-released", cancellationToken).ConfigureAwait(false);
+
+        context.Run.DataStart = earliest;
+        context.Run.DataEnd = startedAt;
+        var result = await _deferred.ApplyAsync(context.Schedule.MarketplaceId, held.Items, released.Items, _clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        context.RowsWritten = result.Deferred + result.Released;
+        context.Notes.Add(string.Create(CultureInfo.InvariantCulture,
+            $"Amazon holds {result.Deferred:N0} deferred transaction{(result.Deferred == 1 ? "" : "s")}; {result.Released:N0} released since {releasedAfter:yyyy-MM-dd} ({result.NewlyReleased:N0} newly). {held.Pages + released.Pages:N0} pages."));
+        context.CoveredUntil = startedAt;
+    }
+
+    /// <summary>Reads every page of one deferred listing, landing each page in raw storage.</summary>
+    private async Task<(IReadOnlyCollection<AmazonDeferredTransaction> Items, int Pages)> ListDeferredAsync(
+        RunContext context, DeferredTransactionListing listing, DateTimeOffset postedAfter, string filePrefix, CancellationToken cancellationToken)
+    {
+        var items = new Dictionary<string, AmazonDeferredTransaction>(StringComparer.Ordinal);
+        string? nextToken = null;
+        var pages = 0;
+        do
+        {
+            if (++pages > MaxDeferredPages)
+            {
+                throw new InvalidOperationException($"Deferred transactions listing ({listing}) did not end after {MaxDeferredPages} pages.");
+            }
+
+            var page = await _financesGateway.ListTransactionsPageAsync(context.Marketplace, listing, postedAfter, nextToken, cancellationToken).ConfigureAwait(false);
+            await LandJsonPageAsync(context, DeferredRawFolder, filePrefix, page.RawJson, pages, cancellationToken).ConfigureAwait(false);
+            foreach (var item in page.Items)
+            {
+                items[item.TransactionId] = item;
+            }
+
+            nextToken = string.IsNullOrEmpty(page.NextToken) ? null : page.NextToken;
+        }
+        while (nextToken is not null);
+
+        return (items.Values, pages);
     }
 
     /// <summary>

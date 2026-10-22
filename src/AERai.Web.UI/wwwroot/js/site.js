@@ -5,11 +5,23 @@
     // ---------- Hover tips ----------
     // Explicit "?" tips plus every plain title="" on the page become styled tooltips that also open
     // on keyboard focus. Without JavaScript the native title tooltip still shows.
-    function setupTooltips() {
+    var tipSelector = "[data-bs-toggle='tooltip'], [title]";
+
+    function setupTooltips(root) {
         if (!window.bootstrap || !window.bootstrap.Tooltip) { return; }
-        var elements = document.querySelectorAll(".app-content [data-bs-toggle='tooltip'], .app-content [title]");
+        var elements = root ? root.querySelectorAll(tipSelector) : document.querySelectorAll(".app-content [data-bs-toggle='tooltip'], .app-content [title]");
         for (var i = 0; i < elements.length; i++) {
             window.bootstrap.Tooltip.getOrCreateInstance(elements[i], { container: "body", delay: { show: 150, hide: 50 } });
+        }
+    }
+
+    // Tooltips live in <body>, so ones belonging to a section about to be replaced are removed first.
+    function disposeTooltips(root) {
+        if (!window.bootstrap || !window.bootstrap.Tooltip) { return; }
+        var elements = root.querySelectorAll("*");
+        for (var i = 0; i < elements.length; i++) {
+            var tip = window.bootstrap.Tooltip.getInstance(elements[i]);
+            if (tip) { tip.dispose(); }
         }
     }
 
@@ -281,6 +293,80 @@
         hint.hidden = false;
     });
 
+    // ---------- Sticky table headers ----------
+    // A sticky header only sticks inside its nearest scroll container, and every .table-responsive is one
+    // (for sideways scrolling). So a table that fits its card gets .is-sticky, which drops the wrapper's
+    // overflow so the header (and the card's .card-toolbar above it, via .has-sticky-head) sticks to the
+    // window as the page scrolls. A table too wide to fit gets .table-scroll instead: a box about a screen
+    // tall that scrolls both ways with the header stuck inside it. Width changes (window, sidebar rail,
+    // expanded rows) re-decide. Without script the tables simply scroll sideways as before.
+    function updateStickyTable(wrapper) {
+        var table = wrapper.querySelector(":scope > table");
+        if (!table) { return; }
+        var fits = table.scrollWidth <= wrapper.clientWidth + 1;
+        wrapper.classList.toggle("is-sticky", fits);
+        wrapper.classList.toggle("table-scroll", !fits);
+
+        // The toolbar sticks only when its card holds just this table, and the header sits right below it.
+        var card = wrapper.parentElement;
+        var toolbar = card && card.classList.contains("card") ? card.querySelector(":scope > .card-toolbar") : null;
+        var withToolbar = fits && toolbar !== null && card.querySelectorAll(":scope > .table-responsive").length === 1;
+        if (card && card.classList.contains("card")) {
+            card.classList.toggle("has-sticky-head", withToolbar);
+            if (withToolbar) {
+                // Rounded down so the header tucks under the toolbar instead of leaving a sliver rows show through.
+                card.style.setProperty("--sticky-head", Math.floor(toolbar.getBoundingClientRect().height) + "px");
+            } else {
+                card.style.removeProperty("--sticky-head");
+            }
+        }
+    }
+
+    var stickyWrappers = [];
+    var stickyObserver = null;
+    var stickyPending = false;
+
+    function updateAllStickyTables() {
+        for (var i = 0; i < stickyWrappers.length; i++) { updateStickyTable(stickyWrappers[i]); }
+    }
+
+    // Called for the page at load and again for each section a partial reload swaps in; wrappers that
+    // were replaced are dropped so the observer never holds detached tables.
+    function setupStickyTables(root) {
+        var found = (root || document).querySelectorAll(root ? ".table-responsive" : ".app-content .table-responsive");
+        stickyWrappers = stickyWrappers.filter(function (wrapper) {
+            if (wrapper.isConnected) { return true; }
+            if (stickyObserver) {
+                stickyObserver.unobserve(wrapper);
+                var table = wrapper.querySelector(":scope > table");
+                if (table) { stickyObserver.unobserve(table); }
+            }
+            return false;
+        });
+        if (found.length === 0) { return; }
+        for (var i = 0; i < found.length; i++) {
+            stickyWrappers.push(found[i]);
+            updateStickyTable(found[i]);
+        }
+        if (!window.ResizeObserver) { return; }
+
+        // Deferred a frame so the class changes don't re-trigger the observer inside its own callback.
+        if (!stickyObserver) {
+            stickyObserver = new ResizeObserver(function () {
+                if (stickyPending) { return; }
+                stickyPending = true;
+                window.requestAnimationFrame(function () { stickyPending = false; updateAllStickyTables(); });
+            });
+        }
+        for (var j = 0; j < found.length; j++) {
+            stickyObserver.observe(found[j]);
+            var table = found[j].querySelector(":scope > table");
+            if (table) { stickyObserver.observe(table); }
+            var toolbar = found[j].parentElement && found[j].parentElement.querySelector(":scope > .card-toolbar");
+            if (toolbar) { stickyObserver.observe(toolbar); }
+        }
+    }
+
     // ---------- Print buttons ----------
     document.addEventListener("click", function (event) {
         var button = event.target.closest && event.target.closest("[data-print]");
@@ -290,6 +376,7 @@
     document.addEventListener("DOMContentLoaded", function () {
         setupTooltips();
         updateNavRail();
+        setupStickyTables();
 
         var dirty = document.querySelectorAll("[data-dirty-form]");
         for (var d = 0; d < dirty.length; d++) { setupDirtyForm(dirty[d]); }
@@ -306,7 +393,7 @@
             if (window.history && window.history.replaceState && window.URL) {
                 var url = new URL(window.location.href);
                 url.searchParams.delete(dialog.getAttribute("data-open-param") || "");
-                window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+                window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
             }
             var focus = dialog.querySelector("input[type=text]");
             if (focus) { dialog.addEventListener("shown.bs.modal", function () { focus.focus(); }, { once: true }); }
@@ -374,4 +461,105 @@
             if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }
         }
     });
+
+    // ---------- Partial reloads ----------
+    // Inside a [data-fragment] section, links to the same page (pager, sorts, view switches) and GET forms
+    // (filters, search) refresh only that section: the same URL is fetched with an X-Fragment header, the
+    // page answers with just the section's partial (PageFragments.PageOrFragment), and the address is
+    // updated so Back, refresh, and bookmarks behave as before. [data-fragment-skip] opts a link or form
+    // out (downloads, other pages). Anything unexpected falls back to loading the page normally.
+    var fragmentRequest = 0;
+
+    // Only this page's own GET: a ?handler= link (CSV export, download) answers with something else.
+    function fragmentTarget(url) {
+        return url.origin === window.location.origin && url.pathname === window.location.pathname && !url.searchParams.has("handler");
+    }
+
+    function restoreFocus(region, focused) {
+        if (!focused) { return; }
+        var match = focused.id ? document.getElementById(focused.id)
+            : focused.name && window.CSS && CSS.escape ? region.querySelector("[name='" + CSS.escape(focused.name) + "']") : null;
+        if (match && region.contains(match)) { match.focus({ preventScroll: true }); }
+    }
+
+    function loadFragment(region, url, push) {
+        var request = ++fragmentRequest;
+        var active = document.activeElement;
+        var focused = active && region.contains(active) && (active.id || active.name) ? { id: active.id, name: active.name } : null;
+        region.setAttribute("aria-busy", "true");
+
+        window.fetch(url.href, { headers: { "X-Fragment": "1" }, credentials: "same-origin" })
+            .then(function (response) {
+                // A sign-in redirect or an error page is a whole document, not this section.
+                if (!response.ok || response.redirected) { throw new Error("fragment " + response.status); }
+                return response.text();
+            })
+            .then(function (html) {
+                if (request !== fragmentRequest) { return; }
+                if (push) {
+                    window.history.pushState({ fragment: region.getAttribute("data-fragment") }, "", url.pathname + url.search);
+                }
+                disposeTooltips(region);
+                region.innerHTML = html;
+                region.removeAttribute("aria-busy");
+                setupTooltips(region);
+                setupStickyTables(region);
+                var bulk = region.querySelector("[data-bulk-bar]");
+                if (bulk) { setupBulk(bulk); }
+                restoreFocus(region, focused);
+                // A pager at the bottom of a long list brings the list back into view.
+                if (region.getBoundingClientRect().top < 0) { region.scrollIntoView({ block: "start" }); }
+            })
+            .catch(function () {
+                if (request === fragmentRequest) { window.location.assign(url.href); }
+            });
+    }
+
+    function fragmentRegion(element) {
+        if (!window.fetch || !window.history || !window.history.pushState || !element.closest) { return null; }
+        if (element.closest("[data-fragment-skip]")) { return null; }
+        return element.closest("[data-fragment]");
+    }
+
+    document.addEventListener("click", function (event) {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) { return; }
+        var link = event.target.closest && event.target.closest("a[href]");
+        if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self")) { return; }
+        var region = fragmentRegion(link);
+        if (!region) { return; }
+        var url = new URL(link.href, window.location.href);
+        if (!fragmentTarget(url) || url.hash) { return; }
+        event.preventDefault();
+        loadFragment(region, url, true);
+    });
+
+    // Registered after the data-confirm handler, so a cancelled confirm is already defaultPrevented here.
+    document.addEventListener("submit", function (event) {
+        var form = event.target;
+        if (event.defaultPrevented || !form.matches || (form.getAttribute("method") || "get").toLowerCase() !== "get") { return; }
+        if (form.target && form.target !== "_self") { return; }
+        var region = fragmentRegion(form);
+        if (!region) { return; }
+        var submitter = event.submitter && event.submitter.getAttribute("formaction") ? event.submitter.formAction : form.action;
+        var url = new URL(submitter, window.location.href);
+        if (!fragmentTarget(url)) { return; }
+        var data = new FormData(form, event.submitter || undefined);
+        url.search = new URLSearchParams(data).toString();
+        event.preventDefault();
+        loadFragment(region, url, true);
+    });
+
+    // Back and Forward between partial reloads refresh the same section for the address now shown.
+    window.addEventListener("popstate", function (event) {
+        var name = event.state && event.state.fragment;
+        var region = name ? document.querySelector("[data-fragment='" + name + "']") : null;
+        if (!region) { return; }
+        loadFragment(region, new URL(window.location.href), false);
+    });
+
+    // The page as first loaded gets a history entry too, so Back from the first partial reload returns to it.
+    if (window.history && window.history.replaceState && document.querySelector("[data-fragment]")) {
+        var first = document.querySelector("[data-fragment]");
+        window.history.replaceState({ fragment: first.getAttribute("data-fragment") }, "", window.location.href);
+    }
 })();

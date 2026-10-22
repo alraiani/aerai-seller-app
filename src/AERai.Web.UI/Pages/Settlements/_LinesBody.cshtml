@@ -1,0 +1,238 @@
+@using System.Globalization
+@using AERai.Web.Application.Settlements
+@model AERai.Web.UI.Pages.Settlements.LinesModel
+@{
+    var g = Model.Group;
+    var gm = SettlementMoney.Of(g, Model.Amounts);
+    var groups = Model.Groups.Items;
+    var label = g.Sku ?? "No SKU";
+}
+
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">Settlements</a>
+    <span aria-hidden="true">/</span>
+    <a asp-page="Summary" asp-route-id="@g.SettlementId" asp-route-amounts="@(Model.Amounts == SettlementAmounts.Home ? null : Model.Amounts.ToString())">@g.SettlementId</a>
+    <span aria-hidden="true">/</span>
+    <span>@label@(SettlementMoney.SalePriceOf(g, Model.Amounts) is { } each ? $" at {SettlementFormat.Money(each, gm.Currency)}" : "")</span>
+</nav>
+
+<partial name="_SettlementRate" model="Model.RatePanel" />
+
+@* ---------- Search, bucket filter, sort ---------- *@
+<div class="list-toolbar mb-3">
+    <form method="get" class="filters" data-autosubmit-form role="search">
+        <input type="hidden" name="sku" value="@Model.Sku" />
+        <input type="hidden" name="price" value="@Model.Price" />
+        @if (Model.Amounts != SettlementAmounts.Home)
+        {
+            <input type="hidden" name="amounts" value="@Model.Amounts" />
+        }
+        @if (Model.Descending)
+        {
+            <input type="hidden" name="desc" value="true" />
+        }
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search order, type, description…" aria-label="Search lines" />
+        </div>
+        <select name="bucket" class="form-select form-select-sm" aria-label="Amounts">
+            @foreach (var (bucket, text) in SettlementFormat.BucketFilters)
+            {
+                <option value="@(bucket?.ToString() ?? "")" selected="@(Model.Bucket == bucket)">@text</option>
+            }
+        </select>
+        <select name="sort" class="form-select form-select-sm" aria-label="Sort by">
+            @foreach (var (sort, text) in SettlementFormat.GroupSorts)
+            {
+                <option value="@(sort == SettlementGroupSort.Posted ? "" : sort.ToString())" selected="@(Model.Sort == sort)">@text</option>
+            }
+        </select>
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
+        @if (Model.IsFiltered)
+        {
+            <a href="@Model.ClearLink()" class="btn btn-sm btn-link">Clear filters</a>
+        }
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@Model.Groups.TotalCount.ToString("N0", CultureInfo.InvariantCulture) group@(Model.Groups.TotalCount == 1 ? "" : "s")</span>
+            <span class="text-muted-token fw-normal">@(g.Title ?? (g.Sku is null ? "amounts that belong to no product" : g.Asin))</span>
+            <partial name="_Tip" model='"Every settlement line behind the summary row, one group per order (lines without an order are grouped by type). Expand a group to see its lines; the total row matches the summary row. Converted amounts are rounded line by line, so they can differ from the total by a cent."' />
+        </span>
+        @if (groups.Count > 0)
+        {
+            <div class="card-toolbar-group expand-controls">
+                <button type="button" class="btn btn-sm btn-soft" data-expand-all="true">Expand all</button>
+                <button type="button" class="btn btn-sm btn-soft" data-expand-all="false">Collapse all</button>
+            </div>
+        }
+    </div>
+    @if (groups.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-title">No lines match</div>
+            <div class="empty-detail">Try a different search or show all amounts.</div>
+            <a href="@Model.ClearLink()" class="btn btn-sm btn-soft">Clear filters</a>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table data-table group-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="toggle-col"><span class="visually-hidden">Expand</span></th>
+                        <th><a href="@Model.SortLink(SettlementGroupSort.Order)" class="sort-link">Order @Model.SortArrow(SettlementGroupSort.Order)</a></th>
+                        <th>Transaction</th>
+                        <th><a href="@Model.SortLink(SettlementGroupSort.Posted)" class="sort-link">Posted (UTC) @Model.SortArrow(SettlementGroupSort.Posted)</a></th>
+                        <th class="text-end">Units</th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementGroupSort.Amount)" class="sort-link">Amount @Model.SortArrow(SettlementGroupSort.Amount)</a></th>
+                    </tr>
+                </thead>
+                @* The totals of the whole summary row (every page, whatever the filter), so it always matches the Summary page. *@
+                <tbody class="totals-group">
+                    <tr class="totals-row">
+                        <td></td>
+                        <td colspan="3">
+                            <div class="fw-semibold">Total · @g.LineCount.ToString("N0", CultureInfo.InvariantCulture) line@(g.LineCount == 1 ? "" : "s")@(g.OrderCount > 0 ? $" in {g.OrderCount:N0} order{(g.OrderCount == 1 ? "" : "s")}" : "")</div>
+                            <partial name="_SettlementBreakdown" model="(gm.Sales, gm.Refunds, gm.Expenses, gm.Reserve, gm.Net, gm.Currency)" />
+                        </td>
+                        <td class="text-end money fw-semibold">@g.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
+                        <td class="text-end money fw-semibold @SettlementFormat.AmountClass(gm.Net)">@SettlementFormat.Money(gm.Net, gm.Currency)</td>
+                    </tr>
+                </tbody>
+                @for (var i = 0; i < groups.Count; i++)
+                {
+                    var group = groups[i];
+                    var groupId = $"group-{i}";
+                    <tbody class="order-group" id="@groupId">
+                        <tr class="group-row">
+                            <td class="toggle-col">
+                                <button type="button" class="btn btn-sm btn-icon group-toggle" data-expand-row aria-expanded="false" aria-controls="@groupId"
+                                        aria-label="Show the @group.Lines.Count lines of @(group.AmazonOrderId ?? group.TransactionType)">
+                                    <partial name="_Icon" model='"chevron-down"' />
+                                </button>
+                            </td>
+                            <td>
+                                <div class="fw-semibold text-nowrap">@(group.AmazonOrderId ?? group.TransactionType)</div>
+                                <div class="cell-sub">@group.Lines.Count line@(group.Lines.Count == 1 ? "" : "s")@(group.IsOrder ? "" : " without an order")</div>
+                                @if (group.AmazonOrderId is { } orderId && Model.Deferrals.TryGetValue(orderId, out var deferral))
+                                {
+                                    <span class="pill pill-info mt-1" title="@SettlementFormat.DeferralReasonTitle(deferral.DeferralReason)">
+                                        @(deferral.Status == AERai.Web.Domain.Core.DeferredTransactionStatus.Deferred
+                                            ? $"Deferred until {SettlementFormat.Day(deferral.MaturityDate, Model.Zone) ?? "unknown"}"
+                                            : $"Was deferred · released {SettlementFormat.Day(deferral.ReleasedAt ?? deferral.MaturityDate, Model.Zone) ?? "earlier"}")
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                @foreach (var type in group.TransactionTypes)
+                                {
+                                    <span class="type-tag">@type</span>
+                                }
+                            </td>
+                            <td class="text-nowrap">@SettlementFormat.Posted(group.FirstPosted)</td>
+                            <td class="text-end money">@(group.Units == 0 ? "" : group.Units.ToString("N0", CultureInfo.InvariantCulture))</td>
+                            <td class="text-end money fw-semibold @SettlementFormat.AmountClass(group.Amount)">@SettlementFormat.Money(group.Amount, group.Currency ?? gm.Currency)</td>
+                        </tr>
+                        @foreach (var line in group.Lines)
+                        {
+                            var bucket = SettlementFormat.BucketOf(line);
+                            var (lineAmount, lineCurrency) = SettlementMoney.AmountOf(line, Model.Amounts);
+                            <tr class="group-child">
+                                <td></td>
+                                <td>
+                                    <div class="child-desc">
+                                        @if (bucket is { } b)
+                                        {
+                                            <span class="@SettlementFormat.BucketPill(b)">@SettlementFormat.BucketLabel(b)</span>
+                                        }
+                                        <span>@line.AmountDescription</span>
+                                    </div>
+                                    @if (line.AmountType is not null)
+                                    {
+                                        <div class="cell-sub">@line.AmountType</div>
+                                    }
+                                </td>
+                                <td class="text-muted-token">@line.TransactionType</td>
+                                <td class="text-nowrap text-muted-token">@SettlementFormat.Posted(line.PostedDate)</td>
+                                <td class="text-end money">@(line.Units == 0 ? "" : line.Units.ToString("N0", CultureInfo.InvariantCulture))</td>
+                                <td class="text-end money @SettlementFormat.AmountClass(lineAmount)">@SettlementFormat.Money(lineAmount, lineCurrency)</td>
+                            </tr>
+                        }
+                    </tbody>
+                }
+            </table>
+        </div>
+    }
+</div>
+<partial name="_Pager" model="Model.Groups.ToPager(Model.Search, Model.CurrentFilters())" />
+
+@if (Model.DeferredLines.Count > 0)
+{
+    var deferredTotal = Model.DeferredLines.Sum(d => d.Amount);
+    var deferredCurrency = Model.DeferredLines[0].Currency;
+    @* Units of this SKU and price sold in this period that Amazon held back: paid in a later settlement, so not in the totals above. *@
+    <div class="card mt-3">
+        <div class="card-toolbar">
+            <span class="card-toolbar-title list-count">
+                <partial name="_Icon" model='"clock"' />
+                Deferred out of this payout
+                <span class="text-muted-token fw-normal">· @Model.DeferredLines.Count.ToString("N0", CultureInfo.InvariantCulture) item@(Model.DeferredLines.Count == 1 ? "" : "s") · @SettlementFormat.Money(deferredTotal, deferredCurrency) · not in the totals above</span>
+                <partial name="_Tip" model='"Units of this SKU and price sold in this period that Amazon held back (about 7 days after delivery). Amazon pays them out in a later settlement, where they appear as ordinary order lines."' />
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="table data-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Reason</th>
+                        <th>Releases on</th>
+                        <th class="text-end">Units</th>
+                        <th class="text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in Model.DeferredLines)
+                    {
+                        var released = d.Status == AERai.Web.Domain.Core.DeferredTransactionStatus.Released;
+                        <tr>
+                            <td>
+                                @if (d.AmazonOrderId is { } orderId)
+                                {
+                                    <a asp-page="/Orders/Index" asp-route-q="@orderId" class="fw-semibold text-nowrap">@orderId</a>
+                                }
+                                else
+                                {
+                                    <span class="fw-semibold">No order</span>
+                                }
+                            </td>
+                            <td><span class="pill pill-info" title="@SettlementFormat.DeferralReasonTitle(d.DeferralReason)">@(d.DeferralReason ?? "—")</span></td>
+                            <td class="text-nowrap">
+                                @SettlementFormat.Day(released ? d.ReleasedAt ?? d.MaturityDate : d.MaturityDate, Model.Zone)
+                                @if (released)
+                                {
+                                    <span class="pill pill-ok ms-1">Paid out</span>
+                                }
+                                else if (d.MaturityDate <= Model.Now)
+                                {
+                                    <span class="pill pill-ok ms-1" title="The release date has passed; Amazon pays it out with the next settlement.">Due</span>
+                                }
+                                else
+                                {
+                                    <span class="pill pill-info ms-1">Held</span>
+                                }
+                            </td>
+                            <td class="text-end money">@d.Quantity.ToString("N0", CultureInfo.InvariantCulture)</td>
+                            <td class="text-end money fw-semibold">@SettlementFormat.Money(d.Amount, d.Currency)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

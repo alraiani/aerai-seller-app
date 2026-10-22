@@ -1,3 +1,4 @@
+using AERai.Web.Application.Settlements;
 using AERai.Web.Domain.Reporting;
 
 namespace AERai.Web.Application.Orders;
@@ -7,4 +8,8 @@ namespace AERai.Web.Application.Orders;
 /// <param name="Items">The order's items, by SKU.</param>
 /// <param name="Payout">What Amazon has paid out for it, or <see langword="null"/> when it isn't in a settlement yet.</param>
 /// <param name="Profit">The estimated profit.</param>
-public sealed record OrderListItem(OrderSummary Order, IReadOnlyList<OrderItemRow> Items, OrderPayout? Payout, OrderProfit Profit);
+/// <param name="Deferral">
+/// The order's payout Amazon still holds (its deferred transaction), when it is not paid out yet and Amazon
+/// deferred it; otherwise <see langword="null"/>.
+/// </param>
+public sealed record OrderListItem(OrderSummary Order, IReadOnlyList<OrderItemRow> Items, OrderPayout? Payout, OrderProfit Profit, DeferredPaymentRow? Deferral = null);

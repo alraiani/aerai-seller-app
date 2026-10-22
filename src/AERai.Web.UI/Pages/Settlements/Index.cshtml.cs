@@ -20,8 +20,9 @@ namespace AERai.Web.UI.Pages.Settlements;
 /// rate); each row is tagged with where it came from and keeps its original net beside the converted one.
 /// </remarks>
 /// <param name="reporting">Reporting queries.</param>
+/// <param name="deferred">What Amazon still holds back (the deferred tile).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
-public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace currentMarketplace) : ListPageModel
+public sealed class IndexModel(IReportingQueries reporting, IDeferredPaymentService deferred, ICurrentMarketplace currentMarketplace) : ListPageModel
 {
     /// <summary>Only periods ending on or after this local date, from <c>?from=</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "from")]
@@ -45,6 +46,15 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
 
     /// <summary>The marketplace shown.</summary>
     public Domain.Core.Marketplace Marketplace { get; private set; } = default!;
+
+    /// <summary>The marketplace's time zone, in which periods are shown.</summary>
+    public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
+
+    /// <summary>What Amazon holds back for the marketplace and has not paid out yet.</summary>
+    public DeferredOverview Deferred { get; private set; } = new([], new DeferredSyncState(false, false, null), DateTimeOffset.MinValue);
+
+    /// <summary>What Amazon deferred out of each listed settlement's payout, by settlement id, in the marketplace's currency.</summary>
+    public IReadOnlyDictionary<string, DeferredOut> DeferredOut { get; private set; } = new Dictionary<string, DeferredOut>();
 
     /// <summary>The current page of settlements.</summary>
     public PagedResult<SettlementSummary> Settlements { get; private set; } = default!;
@@ -72,8 +82,8 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
 
     /// <summary>Loads the totals and the requested page.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when the page is loaded.</returns>
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    /// <returns>The page, or just its section for a partial reload.</returns>
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         var selection = await currentMarketplace.GetAsync(cancellationToken);
         Marketplace = selection.Current;
@@ -81,6 +91,7 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
 
         // Dates are the marketplace's local days, like every other date filter in the app.
         var zone = TimeZoneInfo.FindSystemTimeZoneById(Marketplace.TimeZoneId);
+        Zone = zone;
         var filter = new SettlementListFilter(
             From is { } from ? LocalTime.StartOfDay(from, zone) : null,
             To is { } to ? LocalTime.StartOfDay(to.AddDays(1), zone) : null,
@@ -94,6 +105,9 @@ public sealed class IndexModel(IReportingQueries reporting, ICurrentMarketplace 
         Currencies = await reporting.GetSettlementCurrenciesAsync(Marketplace.MarketplaceId, request, filter, cancellationToken);
 
         Settlements = await reporting.GetSettlementsAsync(Marketplace.MarketplaceId, request, filter, cancellationToken);
+        Deferred = await deferred.GetOverviewAsync(Marketplace, cancellationToken);
+        DeferredOut = await deferred.GetDeferredOutAsync(Marketplace, Settlements.Items, SettlementAmounts.Home, cancellationToken);
+        return this.PageOrFragment("_SettlementsBody");
     }
 
     /// <summary>Link for a sortable column header: toggles direction when it's already the sort.</summary>

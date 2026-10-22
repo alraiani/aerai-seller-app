@@ -57,14 +57,14 @@ public sealed class SettlementLineDetail
     /// <summary>The amount when it counts as a sale, otherwise zero.</summary>
     public decimal Sales { get; set; }
 
-    /// <summary>The amount when it counts as a fee, otherwise zero.</summary>
-    public decimal Fees { get; set; }
+    /// <summary>The amount when it counts as an expense, otherwise zero.</summary>
+    public decimal Expenses { get; set; }
 
     /// <summary>The amount when it counts as a refund, otherwise zero.</summary>
     public decimal Refunds { get; set; }
 
-    /// <summary>The amount when it counts as other, otherwise zero.</summary>
-    public decimal Other { get; set; }
+    /// <summary>The amount when it counts toward the account level reserve, otherwise zero.</summary>
+    public decimal Reserve { get; set; }
 
     /// <summary><see cref="Amount"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
     public decimal? HomeAmount { get; set; }
@@ -72,12 +72,12 @@ public sealed class SettlementLineDetail
     /// <summary><see cref="Sales"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
     public decimal? HomeSales { get; set; }
 
-    /// <summary><see cref="Fees"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
-    public decimal? HomeFees { get; set; }
+    /// <summary><see cref="Expenses"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeExpenses { get; set; }
 
     /// <summary><see cref="Refunds"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
     public decimal? HomeRefunds { get; set; }
 
-    /// <summary><see cref="Other"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
-    public decimal? HomeOther { get; set; }
+    /// <summary><see cref="Reserve"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeReserve { get; set; }
 }

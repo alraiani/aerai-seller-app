@@ -2,7 +2,7 @@ namespace AERai.Web.Domain.Reporting;
 
 /// <summary>
 /// Read model for <c>rpt.vw_SettlementSummary</c>: one row per settlement with amounts bucketed
-/// into sales, fees, refunds, and other.
+/// into sales, refunds, expenses, and reserve (the columns of Seller Central's statement).
 /// </summary>
 public sealed class SettlementSummary
 {
@@ -39,17 +39,17 @@ public sealed class SettlementSummary
     /// <summary>Units sold in the settlement (refunds do not reduce it).</summary>
     public int Units { get; set; }
 
-    /// <summary>Item price amounts (principal, shipping, tax) on order transactions.</summary>
+    /// <summary>Item price, shipping, and tax on orders (less the tax Amazon withholds), and FBA inventory reimbursements.</summary>
     public decimal Sales { get; set; }
 
-    /// <summary>Selling and fulfillment fees (negative).</summary>
-    public decimal Fees { get; set; }
+    /// <summary>Everything Amazon charged (negative): fees, promotions, advertising, subscriptions, clawbacks.</summary>
+    public decimal Expenses { get; set; }
 
     /// <summary>Net of refund transactions (usually negative).</summary>
     public decimal Refunds { get; set; }
 
-    /// <summary>Everything else: promotions, reimbursements, adjustments.</summary>
-    public decimal Other { get; set; }
+    /// <summary>Account level reserve: held back from the payout (negative) or released from an earlier one (positive).</summary>
+    public decimal Reserve { get; set; }
 
     /// <summary>Sum of all amounts — the payout.</summary>
     public decimal Net { get; set; }
@@ -57,14 +57,14 @@ public sealed class SettlementSummary
     /// <summary><see cref="Sales"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
     public decimal? HomeSales { get; set; }
 
-    /// <summary><see cref="Fees"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
-    public decimal? HomeFees { get; set; }
+    /// <summary>The rest of <see cref="HomeNet"/> after converted sales, refunds, and reserve, so the four always add up to it; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeExpenses { get; set; }
 
     /// <summary><see cref="Refunds"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
     public decimal? HomeRefunds { get; set; }
 
-    /// <summary>The rest of <see cref="HomeNet"/> after converted sales, fees, and refunds, so the four always add up to it; <see langword="null"/> without a rate.</summary>
-    public decimal? HomeOther { get; set; }
+    /// <summary><see cref="Reserve"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeReserve { get; set; }
 
     /// <summary><see cref="Net"/> in <see cref="HomeCurrency"/> (the amount entered by an Operator when they gave one); <see langword="null"/> without a rate.</summary>
     public decimal? HomeNet { get; set; }

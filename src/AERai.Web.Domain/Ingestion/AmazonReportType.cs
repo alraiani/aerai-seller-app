@@ -2,7 +2,7 @@ namespace AERai.Web.Domain.Ingestion;
 
 /// <summary>
 /// The SP-API data the app ingests automatically, and how each is obtained. Every value but
-/// <see cref="AwdInventory"/> and <see cref="OrdersApi"/> is a Reports API report.
+/// <see cref="AwdInventory"/>, <see cref="OrdersApi"/>, and <see cref="DeferredTransactions"/> is a Reports API report.
 /// </summary>
 public enum AmazonReportType
 {
@@ -46,4 +46,12 @@ public enum AmazonReportType
     /// staging batch.
     /// </summary>
     OrdersApi = 7,
+
+    /// <summary>
+    /// Deferred transactions from the Finances API (<c>GET /finances/2024-06-19/transactions</c>,
+    /// <c>listTransactions</c>): not a report but a paginated listing of the sales Amazon is still holding
+    /// back (its delivery-date policy and invoiced orders), plus those released since the last run. Written
+    /// straight to <c>core.DeferredTransaction</c>; a snapshot of what is held now, so it cannot be backfilled.
+    /// </summary>
+    DeferredTransactions = 8,
 }

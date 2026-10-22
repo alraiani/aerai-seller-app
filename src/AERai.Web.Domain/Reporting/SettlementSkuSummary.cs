@@ -2,7 +2,7 @@ namespace AERai.Web.Domain.Reporting;
 
 /// <summary>
 /// Read model for <c>rpt.vw_SettlementSkuSummary</c>: one row per settlement, SKU, sale price, and
-/// currency, with the same Sales/Fees/Refunds/Other columns as <see cref="SettlementSummary"/>.
+/// currency, with the same Sales/Refunds/Expenses/Reserve columns as <see cref="SettlementSummary"/>.
 /// </summary>
 public sealed class SettlementSkuSummary
 {
@@ -51,17 +51,17 @@ public sealed class SettlementSkuSummary
     /// <summary>Settlement lines in the group.</summary>
     public int LineCount { get; set; }
 
-    /// <summary>Item price amounts on order transactions.</summary>
+    /// <summary>Item price, shipping, and tax on orders (less the tax Amazon withholds), and FBA inventory reimbursements.</summary>
     public decimal Sales { get; set; }
 
-    /// <summary>Selling and fulfillment fees (negative).</summary>
-    public decimal Fees { get; set; }
+    /// <summary>Everything Amazon charged (negative): fees, promotions, advertising, subscriptions, clawbacks.</summary>
+    public decimal Expenses { get; set; }
 
     /// <summary>Net of refund transactions (usually negative).</summary>
     public decimal Refunds { get; set; }
 
-    /// <summary>Everything else: promotions, reimbursements, adjustments.</summary>
-    public decimal Other { get; set; }
+    /// <summary>Account level reserve: held back from the payout (negative) or released from an earlier one (positive).</summary>
+    public decimal Reserve { get; set; }
 
     /// <summary>Sum of all amounts in the group.</summary>
     public decimal Net { get; set; }
@@ -72,14 +72,14 @@ public sealed class SettlementSkuSummary
     /// <summary><see cref="Sales"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
     public decimal? HomeSales { get; set; }
 
-    /// <summary><see cref="Fees"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
-    public decimal? HomeFees { get; set; }
+    /// <summary><see cref="Expenses"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeExpenses { get; set; }
 
     /// <summary><see cref="Refunds"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
     public decimal? HomeRefunds { get; set; }
 
-    /// <summary><see cref="Other"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
-    public decimal? HomeOther { get; set; }
+    /// <summary><see cref="Reserve"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeReserve { get; set; }
 
     /// <summary><see cref="Net"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
     public decimal? HomeNet { get; set; }

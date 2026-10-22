@@ -70,8 +70,8 @@ public sealed class IndexModel(IInventoryService inventory, IProductFamilyServic
 
     /// <summary>Loads the requested page.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when the page is loaded.</returns>
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    /// <returns>The page, or just its section for a partial reload.</returns>
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
         Families = await families.ListAsync(cancellationToken);
@@ -80,6 +80,7 @@ public sealed class IndexModel(IInventoryService inventory, IProductFamilyServic
             new Application.Common.PageRequest(PageNumber, PageSize, Search),
             new InventoryFilter(FamilyId, Status, Sort, Descending),
             cancellationToken);
+        return this.PageOrFragment("_InventoryBody");
     }
 
     /// <summary>

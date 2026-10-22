@@ -26,7 +26,7 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
         var ordered = filter.Sort switch
         {
             SettlementSort.Sales => query.OrderBy(s => s.HomeSales ?? s.Sales, descending),
-            SettlementSort.Fees => query.OrderBy(s => s.HomeFees ?? s.Fees, descending),
+            SettlementSort.Expenses => query.OrderBy(s => s.HomeExpenses ?? s.Expenses, descending),
             SettlementSort.Refunds => query.OrderBy(s => s.HomeRefunds ?? s.Refunds, descending),
             SettlementSort.Net => query.OrderBy(s => s.HomeNet ?? s.Net, descending),
             _ => query.OrderBy(s => s.PeriodEnd, descending),
@@ -53,9 +53,9 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
                 g.Count(s => s.HomeNet != null),
                 g.Count(s => s.HomeNet == null),
                 g.Sum(s => s.HomeSales ?? 0),
-                g.Sum(s => s.HomeFees ?? 0),
+                g.Sum(s => s.HomeExpenses ?? 0),
                 g.Sum(s => s.HomeRefunds ?? 0),
-                g.Sum(s => s.HomeOther ?? 0),
+                g.Sum(s => s.HomeReserve ?? 0),
                 g.Sum(s => s.HomeNet ?? 0)))
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -167,7 +167,7 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
             SettlementSkuSort.Sku => query.OrderBy(r => r.Sku, descending),
             SettlementSkuSort.Units => query.OrderBy(r => r.Units, descending),
             SettlementSkuSort.Orders => query.OrderBy(r => r.OrderCount, descending),
-            SettlementSkuSort.Fees => query.OrderBy(r => home ? r.HomeFees ?? r.Fees : r.Fees, descending),
+            SettlementSkuSort.Expenses => query.OrderBy(r => home ? r.HomeExpenses ?? r.Expenses : r.Expenses, descending),
             SettlementSkuSort.Refunds => query.OrderBy(r => home ? r.HomeRefunds ?? r.Refunds : r.Refunds, descending),
             SettlementSkuSort.Net => query.OrderBy(r => home ? r.HomeNet ?? r.Net : r.Net, descending),
             _ => query.OrderBy(r => home ? r.HomeSales ?? r.Sales : r.Sales, descending),
@@ -211,18 +211,18 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
                 Units = g.Sum(l => l.Units),
                 Amount = g.Sum(l => home ? l.HomeAmount ?? l.Amount : l.Amount),
                 Sales = g.Sum(l => home ? l.HomeSales ?? l.Sales : l.Sales),
-                Fees = g.Sum(l => home ? l.HomeFees ?? l.Fees : l.Fees),
+                Expenses = g.Sum(l => home ? l.HomeExpenses ?? l.Expenses : l.Expenses),
                 Refunds = g.Sum(l => home ? l.HomeRefunds ?? l.Refunds : l.Refunds),
-                Other = g.Sum(l => home ? l.HomeOther ?? l.Other : l.Other),
+                Reserve = g.Sum(l => home ? l.HomeReserve ?? l.Reserve : l.Reserve),
                 SearchHits = search == null ? 1 : g.Count(l => (l.AmazonOrderId != null && l.AmazonOrderId.Contains(search))
                     || l.TransactionType.Contains(search)
                     || (l.AmountType != null && l.AmountType.Contains(search))
                     || (l.AmountDescription != null && l.AmountDescription.Contains(search))),
                 BucketHits = bucket == null ? 1 : g.Count(l =>
                     (bucket == SettlementBucket.Sales && l.Sales != 0)
-                    || (bucket == SettlementBucket.Fees && l.Fees != 0)
+                    || (bucket == SettlementBucket.Expenses && l.Expenses != 0)
                     || (bucket == SettlementBucket.Refunds && l.Refunds != 0)
-                    || (bucket == SettlementBucket.Other && l.Other != 0)),
+                    || (bucket == SettlementBucket.Reserve && l.Reserve != 0)),
             })
             .Where(g => g.SearchHits > 0 && g.BucketHits > 0);
 
@@ -266,9 +266,9 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
                 g.Units,
                 g.Amount,
                 g.Sales,
-                g.Fees,
+                g.Expenses,
                 g.Refunds,
-                g.Other,
+                g.Reserve,
                 currency,
                 (g.AmazonOrderId is { } orderId ? byOrder[orderId] : byType[g.TransactionType ?? string.Empty]).ToList()))
             .ToList();
@@ -290,11 +290,11 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
 
         public decimal Sales { get; init; }
 
-        public decimal Fees { get; init; }
+        public decimal Expenses { get; init; }
 
         public decimal Refunds { get; init; }
 
-        public decimal Other { get; init; }
+        public decimal Reserve { get; init; }
 
         public int SearchHits { get; init; }
 

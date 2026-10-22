@@ -131,8 +131,38 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         var summary = await scope.ServiceProvider.GetRequiredService<AppDbContext>().SettlementSummaries.SingleAsync(s => s.SettlementId == "T-SET-1");
 
         Assert.Equal(new DateTimeOffset(2026, 9, 4, 7, 0, 0, TimeSpan.Zero), summary.PeriodStart);
-        Assert.Equal((100.00m, -54.99m, -20.00m, -1.00m), (summary.Sales, summary.Fees, summary.Refunds, summary.Other));
+        Assert.Equal((100.00m, -20.00m, -55.99m, 0m), (summary.Sales, summary.Refunds, summary.Expenses, summary.Reserve));
         Assert.Equal(24.01m, summary.Net);
+    }
+
+    [SqlFact]
+    public async Task Settlements_ColumnsMatchSellerCentralsStatement()
+    {
+        // The mix behind Seller Central's statement columns: taxes that cancel out, shipping, a promotion, a
+        // reimbursement and its clawback, a refund with its returned fee, and the account level reserve.
+        const string tsv =
+            "settlement-id\tsettlement-start-date\tsettlement-end-date\ttotal-amount\ttransaction-type\tamount-type\tamount-description\tamount\tcurrency\n" +
+            "T-SET-A\t2026-06-01 01:53:02 UTC\t2026-06-15 01:53:02 UTC\t78.33\t\t\t\t\tUSD\n" +
+            "T-SET-A\t\t\t\tOrder\tItemPrice\tPrincipal\t100.00\t\n" +
+            "T-SET-A\t\t\t\tOrder\tItemPrice\tTax\t7.00\t\n" +
+            "T-SET-A\t\t\t\tOrder\tItemWithheldTax\tMarketplaceFacilitatorTax-Principal\t-7.00\t\n" +
+            "T-SET-A\t\t\t\tOrder\tItemPrice\tShipping\t5.00\t\n" +
+            "T-SET-A\t\t\t\tOrder\tPromotion\tShipping\t-5.00\t\n" +
+            "T-SET-A\t\t\t\tOrder\tItemFees\tCommission\t-15.00\t\n" +
+            "T-SET-A\t\t\t\tother-transaction\tFBA Inventory Reimbursement\tWAREHOUSE_LOST\t12.00\t\n" +
+            "T-SET-A\t\t\t\tother-transaction\tFBA Inventory Reimbursement\tCOMPENSATED_CLAWBACK\t-4.00\t\n" +
+            "T-SET-A\t\t\t\tRefund\tItemPrice\tPrincipal\t-20.00\t\n" +
+            "T-SET-A\t\t\t\tRefund\tItemFees\tCommission\t3.00\t\n" +
+            "T-SET-A\t\t\t\tother-transaction\tother-transaction\tPrevious Reserve Amount Balance\t9.32\t\n" +
+            "T-SET-A\t\t\t\tother-transaction\tother-transaction\tCurrent Reserve Amount\t-6.99\t\n";
+
+        await PromoteAsync(await StageAsync(ImportSource.Settlements, "settlement-statement.tsv", tsv));
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var summary = await scope.ServiceProvider.GetRequiredService<AppDbContext>().SettlementSummaries.SingleAsync(s => s.SettlementId == "T-SET-A");
+
+        Assert.Equal((117.00m, -17.00m, -24.00m, 2.33m), (summary.Sales, summary.Refunds, summary.Expenses, summary.Reserve));
+        Assert.Equal(78.33m, summary.Net); // The header's total-amount: the four columns add up to the deposit.
     }
 
     [SqlFact]
@@ -162,7 +192,7 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         // (the refund in its own column, with no quantity of its own); the 12.00 sale and the SKU-less fee are separate rows.
         Assert.Equal(3, rows.TotalCount);
         var tenDollar = rows.Items.Single(r => r.Sku == "T-SKU-A" && r.SalePrice == 10.00m);
-        Assert.Equal((3, 3, 30.00m, -4.50m, -10.00m, 15.50m), (tenDollar.Units, tenDollar.OrderCount, tenDollar.Sales, tenDollar.Fees, tenDollar.Refunds, tenDollar.Net));
+        Assert.Equal((3, 3, 30.00m, -4.50m, -10.00m, 15.50m), (tenDollar.Units, tenDollar.OrderCount, tenDollar.Sales, tenDollar.Expenses, tenDollar.Refunds, tenDollar.Net));
         Assert.Equal((1, 12.00m), (rows.Items.Single(r => r.SalePrice == 12.00m).Units, rows.Items.Single(r => r.SalePrice == 12.00m).Sales));
         Assert.Equal((0, -39.99m), (rows.Items.Single(r => r.Sku is null).Units, rows.Items.Single(r => r.Sku is null).Net));
 
@@ -179,7 +209,7 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         Assert.Equal(tenDollar.Net, groups.Items.Sum(g => g.Amount));
         Assert.Equal(tenDollar.Units, groups.Items.Sum(g => g.Units));
         Assert.All(groups.Items, g => Assert.Equal(g.Amount, g.Lines.Sum(l => l.Amount)));
-        Assert.All(lines.Where(l => l.AmountType == "ItemFees"), l => Assert.Equal(l.Amount, l.Fees));
+        Assert.All(lines.Where(l => l.AmountType == "ItemFees"), l => Assert.Equal(l.Amount, l.Expenses));
     }
 
     [SqlFact]

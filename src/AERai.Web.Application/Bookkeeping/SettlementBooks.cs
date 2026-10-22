@@ -18,6 +18,7 @@ public sealed record SettlementCategoryTotal(string AmountType, string AmountDes
 /// <param name="ExchangeRate">One <paramref name="Currency"/> in <paramref name="HomeCurrency"/> (1 when they are the same), or <see langword="null"/> while unknown.</param>
 /// <param name="RateNote">Where the rate came from, for the entry's memo (e.g. "ECB 2026-09-08", "entered by …"); <see langword="null"/> without conversion.</param>
 /// <param name="ManualHomeAmount">The converted payout an Operator entered, which the entry's deposit line must equal exactly.</param>
+/// <param name="TimeZoneId">The marketplace's time zone, whose local dates the entry and its pages use; <see langword="null"/> keeps UTC.</param>
 public sealed record SettlementBooks(
     string SettlementId,
     string MarketplaceId,
@@ -28,7 +29,8 @@ public sealed record SettlementBooks(
     string HomeCurrency,
     decimal? ExchangeRate,
     string? RateNote = null,
-    decimal? ManualHomeAmount = null)
+    decimal? ManualHomeAmount = null,
+    string? TimeZoneId = null)
 {
     /// <summary>Whether the settlement was paid in another currency than the books are kept in.</summary>
     public bool NeedsConversion => Currency is not null && !string.Equals(Currency, HomeCurrency, StringComparison.OrdinalIgnoreCase);

@@ -15,8 +15,10 @@ namespace AERai.Web.UI.Pages.Settlements;
 /// order grouped by transaction type) that expands into its lines, each with one signed amount.
 /// </summary>
 /// <param name="reporting">Reporting queries.</param>
+/// <param name="deferred">Payouts Amazon deferred (marks orders it held before paying them out).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
-public sealed class LinesModel(IReportingQueries reporting, ICurrentMarketplace currentMarketplace) : ListPageModel
+/// <param name="time">Clock (which release dates have passed).</param>
+public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentService deferred, ICurrentMarketplace currentMarketplace, TimeProvider time) : ListPageModel
 {
     /// <summary>The SKU of the summary row; blank selects the row of amounts that belong to no SKU.</summary>
     [BindProperty(SupportsGet = true, Name = "sku")]
@@ -51,13 +53,25 @@ public sealed class LinesModel(IReportingQueries reporting, ICurrentMarketplace 
     /// <summary>The current page of order groups.</summary>
     public PagedResult<SettlementOrderGroup> Groups { get; private set; } = default!;
 
+    /// <summary>The deferral of each order on this page that Amazon deferred before paying it out.</summary>
+    public IReadOnlyDictionary<string, DeferredPaymentRow> Deferrals { get; private set; } = new Dictionary<string, DeferredPaymentRow>();
+
+    /// <summary>The products of this row (SKU and price each) that Amazon deferred out of this payout.</summary>
+    public IReadOnlyList<DeferredLineItem> DeferredLines { get; private set; } = [];
+
+    /// <summary>When the page was read (release dates before it are due).</summary>
+    public DateTimeOffset Now { get; private set; }
+
+    /// <summary>The marketplace's time zone, in which release dates are shown.</summary>
+    public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
+
     /// <summary>Whether a search or bucket filter is applied.</summary>
     public bool IsFiltered => !string.IsNullOrWhiteSpace(Search) || Bucket is not null;
 
     /// <summary>Loads the summary row and the requested page of its groups.</summary>
     /// <param name="id">Settlement id from the route.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The page, or 404 when the row does not exist in the current marketplace.</returns>
+    /// <returns>The page (or just its section for a partial reload), or 404 when the row does not exist in the current marketplace.</returns>
     public async Task<IActionResult> OnGetAsync(string id, CancellationToken cancellationToken)
     {
         var sku = string.IsNullOrWhiteSpace(Sku) ? null : Sku;
@@ -84,7 +98,12 @@ public sealed class LinesModel(IReportingQueries reporting, ICurrentMarketplace 
         RatePanel = new SettlementRatePanel(settlement, Amounts, LinkWith(("amounts", null)), LinkWith(("amounts", SettlementAmounts.Original.ToString())));
         Groups = await reporting.GetSettlementOrderGroupsAsync(
             marketplace.MarketplaceId, id, sku, price, ToPageRequest(), new SettlementLineFilter(Bucket, Sort, Descending, Amounts), cancellationToken);
-        return Page();
+        Zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
+        DeferredLines = await deferred.GetSkuLinesAsync(marketplace, settlement, sku, price, Amounts, cancellationToken);
+        Now = time.GetUtcNow();
+        Deferrals = await deferred.GetOrderDeferralsAsync(
+            marketplace, [.. Groups.Items.Where(g => g.AmazonOrderId is not null).Select(g => g.AmazonOrderId!)], cancellationToken); // Non-null: filtered just before.
+        return this.PageOrFragment("_LinesBody");
     }
 
     /// <summary>A link back to this summary row with only its SKU and price (no search, filter, or sort).</summary>

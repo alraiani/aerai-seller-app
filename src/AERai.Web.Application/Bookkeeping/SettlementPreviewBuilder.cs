@@ -28,6 +28,15 @@ public static class SettlementPreviewBuilder
             m => (m.AmountType, m.AmountDescription),
             m => m.QuickBooksAccountName);
 
+        // The period is expressed in the marketplace's local time, so the entry is dated the day Seller
+        // Central shows (Amazon closes periods at an hour that is already the next day in UTC).
+        var zone = settlement.TimeZoneId is { } zoneId ? TimeZoneInfo.FindSystemTimeZoneById(zoneId) : TimeZoneInfo.Utc;
+        settlement = settlement with
+        {
+            PeriodStart = settlement.PeriodStart is { } start ? TimeZoneInfo.ConvertTime(start, zone) : null,
+            PeriodEnd = settlement.PeriodEnd is { } end ? TimeZoneInfo.ConvertTime(end, zone) : null,
+        };
+
         var converts = settlement.NeedsConversion;
         var rate = converts ? settlement.ExchangeRate : 1m;
         var rows = settlement.Categories

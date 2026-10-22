@@ -117,6 +117,9 @@ public static class DependencyInjection
         services.AddScoped<ISyncScheduleRepository, SyncScheduleRepository>();
         services.AddScoped<ISyncRunRepository, SyncRunRepository>();
         services.AddScoped<IAwdInventoryRepository, AwdInventoryRepository>();
+        services.AddScoped<DeferredTransactionRepository>();
+        services.AddScoped<IDeferredTransactionRepository>(provider => provider.GetRequiredService<DeferredTransactionRepository>());
+        services.AddScoped<IDeferredPaymentQueries>(provider => provider.GetRequiredService<DeferredTransactionRepository>());
         services.AddScoped<IAmazonOrderRepository, AmazonOrderRepository>();
         services.AddScoped<IAppliedBlobRepository, AppliedBlobRepository>();
         services.AddScoped<ISyncSettingsRepository, SyncSettingsRepository>();
@@ -202,6 +205,10 @@ public static class DependencyInjection
                         client.BaseAddress = provider.GetRequiredService<IOptions<SpApiOptions>>().Value.Endpoint)
                     .AddHttpMessageHandler<SpApiPipelineHandler>();
                 services.AddScoped<IAmazonOrdersGateway, SpApiOrdersGateway>();
+                services.AddHttpClient<FinancesApiClient>((provider, client) =>
+                        client.BaseAddress = provider.GetRequiredService<IOptions<SpApiOptions>>().Value.Endpoint)
+                    .AddHttpMessageHandler<SpApiPipelineHandler>();
+                services.AddScoped<IAmazonFinancesGateway, SpApiFinancesGateway>();
                 break;
 
             case SpApiMode.Simulated:
@@ -210,6 +217,7 @@ public static class DependencyInjection
                 services.AddSingleton<IAmazonCatalogGateway, SimulatedCatalogGateway>();
                 services.AddSingleton<IAmazonAwdGateway, SimulatedAwdGateway>();
                 services.AddSingleton<IAmazonOrdersGateway, SimulatedOrdersGateway>();
+                services.AddSingleton<IAmazonFinancesGateway, SimulatedFinancesGateway>();
                 break;
 
             default:
@@ -217,6 +225,7 @@ public static class DependencyInjection
                 services.AddSingleton<IAmazonCatalogGateway, UnavailableCatalogGateway>();
                 services.AddSingleton<IAmazonAwdGateway, UnavailableAwdGateway>();
                 services.AddSingleton<IAmazonOrdersGateway, UnavailableOrdersGateway>();
+                services.AddSingleton<IAmazonFinancesGateway, UnavailableFinancesGateway>();
                 break;
         }
     }

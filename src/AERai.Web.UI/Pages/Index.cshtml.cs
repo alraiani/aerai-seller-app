@@ -30,6 +30,9 @@ public sealed class IndexModel(IDashboardService dashboard, ICurrentMarketplace 
     /// <summary>The computed dashboard data.</summary>
     public DashboardSnapshot Snapshot { get; private set; } = default!;
 
+    /// <summary>The marketplace's time zone, in which dates are shown.</summary>
+    public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
+
     /// <summary>Age after which sync data shows as stale.</summary>
     public TimeSpan StaleAfter => TimeSpan.FromHours(options.Value.StaleAfterHours);
 
@@ -39,6 +42,7 @@ public sealed class IndexModel(IDashboardService dashboard, ICurrentMarketplace 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         var selection = await currentMarketplace.GetAsync(cancellationToken);
+        Zone = TimeZoneInfo.FindSystemTimeZoneById(selection.Current.TimeZoneId);
         Snapshot = await dashboard.GetSnapshotAsync(selection.Current, Period, cancellationToken);
     }
 }

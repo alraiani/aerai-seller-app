@@ -103,9 +103,9 @@ internal sealed class OrderQueries(AppDbContext dbContext) : IOrderQueries
                 g.Key.SettlementId,
                 g.Key.Currency,
                 Sales = g.Sum(l => l.Sales),
-                Fees = g.Sum(l => l.Fees),
+                Expenses = g.Sum(l => l.Expenses),
                 Refunds = g.Sum(l => l.Refunds),
-                Other = g.Sum(l => l.Other),
+                Reserve = g.Sum(l => l.Reserve),
                 FirstPosted = g.Min(l => l.PostedDate),
             })
             .OrderBy(r => r.FirstPosted)
@@ -113,7 +113,7 @@ internal sealed class OrderQueries(AppDbContext dbContext) : IOrderQueries
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         // The filter above excludes null order ids, so the "!" only quiets the compiler.
-        return rows.Select(r => new OrderSettlementAmounts(r.AmazonOrderId!, r.SettlementId, r.Currency, r.Sales, r.Fees, r.Refunds, r.Other)).ToList();
+        return rows.Select(r => new OrderSettlementAmounts(r.AmazonOrderId!, r.SettlementId, r.Currency, r.Sales, r.Expenses, r.Refunds, r.Reserve)).ToList();
     }
 
     /// <inheritdoc/>

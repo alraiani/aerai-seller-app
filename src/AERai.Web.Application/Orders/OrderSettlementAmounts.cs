@@ -5,18 +5,18 @@ namespace AERai.Web.Application.Orders;
 /// <param name="SettlementId">The settlement the amounts were paid in.</param>
 /// <param name="Currency">ISO 4217 currency the settlement was paid in.</param>
 /// <param name="Sales">Item price amounts.</param>
-/// <param name="Fees">Selling and fulfillment fees (negative).</param>
+/// <param name="Expenses">Fees and other charges on the order (negative).</param>
 /// <param name="Refunds">Money returned to the customer (usually negative).</param>
-/// <param name="Other">Everything else on the order's lines.</param>
+/// <param name="Reserve">Account level reserve on the order's lines (normally none).</param>
 public sealed record OrderSettlementAmounts(
     string AmazonOrderId,
     string SettlementId,
     string? Currency,
     decimal Sales,
-    decimal Fees,
+    decimal Expenses,
     decimal Refunds,
-    decimal Other)
+    decimal Reserve)
 {
     /// <summary>The order's net in this settlement.</summary>
-    public decimal Net => Sales + Fees + Refunds + Other;
+    public decimal Net => Sales + Expenses + Refunds + Reserve;
 }

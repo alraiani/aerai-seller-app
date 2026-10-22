@@ -13,12 +13,12 @@ public sealed class SettlementMoneyTests
         HomeCurrency = "USD",
         ExchangeRate = rate,
         Sales = 100m,
-        Fees = -15m,
+        Expenses = -15m,
         Net = 85m,
         HomeSales = rate is null ? null : 72m,
-        HomeFees = rate is null ? null : -10.8m,
+        HomeExpenses = rate is null ? null : -10.8m,
         HomeRefunds = rate is null ? null : 0m,
-        HomeOther = rate is null ? null : 0m,
+        HomeReserve = rate is null ? null : 0m,
         HomeNet = rate is null ? null : 61.2m,
     };
 
@@ -37,7 +37,7 @@ public sealed class SettlementMoneyTests
     {
         var money = SettlementMoney.Of(Cad(0.72m), SettlementAmounts.Home);
 
-        Assert.Equal((72m, -10.8m, 61.2m, "USD", true), (money.Sales, money.Fees, money.Net, money.Currency, money.IsConverted));
+        Assert.Equal((72m, -10.8m, 61.2m, "USD", true), (money.Sales, money.Expenses, money.Net, money.Currency, money.IsConverted));
     }
 
     [Fact]

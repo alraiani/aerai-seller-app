@@ -10,8 +10,8 @@ namespace AERai.Web.Application.Ingestion;
 /// Supported folders: <c>orders/</c>, <c>settlements/</c>, <c>inventory/</c> (report files, staged then
 /// optionally promoted) and <c>ordersapi/</c> (Orders API pages, written straight to the orders). The
 /// snapshot folders (<c>fbainventory/</c>, <c>fbareservedinventory/</c>, <c>fbarestockrecommendations/</c>,
-/// <c>awdinventory/</c>) are never loaded: those reports are dated by the day they arrive, so loading an old
-/// file would date it today.
+/// <c>awdinventory/</c>, and <c>deferred/</c>) are never loaded: those reports are dated by the day they arrive
+/// (a deferred listing says what Amazon held when it was read), so loading an old file would date it today.
 /// </remarks>
 public interface IBlobRefreshService
 {

@@ -132,7 +132,7 @@ public sealed class OrderQueriesTests(SqlDatabaseFixture fixture) : IClassFixtur
         var amounts = await Queries(scope).GetSettlementAmountsAsync(Us, ["OQP-1", "OQP-4", "OQP-2"], CancellationToken.None);
 
         var usd = Assert.Single(amounts, a => a.AmazonOrderId == "OQP-1");
-        Assert.Equal(("OQP-S-USD", "USD", 50m, -12m, 38m), (usd.SettlementId, usd.Currency, usd.Sales, usd.Fees, usd.Net));
+        Assert.Equal(("OQP-S-USD", "USD", 50m, -12m, 38m), (usd.SettlementId, usd.Currency, usd.Sales, usd.Expenses, usd.Net));
         var cad = Assert.Single(amounts, a => a.AmazonOrderId == "OQP-4");
         Assert.Equal(("OQP-S-CAD", "CAD", 25m, -25m, 0m), (cad.SettlementId, cad.Currency, cad.Sales, cad.Refunds, cad.Net));
         Assert.DoesNotContain(amounts, a => a.AmazonOrderId == "OQP-2");

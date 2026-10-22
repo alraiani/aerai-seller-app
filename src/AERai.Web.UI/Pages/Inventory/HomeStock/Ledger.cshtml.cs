@@ -115,8 +115,8 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
 
     /// <summary>Lists entries.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when the page is loaded.</returns>
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    /// <returns>The page, or just its section for a partial reload.</returns>
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         await LoadAsync(cancellationToken);
         Input.Sku ??= Sku;
@@ -124,6 +124,7 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
 
         // Whole minutes: the date-time picker shows seconds and milliseconds otherwise.
         Input.OccurredAt = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, DateTimeKind.Unspecified);
+        return this.PageOrFragment("_LedgerBody");
     }
 
     /// <summary>Logs a movement.</summary>

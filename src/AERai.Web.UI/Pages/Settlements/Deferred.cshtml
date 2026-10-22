@@ -1,0 +1,10 @@
+@page
+@model AERai.Web.UI.Pages.Settlements.DeferredModel
+@{
+    ViewData["Title"] = "Deferred by Amazon";
+}
+
+@* Search, the view switch, and the pager reload only this section (site.js partial reloads). *@
+<div data-fragment="deferred">
+    <partial name="_DeferredBody" />
+</div>

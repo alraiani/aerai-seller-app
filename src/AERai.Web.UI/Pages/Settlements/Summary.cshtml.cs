@@ -18,8 +18,9 @@ namespace AERai.Web.UI.Pages.Settlements;
 /// </summary>
 /// <param name="reporting">Reporting queries.</param>
 /// <param name="rates">Settlement exchange rates.</param>
+/// <param name="deferred">Payouts Amazon deferred (which orders in this settlement it held first).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
-public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchangeRateService rates, ICurrentMarketplace currentMarketplace) : ListPageModel
+public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchangeRateService rates, IDeferredPaymentService deferred, ICurrentMarketplace currentMarketplace) : ListPageModel
 {
     /// <summary>Which currency amounts are shown in, from <c>?amounts=original</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "amounts")]
@@ -40,6 +41,18 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
     /// <summary>The settlement's totals.</summary>
     public SettlementSummary Settlement { get; private set; } = default!;
 
+    /// <summary>The marketplace's time zone, in which the period and deposit dates are shown.</summary>
+    public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
+
+    /// <summary>The orders in this settlement that Amazon deferred before paying them out here.</summary>
+    public SettlementDeferrals Deferrals { get; private set; } = SettlementDeferrals.None;
+
+    /// <summary>What Amazon deferred out of this payout (sales made in its period, paid in a later one), or <see langword="null"/>.</summary>
+    public DeferredOut? DeferredOut { get; private set; }
+
+    /// <summary>What Amazon deferred out of this payout per SKU and price each (amounts in the page's currency, price each as paid).</summary>
+    public IReadOnlyList<SkuDeferral> SkuDeferrals { get; private set; } = [];
+
     /// <summary>The conversion banner (shown only for a settlement paid in another currency).</summary>
     public SettlementRatePanel RatePanel { get; private set; } = default!;
 
@@ -52,7 +65,7 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
     /// <summary>Loads the settlement and the requested page of rows.</summary>
     /// <param name="id">Settlement id from the route.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The page, or 404 when the settlement is not in the current marketplace.</returns>
+    /// <returns>The page (or just its section for a partial reload), or 404 when the settlement is not in the current marketplace.</returns>
     public async Task<IActionResult> OnGetAsync(string id, CancellationToken cancellationToken)
     {
         var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
@@ -63,6 +76,10 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
         }
 
         Settlement = settlement;
+        Zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
+        Deferrals = await deferred.GetSettlementDeferralsAsync(marketplace, id, cancellationToken);
+        DeferredOut = (await deferred.GetDeferredOutAsync(marketplace, [settlement], Amounts, cancellationToken)).GetValueOrDefault(id);
+        SkuDeferrals = await deferred.GetSkuDeferralsAsync(marketplace, settlement, Amounts, cancellationToken);
         var rate = settlement.Currency is not null && settlement.Currency != settlement.HomeCurrency
             ? await rates.GetAsync(marketplace.MarketplaceId, id, cancellationToken)
             : null;
@@ -71,7 +88,7 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
             User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator));
         Rows = await reporting.GetSettlementSkuSummaryAsync(
             marketplace.MarketplaceId, id, ToPageRequest(), new SettlementSkuFilter(Kind, Sort, Descending, Amounts), cancellationToken);
-        return Page();
+        return this.PageOrFragment("_SummaryBody");
     }
 
     /// <summary>Link for a sortable column header: toggles direction when it's already the sort.</summary>
@@ -89,4 +106,13 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
     /// <param name="kind">Which rows.</param>
     /// <returns>A relative URL.</returns>
     public string KindLink(SettlementRowKind kind) => LinkWith(("kind", kind == SettlementRowKind.All ? null : kind.ToString()));
+
+    /// <summary>What Amazon deferred out of this payout for one summary row (its SKU at its price each as paid).</summary>
+    /// <param name="row">A summary row.</param>
+    /// <returns>The deferral, or <see langword="null"/> when none of that SKU and price was held back.</returns>
+    public SkuDeferral? DeferredFor(SettlementSkuSummary row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return SkuDeferrals.FirstOrDefault(d => d.Sku == row.Sku && d.PriceEach == row.SalePrice);
+    }
 }

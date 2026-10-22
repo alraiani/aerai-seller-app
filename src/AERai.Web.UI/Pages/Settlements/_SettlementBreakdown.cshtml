@@ -1,10 +1,13 @@
 @using AERai.Web.UI.Models
-@model (decimal Sales, decimal Fees, decimal Refunds, decimal Other, decimal Net, string? Currency)
-@* The four columns that make up a net amount, as a compact strip: Sales − Fees − Refunds ± Other = Net. *@
+@model (decimal Sales, decimal Refunds, decimal Expenses, decimal Reserve, decimal Net, string? Currency)
+@* The columns of Seller Central's statement that make up a net amount, as a compact strip: Sales − Refunds − Expenses ± Reserve = Net. Reserve shows only when there is one. *@
 <dl class="amount-breakdown">
     <div><dt>Sales</dt><dd>@SettlementFormat.Money(Model.Sales, Model.Currency)</dd></div>
-    <div><dt>Fees</dt><dd class="@SettlementFormat.AmountClass(Model.Fees)">@SettlementFormat.Money(Model.Fees, Model.Currency)</dd></div>
     <div><dt>Refunds</dt><dd class="@SettlementFormat.AmountClass(Model.Refunds)">@SettlementFormat.Money(Model.Refunds, Model.Currency)</dd></div>
-    <div><dt>Other</dt><dd class="@SettlementFormat.AmountClass(Model.Other)">@SettlementFormat.Money(Model.Other, Model.Currency)</dd></div>
+    <div><dt>Expenses</dt><dd class="@SettlementFormat.AmountClass(Model.Expenses)">@SettlementFormat.Money(Model.Expenses, Model.Currency)</dd></div>
+    @if (Model.Reserve != 0)
+    {
+        <div><dt>Reserve</dt><dd class="@SettlementFormat.AmountClass(Model.Reserve)">@SettlementFormat.Money(Model.Reserve, Model.Currency)</dd></div>
+    }
     <div class="amount-breakdown-total"><dt>Net</dt><dd class="@SettlementFormat.AmountClass(Model.Net)">@SettlementFormat.Money(Model.Net, Model.Currency)</dd></div>
 </dl>

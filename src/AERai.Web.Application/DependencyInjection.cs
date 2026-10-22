@@ -73,6 +73,7 @@ public static class DependencyInjection
         services.AddScoped<IProductCostTemplateService, ProductCostTemplateService>();
         services.AddScoped<IBookkeepingService, BookkeepingService>();
         services.AddScoped<ISettlementExchangeRateService, SettlementExchangeRateService>();
+        services.AddScoped<IDeferredPaymentService, DeferredPaymentService>();
         services.AddScoped<IBlobRefreshService, BlobRefreshService>();
         services.AddScoped<ICurrentMarketplace, CurrentMarketplace>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();

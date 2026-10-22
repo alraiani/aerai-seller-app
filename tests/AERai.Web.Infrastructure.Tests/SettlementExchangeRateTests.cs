@@ -62,7 +62,7 @@ public sealed class SettlementExchangeRateTests(SqlDatabaseFixture fixture) : IC
     public async Task Promotion_CadSettlement_KeepsDepositDateAndConvertsAtTheFetchedRate()
     {
         await PromoteAsync(Settlement("FX-CAD-1", "CAD", "17.09.2026 01:50:49 UTC",
-            ("ItemPrice", "Principal", 100.01m), ("ItemFees", "Commission", -15.03m), ("other-transaction", "Reserve", 2.33m)));
+            ("ItemPrice", "Principal", 100.01m), ("ItemFees", "Commission", -15.03m), ("other-transaction", "Current Reserve Amount", 2.33m)));
 
         var s = await SummaryAsync("FX-CAD-1");
 
@@ -70,10 +70,11 @@ public sealed class SettlementExchangeRateTests(SqlDatabaseFixture fixture) : IC
         Assert.Equal(("CAD", "USD", 0.72m, "Market"), (s.Currency, s.HomeCurrency, s.ExchangeRate, s.RateSource));
         Assert.Equal(87.31m, s.Net);
 
-        // The net converts as a whole (87.31 × 0.72 = 62.8632), and the four columns add up to it exactly.
+        // The net converts as a whole (87.31 × 0.72 = 62.8632), and the four columns add up to it exactly:
+        // expenses take the cent the separate roundings leave over (-15.03 × 0.72 = -10.8216 → -10.83).
         Assert.Equal(62.86m, s.HomeNet);
-        Assert.Equal((72.01m, -10.82m, 0m), (s.HomeSales, s.HomeFees, s.HomeRefunds));
-        Assert.Equal(s.HomeNet, s.HomeSales + s.HomeFees + s.HomeRefunds + s.HomeOther);
+        Assert.Equal((72.01m, 0m, -10.83m, 1.68m), (s.HomeSales, s.HomeRefunds, s.HomeExpenses, s.HomeReserve));
+        Assert.Equal(s.HomeNet, s.HomeSales + s.HomeExpenses + s.HomeRefunds + s.HomeReserve);
     }
 
     [SqlFact]
@@ -115,7 +116,7 @@ public sealed class SettlementExchangeRateTests(SqlDatabaseFixture fixture) : IC
 
         var adjusted = await SummaryAsync("FX-CAD-2");
         Assert.Equal(("Manual", 219.13m), (adjusted.RateSource, adjusted.HomeNet));
-        Assert.Equal(adjusted.HomeNet, adjusted.HomeSales + adjusted.HomeFees + adjusted.HomeRefunds + adjusted.HomeOther);
+        Assert.Equal(adjusted.HomeNet, adjusted.HomeSales + adjusted.HomeExpenses + adjusted.HomeRefunds + adjusted.HomeReserve);
 
         // The export posts the deposit the bank shows, and the entry still balances.
         await scope.ServiceProvider.GetRequiredService<Application.Bookkeeping.IBookkeepingService>().SaveMappingsAsync(
