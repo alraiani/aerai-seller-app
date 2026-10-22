@@ -397,6 +397,24 @@
         if (button) { window.print(); }
     });
 
+    // A [data-print-group="id"] button prints just that row group (e.g. one kind of ledger movement), opened:
+    // html.printing-group hides every other group in print (site.css); the page is put back afterwards.
+    document.addEventListener("click", function (event) {
+        var button = event.target.closest && event.target.closest("[data-print-group]");
+        var group = button && document.getElementById(button.getAttribute("data-print-group"));
+        if (!group) { return; }
+        var root = document.documentElement;
+        var wasOpen = group.classList.contains("is-expanded");
+        root.classList.add("printing-group");
+        group.classList.add("is-printing", "is-expanded");
+        window.addEventListener("afterprint", function () {
+            root.classList.remove("printing-group");
+            group.classList.remove("is-printing");
+            group.classList.toggle("is-expanded", wasOpen);
+        }, { once: true });
+        window.print();
+    });
+
     document.addEventListener("DOMContentLoaded", function () {
         setupTooltips();
         updateNavRail();

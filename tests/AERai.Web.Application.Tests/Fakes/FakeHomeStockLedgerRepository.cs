@@ -84,4 +84,14 @@ internal sealed class FakeHomeStockLedgerRepository : IHomeStockLedgerRepository
 
     public Task<PagedResult<HomeStockLedgerEntry>> ListAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, CancellationToken cancellationToken) =>
         Task.FromResult(new PagedResult<HomeStockLedgerEntry>([], 0, 1, request.SafePageSize));
+
+    public List<HomeStockLedgerGroup> Groups { get; } = [];
+
+    public (string? Search, int MaxRows)? LastGroupsCall { get; private set; }
+
+    public Task<IReadOnlyList<HomeStockLedgerGroup>> ListGroupsAsync(string marketplaceId, HomeStockLedgerFilter filter, string? search, int maxRows, CancellationToken cancellationToken)
+    {
+        LastGroupsCall = (search, maxRows);
+        return Task.FromResult<IReadOnlyList<HomeStockLedgerGroup>>(Groups);
+    }
 }

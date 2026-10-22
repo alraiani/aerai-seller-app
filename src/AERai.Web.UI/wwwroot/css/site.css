@@ -863,6 +863,9 @@ th .tip { text-transform: none; }
     .worksheet-table .home-input { border: 0; box-shadow: none; padding: 0; width: auto; }
     .worksheet-table .sku-cell { position: static; }
     .worksheet-table tr { break-inside: avoid; }
+    /* Printing one row group ([data-print-group]): the others are left out, and the toggles mean nothing on paper. */
+    .printing-group .group-table tbody.order-group:not(.is-printing) { display: none; }
+    .group-table .group-toggle, .expand-controls { display: none !important; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
