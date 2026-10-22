@@ -99,6 +99,30 @@
                             <th class="text-end">Home inv. <partial name="_Tip" model='"Units at home for this marketplace. Edit a count and save; every change is logged in the home-stock ledger."' /></th>
                             <th>Order next <partial name="_Tip" model='"The next supplier order from the sales rate: how many and the last day to place it so it arrives (through prep and transit) before all stock — Amazon and home — runs out."' /></th>
                         </tr>
+                        @* The totals sit in the sticky header so they stay in view while scrolling and typing sends. *@
+                        <tr class="totals-row">
+                            <th class="sku-cell" scope="row">Total</th>
+                            <th class="text-end">@sheet.Totals.Sold30d.ToString("N0", en)</th>
+                            <th class="text-end">@sheet.Totals.Sold90d.ToString("N0", en)</th>
+                            <th class="text-end">
+                                @sheet.Totals.Available.ToString("N0", en)@(sheet.Totals.Inbound > 0 ? $" +{sheet.Totals.Inbound.ToString("N0", en)}" : "")
+                                @if (sheet.Totals.PendingToAmazon > 0)
+                                {
+                                    <div class="cell-sub">+@sheet.Totals.PendingToAmazon.ToString("N0", en) awaiting</div>
+                                }
+                            </th>
+                            <th></th>
+                            <th class="col-send">
+                                @* Without script this shows the suggestion; site.js replaces it with the sum of the send boxes. *@
+                                <div data-send-total>@(sheet.Totals.SendToAmazon > 0 ? $"Send {sheet.Totals.SendToAmazon.ToString("N0", en)}" : "—")</div>
+                                @if (Model.CanEdit && sheet.Totals.SendToAmazon > 0)
+                                {
+                                    <div class="cell-sub" data-send-suggested hidden>suggested @sheet.Totals.SendToAmazon.ToString("N0", en)</div>
+                                }
+                            </th>
+                            <th class="text-end">@sheet.Totals.HomeStock.ToString("N0", en)</th>
+                            <th title="Units for supplier orders due within @Model.SoonDays days or overdue">@(sheet.Totals.Reorder > 0 ? $"Order {sheet.Totals.Reorder.ToString("N0", en)} now" : "Nothing due")</th>
+                        </tr>
                     </thead>
                     @foreach (var group in sheet.Groups)
                     {
@@ -223,24 +247,6 @@
                             }
                         </tbody>
                     }
-                    <tfoot>
-                        <tr>
-                            <td class="sku-cell">Total</td>
-                            <td class="text-end">@sheet.Totals.Sold30d.ToString("N0", en)</td>
-                            <td class="text-end">@sheet.Totals.Sold90d.ToString("N0", en)</td>
-                            <td class="text-end">
-                                @sheet.Totals.Available.ToString("N0", en)@(sheet.Totals.Inbound > 0 ? $" +{sheet.Totals.Inbound.ToString("N0", en)}" : "")
-                                @if (sheet.Totals.PendingToAmazon > 0)
-                                {
-                                    <div class="cell-sub">+@sheet.Totals.PendingToAmazon.ToString("N0", en) awaiting</div>
-                                }
-                            </td>
-                            <td></td>
-                            <td class="col-send">@(sheet.Totals.SendToAmazon > 0 ? $"Send {sheet.Totals.SendToAmazon.ToString("N0", en)}" : "—")</td>
-                            <td class="text-end">@sheet.Totals.HomeStock.ToString("N0", en)</td>
-                            <td title="Units for supplier orders due within @Model.SoonDays days or overdue">@(sheet.Totals.Reorder > 0 ? $"Order {sheet.Totals.Reorder.ToString("N0", en)} now" : "Nothing due")</td>
-                        </tr>
-                    </tfoot>
                 </table>
             </div>
         }

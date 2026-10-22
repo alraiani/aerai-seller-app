@@ -275,9 +275,27 @@
     // ---------- Worksheet send amounts ----------
     // Typing units to send into a [data-send-input] shows what home stock will be after the save
     // ("→ 70 at home after sending") under the same row's home count. The server does the real subtraction.
+    // The total row's [data-send-total] shows the sum of every box, so it says what will actually go out;
+    // the suggestion moves underneath ([data-send-suggested]). Without script the total is the suggestion.
+    function updateSendTotal() {
+        var total = document.querySelector("[data-send-total]");
+        var boxes = document.querySelectorAll("[data-send-input]");
+        // Viewers have no boxes, so their total stays the suggestion.
+        if (!total || boxes.length === 0) { return; }
+        var sum = 0;
+        boxes.forEach(function (box) {
+            var units = parseInt(box.value, 10);
+            if (units > 0) { sum += units; }
+        });
+        total.textContent = sum > 0 ? "Sending " + sum.toLocaleString("en-US") : "Sending 0";
+        var suggested = document.querySelector("[data-send-suggested]");
+        if (suggested) { suggested.hidden = false; }
+    }
+
     document.addEventListener("input", function (event) {
         var input = event.target;
         if (!input.matches || !input.matches("[data-send-input]")) { return; }
+        updateSendTotal();
         var row = input.closest("tr");
         var hint = row && row.querySelector("[data-after-send]");
         var home = row && row.querySelector(".home-input");
@@ -306,6 +324,12 @@
         var fits = table.scrollWidth <= wrapper.clientWidth + 1;
         wrapper.classList.toggle("is-sticky", fits);
         wrapper.classList.toggle("table-scroll", !fits);
+
+        // A second header row (e.g. the Worksheet's totals) sticks right under the first.
+        var first = table.tHead && table.tHead.rows.length > 1 ? table.tHead.rows[0] : null;
+        if (first) {
+            table.style.setProperty("--sticky-row1", Math.floor(first.getBoundingClientRect().height) + "px");
+        }
 
         // The toolbar sticks only when its card holds just this table, and the header sits right below it.
         var card = wrapper.parentElement;
@@ -377,6 +401,7 @@
         setupTooltips();
         updateNavRail();
         setupStickyTables();
+        updateSendTotal();
 
         var dirty = document.querySelectorAll("[data-dirty-form]");
         for (var d = 0; d < dirty.length; d++) { setupDirtyForm(dirty[d]); }
