@@ -77,6 +77,95 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
         });
 
     /// <inheritdoc/>
+    public Task<(HomeStockLedgerOutcome Outcome, long? Id)> CorrectAsync(
+        string marketplaceId,
+        long id,
+        HomeStockMovementType type,
+        int units,
+        string? note,
+        IReadOnlyDictionary<string, AmazonBaseline> amazonBaselines,
+        DateTimeOffset createdAt,
+        string createdBy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(amazonBaselines);
+
+        return InTransactionAsync(async () =>
+        {
+            var original = await dbContext.HomeStockMovements.AsNoTracking()
+                .SingleOrDefaultAsync(m => m.Id == id && m.MarketplaceId == marketplaceId, cancellationToken)
+                .ConfigureAwait(false);
+            if (original is null)
+            {
+                return (HomeStockLedgerOutcome.NotFound, null);
+            }
+
+            // An edited entry is reversed, so "already reversed" also covers "already edited".
+            var alreadyReversed = await dbContext.HomeStockMovements.AnyAsync(m => m.ReversesId == id, cancellationToken).ConfigureAwait(false);
+            if (alreadyReversed || original.ReversesId is not null || original.Type == HomeStockMovementType.OpeningBalance)
+            {
+                return (HomeStockLedgerOutcome.CannotReverse, null);
+            }
+
+            if (original.Type == type && original.Units == units && original.Note == note)
+            {
+                return (HomeStockLedgerOutcome.Unchanged, null);
+            }
+
+            // Units Amazon already shows did go out: the send can't shrink below them or become something else.
+            var wasSend = original.Type == HomeStockMovementType.ShippedToAmazon;
+            var isSend = type == HomeStockMovementType.ShippedToAmazon;
+            if (wasSend && original.ReconciledUnits > 0 && (!isSend || -units < original.ReconciledUnits))
+            {
+                return (HomeStockLedgerOutcome.AlreadyAtAmazon, null);
+            }
+
+            var current = (await BalanceRowAsync(marketplaceId, original.Sku, cancellationToken).ConfigureAwait(false))?.Quantity ?? 0;
+            if (current - original.Units + units < 0)
+            {
+                return (HomeStockLedgerOutcome.WouldGoNegative, null);
+            }
+
+            // A send keeps the baseline it was logged with; an entry that becomes a send is measured from now.
+            var baseline = !isSend ? null
+                : wasSend ? new AmazonBaseline(original.AmazonBaselineUnits ?? 0, original.AmazonBaselineAt)
+                : amazonBaselines.GetValueOrDefault(original.Sku) ?? AmazonBaseline.Of(null);
+            var reversal = new HomeStockLedgerWrite(
+                marketplaceId, original.Sku, original.Type, -original.Units, createdAt, original.Reference, $"Edited: reverses entry #{original.Id}", original.Id, createdAt, createdBy);
+
+            // The copy keeps when the units moved and who logged them, so a send stays in its group on Awaiting Amazon.
+            var copy = new HomeStockLedgerWrite(
+                marketplaceId, original.Sku, type, units, original.OccurredAt, original.Reference, note, null, original.CreatedAt, original.CreatedBy, baseline, original.Id);
+
+            // The addition goes first, so the balance never dips below zero between the two entries.
+            HomeStockMovement? corrected = null;
+            foreach (var write in reversal.Units > copy.Units ? new[] { reversal, copy } : [copy, reversal])
+            {
+                var row = await BalanceRowAsync(marketplaceId, original.Sku, cancellationToken).ConfigureAwait(false);
+                var movement = HomeStockBalance.Apply(dbContext, row, write);
+                if (ReferenceEquals(write, copy))
+                {
+                    corrected = movement;
+                }
+
+                await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (wasSend && isSend && corrected is not null)
+            {
+                // Amazon's progress on the send carries over; it closes once Amazon shows every unit.
+                corrected.ReconciledUnits = original.ReconciledUnits;
+                var closed = original.ReconciledUnits >= -units;
+                corrected.ReconciledAt = closed ? original.ReconciledAt ?? createdAt : null;
+                corrected.ReconciledBy = closed ? original.ReconciledBy ?? createdBy : null;
+                await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return (HomeStockLedgerOutcome.Recorded, corrected?.Id);
+        });
+    }
+
+    /// <inheritdoc/>
     public async Task<(IReadOnlyList<HomeStockCountChange> Applied, IReadOnlyList<string> Stale)> ApplyCountsAsync(
         string marketplaceId,
         IReadOnlyList<HomeStockCountChange> changes,
@@ -182,9 +271,12 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
 
     private IQueryable<LedgerRow> Filtered(string marketplaceId, HomeStockLedgerFilter filter, string? search)
     {
+        // An edit leaves the original and its reversal behind as history; the page lists only the corrected copy.
         var query =
             from m in dbContext.HomeStockMovements.AsNoTracking()
             where m.MarketplaceId == marketplaceId
+                && !dbContext.HomeStockMovements.Any(c => c.CorrectsId == m.Id)
+                && !(m.ReversesId != null && dbContext.HomeStockMovements.Any(c => c.CorrectsId == m.ReversesId))
             join p in dbContext.Products on m.Sku equals p.Sku
             select new LedgerRow { Movement = m, Product = p };
 
@@ -239,7 +331,13 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
             x.Movement.ReversesId,
             dbContext.HomeStockMovements.Where(r => r.ReversesId == x.Movement.Id).Select(r => (long?)r.Id).FirstOrDefault(),
             x.Movement.CreatedAt,
-            x.Movement.CreatedBy));
+            x.Movement.CreatedBy,
+            x.Movement.CorrectsId == null ? null : (
+                from was in dbContext.HomeStockMovements
+                where was.Id == x.Movement.CorrectsId
+                from undo in dbContext.HomeStockMovements
+                where undo.ReversesId == was.Id
+                select new HomeStockLedgerEdit(undo.CreatedAt, undo.CreatedBy, was.Type, was.Units, was.Note)).FirstOrDefault()));
 
     private Task<HomeStock?> BalanceRowAsync(string marketplaceId, string sku, CancellationToken cancellationToken) =>
         dbContext.HomeStocks.SingleOrDefaultAsync(h => h.MarketplaceId == marketplaceId && h.Sku == sku, cancellationToken);

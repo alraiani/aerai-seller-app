@@ -162,4 +162,61 @@ public sealed class HomeStockLedgerTests(SqlDatabaseFixture fixture) : IClassFix
         var onlyB = await ledger.ListGroupsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-GRP-B", Type: HomeStockMovementType.ShippedToAmazon), null, 10, CancellationToken.None);
         Assert.Equal([(HomeStockMovementType.ShippedToAmazon, 1)], onlyB.Select(g => (g.Type, g.EntryCount)));
     }
+
+    private static readonly IReadOnlyDictionary<string, AmazonBaseline> NoBaselines = new Dictionary<string, AmazonBaseline>();
+
+    [SqlFact]
+    public async Task Correct_ReplacesTheEntryInTheListsAndKeepsTheHistory()
+    {
+        await AddProductAsync("T-EDIT-1");
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var ledger = scope.ServiceProvider.GetRequiredService<IHomeStockLedgerRepository>();
+        var (_, id) = await ledger.RecordAsync(Write("T-EDIT-1", HomeStockMovementType.ReceivedFromSupplier, 20), CancellationToken.None);
+
+        var (outcome, copyId) = await ledger.CorrectAsync(MarketplaceIds.UnitedStates, id!.Value, HomeStockMovementType.Other, 15, "found 15", NoBaselines, Now.AddHours(1), "editor", CancellationToken.None);
+        var (again, _) = await ledger.CorrectAsync(MarketplaceIds.UnitedStates, id.Value, HomeStockMovementType.Other, 12, "x", NoBaselines, Now.AddHours(2), "editor", CancellationToken.None);
+        var (copyAgain, secondId) = await ledger.CorrectAsync(MarketplaceIds.UnitedStates, copyId!.Value, HomeStockMovementType.Other, 12, "found 12", NoBaselines, Now.AddHours(3), "editor", CancellationToken.None);
+
+        Assert.Equal((HomeStockLedgerOutcome.Recorded, HomeStockLedgerOutcome.CannotReverse, HomeStockLedgerOutcome.Recorded), (outcome, again, copyAgain));
+
+        // Original, its reversal, the first copy, its reversal, and the second copy: all kept, adding up to the balance.
+        Assert.Equal((12, 12, 5), await StateAsync("T-EDIT-1"));
+
+        var page = await ledger.ListAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-EDIT-1"), new PageRequest(), CancellationToken.None);
+        var entry = Assert.Single(page.Items);
+        Assert.Equal((secondId, HomeStockMovementType.Other, 12, "found 12", "tests", Now), (entry.Id, entry.Type, entry.Units, entry.Note, entry.CreatedBy, entry.CreatedAt));
+        Assert.Equal(new HomeStockLedgerEdit(Now.AddHours(3), "editor", HomeStockMovementType.Other, 15, "found 15"), entry.Edit);
+
+        var groups = await ledger.ListGroupsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-EDIT-1"), null, 10, CancellationToken.None);
+        Assert.Equal([(HomeStockMovementType.Other, 1, 12, 0)], groups.Select(g => (g.Type, g.EntryCount, g.UnitsIn, g.UnitsOut)));
+    }
+
+    [SqlFact]
+    public async Task Correct_RefusesWhatWouldGoNegativeOrUndoWhatAmazonShows()
+    {
+        await AddProductAsync("T-EDIT-2");
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var ledger = scope.ServiceProvider.GetRequiredService<IHomeStockLedgerRepository>();
+        var (_, received) = await ledger.RecordAsync(Write("T-EDIT-2", HomeStockMovementType.ReceivedFromSupplier, 30), CancellationToken.None);
+        var (_, sent) = await ledger.RecordAsync(Write("T-EDIT-2", HomeStockMovementType.ShippedToAmazon, -25) with { AmazonBaseline = new AmazonBaseline(40, Now) }, CancellationToken.None);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.HomeStockMovements.Where(m => m.Id == sent).ExecuteUpdateAsync(u => u.SetProperty(m => m.ReconciledUnits, 4));
+
+        await CorrectAsync(HomeStockLedgerOutcome.WouldGoNegative, received!.Value, HomeStockMovementType.ReceivedFromSupplier, 20);
+        await CorrectAsync(HomeStockLedgerOutcome.AlreadyAtAmazon, sent!.Value, HomeStockMovementType.ShippedToAmazon, -3);
+        await CorrectAsync(HomeStockLedgerOutcome.AlreadyAtAmazon, sent.Value, HomeStockMovementType.CountCorrection, -25);
+        var copyId = await CorrectAsync(HomeStockLedgerOutcome.Recorded, sent.Value, HomeStockMovementType.ShippedToAmazon, -6);
+
+        // The corrected send keeps its baseline and Amazon's progress, and stays open for the 2 units still on their way.
+        var copy = await db.HomeStockMovements.AsNoTracking().SingleAsync(m => m.Id == copyId);
+        Assert.Equal((40, (int?)4, (DateTimeOffset?)null, Now), (copy.AmazonBaselineUnits ?? 0, (int?)copy.ReconciledUnits, copy.ReconciledAt, copy.CreatedAt));
+        Assert.Equal((24, 24, 4), await StateAsync("T-EDIT-2"));
+
+        async Task<long?> CorrectAsync(HomeStockLedgerOutcome expected, long id, HomeStockMovementType type, int units)
+        {
+            var (outcome, newId) = await ledger.CorrectAsync(MarketplaceIds.UnitedStates, id, type, units, null, NoBaselines, Now.AddHours(1), "editor", CancellationToken.None);
+            Assert.Equal(expected, outcome);
+            return newId;
+        }
+    }
 }

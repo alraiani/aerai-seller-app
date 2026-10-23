@@ -302,4 +302,43 @@ public sealed class HomeStockLedgerServiceTests
 
         Assert.Equal((7, true), (group.NetUnits, group.IsCapped));
     }
+
+    private Task<Result<string>> CorrectAsync(HomeStockMovementType type, int units, string? note = null) =>
+        CreateService().CorrectAsync(Us, new HomeStockCorrectionInput(7, type, units, note), User, CancellationToken.None);
+
+    [Theory]
+    [InlineData(HomeStockMovementType.ReceivedFromSupplier, -12, 12)]
+    [InlineData(HomeStockMovementType.ShippedToAmazon, 5, -5)]
+    [InlineData(HomeStockMovementType.CountCorrection, -3, -3)]
+    public async Task CorrectAsync_GivesReceivedAndShippedTheirOwnSign(HomeStockMovementType type, int typed, int recorded)
+    {
+        var result = await CorrectAsync(type, typed, " recount ");
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal((7L, type, recorded, "recount"), (_repository.LastCorrection?.Id, _repository.LastCorrection?.Type, _repository.LastCorrection?.Units, _repository.LastCorrection?.Note));
+        Assert.True(_alerts.Requests > 0);
+    }
+
+    [Theory]
+    [InlineData(HomeStockMovementType.OpeningBalance, 5, "x")]
+    [InlineData(HomeStockMovementType.CountCorrection, 0, "x")]
+    [InlineData(HomeStockMovementType.Other, 4, null)]
+    public async Task CorrectAsync_RefusesWhatCantBeLogged(HomeStockMovementType type, int units, string? note)
+    {
+        var result = await CorrectAsync(type, units, note);
+
+        Assert.True(result.IsFailure);
+        Assert.Null(_repository.LastCorrection);
+    }
+
+    [Fact]
+    public async Task CorrectAsync_SendAmazonAlreadyShows_ExplainsWhy()
+    {
+        _repository.CorrectOutcome = HomeStockLedgerOutcome.AlreadyAtAmazon;
+
+        var result = await CorrectAsync(HomeStockMovementType.ShippedToAmazon, 2);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Amazon already shows", result.Error, StringComparison.Ordinal);
+    }
 }

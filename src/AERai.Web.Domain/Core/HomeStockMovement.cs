@@ -2,7 +2,9 @@ namespace AERai.Web.Domain.Core;
 
 /// <summary>
 /// One line of a SKU's home-stock ledger in a marketplace: units in (positive) or out (negative),
-/// when, and why. Entries are never edited or deleted; a mistake is undone by a reversing entry.
+/// when, and why. Entries are never edited or deleted; a mistake is undone by a reversing entry, and an
+/// edit made on the ledger page is a correction: the entry is reversed and a corrected copy logged
+/// (<see cref="CorrectsId"/>), in one transaction.
 /// </summary>
 /// <remarks>
 /// The ledger is the history; <see cref="HomeStock"/> is its running balance. Both are written in the
@@ -44,6 +46,12 @@ public sealed class HomeStockMovement
 
     /// <summary>The entry this one reverses, if it is a reversal.</summary>
     public long? ReversesId { get; set; }
+
+    /// <summary>
+    /// The entry this one corrects, if it was logged by editing that entry on the ledger page (which also
+    /// reverses it). The page then lists only this copy; the original and its reversal stay as history.
+    /// </summary>
+    public long? CorrectsId { get; set; }
 
     /// <summary>
     /// For a <see cref="HomeStockMovementType.ShippedToAmazon"/> entry: the SKU's FBA sell-through stock

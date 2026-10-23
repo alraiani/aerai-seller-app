@@ -48,6 +48,17 @@ public interface IHomeStockLedgerService
     /// <returns>Success, or why it cannot be reversed.</returns>
     Task<Result> ReverseAsync(string marketplaceId, long id, string user, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Edits an entry from the ledger page. The ledger is never overwritten: the entry is reversed and a
+    /// corrected copy logged in its place, so the history and the balance stay intact.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="input">The entry and its new type, units, and note.</param>
+    /// <param name="user">Email of the user editing it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A message to show, or why it can't be edited.</returns>
+    Task<Result<string>> CorrectAsync(string marketplaceId, HomeStockCorrectionInput input, string user, CancellationToken cancellationToken);
+
     /// <summary>One page of entries, newest first.</summary>
     /// <param name="marketplaceId">Marketplace.</param>
     /// <param name="filter">Filters.</param>

@@ -6,6 +6,7 @@ using AERai.Web.Application.Security;
 using AERai.Web.Domain.Core;
 using AERai.Web.UI.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 
 namespace AERai.Web.UI.Pages.Inventory.HomeStock;
 
@@ -61,6 +62,16 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
     /// <summary>Last local day to include, from <c>?to=</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "to")]
     public DateOnly? To { get; set; }
+
+    /// <summary>The entry shown as an edit form, from <c>?edit=</c> (or after a failed save).</summary>
+    [BindProperty(SupportsGet = true, Name = "edit")]
+    public long? EditId { get; set; }
+
+    /// <summary>The values typed into the edit form, after a save that failed; the entry's own otherwise.</summary>
+    public CorrectionInput? EditValues { get; private set; }
+
+    /// <summary>Why the last save of the edit form failed.</summary>
+    public string? EditError { get; private set; }
 
     /// <summary>Opens the Log movement dialog on load (after a failed save, or from a link).</summary>
     [BindProperty(SupportsGet = true, Name = "log")]
@@ -123,6 +134,69 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
     /// <param name="instant">The instant.</param>
     /// <returns>The same instant with the local offset.</returns>
     public DateTimeOffset Local(DateTimeOffset instant) => TimeZoneInfo.ConvertTime(instant, Zone);
+
+    /// <summary>The current list's filters, view, search, and page, to come back to after a post or edit.</summary>
+    public RouteValueDictionary ListRoute()
+    {
+        var route = new RouteValueDictionary(PagerFilters.ToDictionary(kv => kv.Key, kv => (object?)kv.Value));
+        if (!string.IsNullOrWhiteSpace(Search))
+        {
+            route["q"] = Search;
+        }
+
+        if (PageNumber > 1)
+        {
+            route["p"] = PageNumber;
+        }
+
+        return route;
+    }
+
+    /// <summary>The same list with one entry open for editing.</summary>
+    /// <param name="id">The entry.</param>
+    /// <returns>The link.</returns>
+    public string EditLink(long id)
+    {
+        var route = ListRoute();
+        route["edit"] = id;
+        return Url.Page("Ledger", route)!; // Non-null: this page always resolves.
+    }
+
+    /// <summary>The same list with no entry open for editing.</summary>
+    public string CancelEditLink() => Url.Page("Ledger", ListRoute())!; // Non-null: this page always resolves.
+
+    /// <summary>
+    /// What changed in an edited entry, e.g. "edited Oct 23 by ops@… · was Received from supplier +20".
+    /// </summary>
+    /// <param name="entry">The entry.</param>
+    /// <returns>The summary, or <see langword="null"/> for an entry never edited.</returns>
+    public string? EditSummary(HomeStockLedgerEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        if (entry.Edit is not { } edit)
+        {
+            return null;
+        }
+
+        var en = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+        var was = new List<string>();
+        if (edit.WasType != entry.Type)
+        {
+            was.Add(Label(edit.WasType));
+        }
+
+        if (edit.WasUnits != entry.Units)
+        {
+            was.Add(edit.WasUnits.ToString("+#,0;−#,0", en));
+        }
+
+        if (edit.WasNote != entry.Note)
+        {
+            was.Add(edit.WasNote is null ? "no note" : $"“{edit.WasNote}”");
+        }
+
+        return $"Edited {Local(edit.EditedAt).ToString("MMM d", en)} by {edit.EditedBy}" + (was.Count > 0 ? $" · was {string.Join(" ", was)}" : string.Empty);
+    }
 
     /// <summary>
     /// A link to every entry of one kind of movement in the All entries view, keeping the other filters
@@ -188,6 +262,40 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
         return Page();
     }
 
+    /// <summary>Edits an entry: it is reversed and a corrected copy logged in its place.</summary>
+    /// <param name="id">The entry.</param>
+    /// <param name="correction">Its new type, units, and note.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back to the list, or the list with the row still open and the error shown.</returns>
+    public async Task<IActionResult> OnPostEditAsync(long id, CorrectionInput correction, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(correction);
+        if (!CanEdit)
+        {
+            return Forbid();
+        }
+
+        await LoadMarketplaceAsync(cancellationToken);
+        var result = await ledger.CorrectAsync(
+            Marketplace.MarketplaceId,
+            new HomeStockCorrectionInput(id, correction.Type, correction.Units, correction.Note),
+            User.Identity!.Name!, // Non-null: the page requires an authenticated user.
+            cancellationToken);
+        if (result.IsSuccess)
+        {
+            TempData[StatusMessage.Success] = result.Value;
+            return RedirectToPage(ListRoute());
+        }
+
+        // The Log movement form is bound on every post too; its empty fields aren't this form's errors.
+        ModelState.Clear();
+        EditId = id;
+        EditValues = correction;
+        EditError = result.Error;
+        await LoadAsync(cancellationToken);
+        return Page();
+    }
+
     /// <summary>Reverses an entry.</summary>
     /// <param name="id">The entry.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
@@ -229,6 +337,19 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
         {
             Groups = await ledger.GetGroupsAsync(Marketplace.MarketplaceId, filter, Search, cancellationToken);
         }
+    }
+
+    /// <summary>The fields of a row's edit form.</summary>
+    public sealed class CorrectionInput
+    {
+        /// <summary>Kind of movement.</summary>
+        public HomeStockMovementType Type { get; set; }
+
+        /// <summary>Units (signed for a count correction or other).</summary>
+        public int Units { get; set; }
+
+        /// <summary>Note.</summary>
+        public string? Note { get; set; }
     }
 
     /// <summary>The Log movement form fields.</summary>
