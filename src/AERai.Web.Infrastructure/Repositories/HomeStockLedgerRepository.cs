@@ -141,9 +141,13 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
                 marketplaceId, original.Sku, type, units, original.OccurredAt, original.Reference, note, null,
                 newSend ? createdAt : original.CreatedAt, newSend ? createdBy : original.CreatedBy, baseline, original.Id);
 
-            // The addition goes first, so the balance never dips below zero between the two entries.
+            // The reversal goes first, so the copy's balance reads in logging order. When taking the original's units
+            // out first would dip below zero (some of them have since gone out), the copy goes first instead, and the
+            // two balances are swapped afterwards: the lists hide the reversal, so the copy must show the final count.
+            var reversalFirst = current - original.Units >= 0;
             HomeStockMovement? corrected = null;
-            foreach (var write in reversal.Units > copy.Units ? new[] { reversal, copy } : [copy, reversal])
+            HomeStockMovement? reversed = null;
+            foreach (var write in reversalFirst ? new[] { reversal, copy } : [copy, reversal])
             {
                 var row = await BalanceRowAsync(marketplaceId, original.Sku, cancellationToken).ConfigureAwait(false);
                 var movement = HomeStockBalance.Apply(dbContext, row, write);
@@ -151,7 +155,17 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
                 {
                     corrected = movement;
                 }
+                else
+                {
+                    reversed = movement;
+                }
 
+                await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (!reversalFirst && corrected is not null && reversed is not null)
+            {
+                (corrected.BalanceAfter, reversed.BalanceAfter) = (reversed.BalanceAfter, corrected.BalanceAfter);
                 await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             }
 
@@ -273,6 +287,19 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
         }
 
         return groups;
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<HomeStockLedgerEntry>> GetEntriesAsync(string marketplaceId, IReadOnlyCollection<long> ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        var rows =
+            from m in dbContext.HomeStockMovements.AsNoTracking()
+            where m.MarketplaceId == marketplaceId && ids.Contains(m.Id)
+            join p in dbContext.Products on m.Sku equals p.Sku
+            select new LedgerRow { Movement = m, Product = p };
+        return await ToEntries(rows).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private IQueryable<LedgerRow> Filtered(string marketplaceId, HomeStockLedgerFilter filter, string? search)

@@ -1,4 +1,5 @@
 using AERai.Web.Application.Common;
+using AERai.Web.Domain.Core;
 
 namespace AERai.Web.Application.Inventory;
 
@@ -58,6 +59,21 @@ public interface IHomeStockLedgerService
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>A message to show, or why it can't be edited.</returns>
     Task<Result<string>> CorrectAsync(string marketplaceId, HomeStockCorrectionInput input, string user, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sets the reason (movement type and/or note) of several entries at once, each recorded as a correction
+    /// like a single edit, with the same rules. Units stay each entry's own (received and shipped take their
+    /// type's direction). Entries that can't change are skipped and reported, not failed as a batch.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="ids">The entries, at most <see cref="HomeStockLedgerService.MaxBulkEntries"/>.</param>
+    /// <param name="type">The movement to set, or <see langword="null"/> to keep each entry's own.</param>
+    /// <param name="note">The note to set, or blank to keep each entry's own.</param>
+    /// <param name="user">Email of the user editing them.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>How many changed, were already so, or were skipped and why; or why nothing could be done.</returns>
+    Task<Result<HomeStockBulkCorrectionResult>> CorrectReasonAsync(
+        string marketplaceId, IReadOnlyCollection<long> ids, HomeStockMovementType? type, string? note, string user, CancellationToken cancellationToken);
 
     /// <summary>One page of entries, newest first.</summary>
     /// <param name="marketplaceId">Marketplace.</param>

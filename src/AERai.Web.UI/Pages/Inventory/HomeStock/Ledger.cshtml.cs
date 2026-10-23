@@ -153,6 +153,10 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
         return route;
     }
 
+    /// <summary><see cref="ListRoute"/> as text, for a form's <c>asp-all-route-data</c>.</summary>
+    public IDictionary<string, string> ListRouteValues() =>
+        ListRoute().ToDictionary(kv => kv.Key, kv => Convert.ToString(kv.Value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
+
     /// <summary>The same list with one entry open for editing.</summary>
     /// <param name="id">The entry.</param>
     /// <returns>The link.</returns>
@@ -196,7 +200,7 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
             was.Add(edit.WasNote is null ? "no note" : $"“{edit.WasNote}”");
         }
 
-        return $"Edited {Local(edit.EditedAt).ToString("MMM d", en)} by {edit.EditedBy}" + (was.Count > 0 ? $" · was {string.Join(" ", was)}" : string.Empty);
+        return $"Edited {Local(edit.EditedAt).ToString("MMM d", en)} by {edit.EditedBy}" + (was.Count > 0 ? $" · was {string.Join(", ", was)}" : string.Empty);
     }
 
     /// <summary>
@@ -295,6 +299,35 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
         EditError = result.Error;
         await LoadAsync(cancellationToken);
         return Page();
+    }
+
+    /// <summary>Sets the reason (movement and/or note) of the ticked entries, each recorded as a correction.</summary>
+    /// <param name="ids">The ticked entries.</param>
+    /// <param name="reasonType">The movement to set; empty keeps each entry's own.</param>
+    /// <param name="reasonNote">The note to set; blank keeps each entry's own.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back to the list.</returns>
+    public async Task<IActionResult> OnPostReasonAsync(long[]? ids, HomeStockMovementType? reasonType, string? reasonNote, CancellationToken cancellationToken)
+    {
+        if (!CanEdit)
+        {
+            return Forbid();
+        }
+
+        await LoadMarketplaceAsync(cancellationToken);
+        var result = await ledger.CorrectReasonAsync(Marketplace.MarketplaceId, ids ?? [], reasonType, reasonNote, User.Identity!.Name!, cancellationToken); // Non-null: the page requires an authenticated user.
+        if (result.IsFailure)
+        {
+            TempData[StatusMessage.Error] = result.Error;
+            return RedirectToPage(ListRoute());
+        }
+
+        var (updated, unchanged, skipped) = result.Value;
+        var message = $"Reason set on {updated:N0} entr{(updated == 1 ? "y" : "ies")}"
+            + (unchanged > 0 ? $"; {unchanged:N0} already had it" : string.Empty)
+            + (skipped.Count > 0 ? $". {skipped.Count:N0} skipped: {string.Join(" ", skipped.Take(5))}{(skipped.Count > 5 ? " …" : string.Empty)}" : ".");
+        TempData[skipped.Count > 0 && updated == 0 ? StatusMessage.Error : StatusMessage.Success] = message;
+        return RedirectToPage(ListRoute());
     }
 
     /// <summary>Reverses an entry.</summary>

@@ -187,6 +187,10 @@ public sealed class HomeStockLedgerTests(SqlDatabaseFixture fixture) : IClassFix
         Assert.Equal((secondId, HomeStockMovementType.Other, 12, "found 12", "tests", Now), (entry.Id, entry.Type, entry.Units, entry.Note, entry.CreatedBy, entry.CreatedAt));
         Assert.Equal(new HomeStockLedgerEdit(Now.AddHours(3), "editor", HomeStockMovementType.Other, 15, "found 15"), entry.Edit);
 
+        // By id, the history is still there (for a bulk edit to find), but only in its own marketplace.
+        Assert.Equal([id.Value, copyId.Value], (await ledger.GetEntriesAsync(MarketplaceIds.UnitedStates, [id.Value, copyId.Value], CancellationToken.None)).Select(e => e.Id).Order());
+        Assert.Empty(await ledger.GetEntriesAsync(MarketplaceIds.Canada, [id.Value], CancellationToken.None));
+
         var groups = await ledger.ListGroupsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-EDIT-1"), null, 10, CancellationToken.None);
         Assert.Equal([(HomeStockMovementType.Other, 1, 12, 0)], groups.Select(g => (g.Type, g.EntryCount, g.UnitsIn, g.UnitsOut)));
     }
@@ -236,5 +240,60 @@ public sealed class HomeStockLedgerTests(SqlDatabaseFixture fixture) : IClassFix
         Assert.Equal(HomeStockLedgerOutcome.Recorded, outcome);
         var copy = await scope.ServiceProvider.GetRequiredService<AppDbContext>().HomeStockMovements.AsNoTracking().SingleAsync(m => m.Id == copyId);
         Assert.Equal((editedAt, "editor", (int?)17, Now), (copy.CreatedAt, copy.CreatedBy, copy.AmazonBaselineUnits, copy.OccurredAt));
+    }
+
+    [SqlFact]
+    public async Task Correct_ReceiptWhoseUnitsPartlyWentOut_ShowsTheFinalBalance()
+    {
+        await AddProductAsync("T-EDIT-4");
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var ledger = scope.ServiceProvider.GetRequiredService<IHomeStockLedgerRepository>();
+        var (_, received) = await ledger.RecordAsync(Write("T-EDIT-4", HomeStockMovementType.ReceivedFromSupplier, 50), CancellationToken.None);
+        await ledger.RecordAsync(Write("T-EDIT-4", HomeStockMovementType.ShippedToAmazon, -8), CancellationToken.None);
+
+        // Taking the 50 out first would go to -8, so the copy is written first; it must still show the count after the edit.
+        var (outcome, copyId) = await ledger.CorrectAsync(MarketplaceIds.UnitedStates, received!.Value, HomeStockMovementType.ReceivedFromSupplier, 50, "restock", NoBaselines, Now.AddHours(1), "editor", CancellationToken.None);
+
+        Assert.Equal(HomeStockLedgerOutcome.Recorded, outcome);
+        var page = await ledger.ListAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-EDIT-4"), new PageRequest(), CancellationToken.None);
+        Assert.Equal(42, page.Items.Single(e => e.Id == copyId).BalanceAfter);
+        Assert.Equal((42, 42, 4), await StateAsync("T-EDIT-4"));
+    }
+
+    [SqlFact]
+    public async Task FixCorrectionBalances_SwapsOnlyCopiesStillShowingTheInBetweenCount()
+    {
+        await AddProductAsync("T-EDIT-5");
+        await AddProductAsync("T-EDIT-6");
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var ledger = scope.ServiceProvider.GetRequiredService<IHomeStockLedgerRepository>();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // T-EDIT-5: copy written first (8 units had gone out). T-EDIT-6: reversal written first, already right.
+        var (_, fifty) = await ledger.RecordAsync(Write("T-EDIT-5", HomeStockMovementType.ReceivedFromSupplier, 50), CancellationToken.None);
+        await ledger.RecordAsync(Write("T-EDIT-5", HomeStockMovementType.ShippedToAmazon, -8), CancellationToken.None);
+        var (_, twenty) = await ledger.RecordAsync(Write("T-EDIT-6", HomeStockMovementType.ReceivedFromSupplier, 20), CancellationToken.None);
+        var (_, copy5) = await ledger.CorrectAsync(MarketplaceIds.UnitedStates, fifty!.Value, HomeStockMovementType.ReceivedFromSupplier, 50, "restock", NoBaselines, Now.AddHours(1), "editor", CancellationToken.None);
+        var (_, copy6) = await ledger.CorrectAsync(MarketplaceIds.UnitedStates, twenty!.Value, HomeStockMovementType.ReceivedFromSupplier, 15, null, NoBaselines, Now.AddHours(1), "editor", CancellationToken.None);
+
+        // Put T-EDIT-5 back the way edits made before the fix left it: the copy shows the in-between 92.
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE core.HomeStockMovement SET BalanceAfter = 92 WHERE Sku = 'T-EDIT-5' AND CorrectsId IS NOT NULL;
+            UPDATE core.HomeStockMovement SET BalanceAfter = 42 WHERE Sku = 'T-EDIT-5' AND ReversesId IS NOT NULL;
+            """);
+        var script = SqlResource.Read("V020_LedgerCorrectionBalances", "fix-correction-balances.sql");
+
+        await db.Database.ExecuteSqlRawAsync(script);
+        await db.Database.ExecuteSqlRawAsync(script);
+
+        var balances = await db.HomeStockMovements.AsNoTracking()
+            .Where(m => m.Id == copy5 || m.Id == copy6 || m.ReversesId == fifty || m.ReversesId == twenty)
+            .ToDictionaryAsync(m => m.Id, m => m.BalanceAfter);
+        var reversal5 = await db.HomeStockMovements.Where(m => m.ReversesId == fifty).Select(m => m.Id).SingleAsync();
+        var reversal6 = await db.HomeStockMovements.Where(m => m.ReversesId == twenty).Select(m => m.Id).SingleAsync();
+        Assert.Equal((42, 92), (balances[copy5!.Value], balances[reversal5]));
+        Assert.Equal((15, 0), (balances[copy6!.Value], balances[reversal6]));
+        Assert.Equal((42, 42, 4), await StateAsync("T-EDIT-5"));
     }
 }
