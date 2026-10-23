@@ -225,6 +225,12 @@ public sealed partial class HomeStockLedgerService(
         var note = Tidy(input.Note);
         var limit = InventoryItemService.MaxHomeStock;
 
+        // Range-checked as a long first: Math.Abs(int.MinValue) would overflow.
+        if (input.Units == 0 || Math.Abs((long)input.Units) > limit)
+        {
+            return Result.Failure<string>($"Enter the units, from 1 to {limit:N0} (+ adds, − removes for a count correction or other).");
+        }
+
         // Received and shipped have a direction of their own, so only the amount typed matters.
         var units = input.Type switch
         {
@@ -234,7 +240,6 @@ public sealed partial class HomeStockLedgerService(
         };
         string? error =
             !Enum.IsDefined(input.Type) || input.Type == HomeStockMovementType.OpeningBalance ? "Choose what kind of movement this is."
-            : units == 0 || Math.Abs(units) > limit ? $"Enter the units, from 1 to {limit:N0} (+ adds, − removes for a count correction or other)."
             : input.Type == HomeStockMovementType.Other && note is null ? "Add a note saying what this movement was."
             : note?.Length > MaxNoteLength ? $"The note can be at most {MaxNoteLength} characters."
             : null;

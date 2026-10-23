@@ -134,8 +134,12 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
                 marketplaceId, original.Sku, original.Type, -original.Units, createdAt, original.Reference, $"Edited: reverses entry #{original.Id}", original.Id, createdAt, createdBy);
 
             // The copy keeps when the units moved and who logged them, so a send stays in its group on Awaiting Amazon.
+            // An entry that only now becomes a send is logged as of now instead: its baseline is today's, and the
+            // reconciler compares Amazon's numbers from the send's logged time.
+            var newSend = isSend && !wasSend;
             var copy = new HomeStockLedgerWrite(
-                marketplaceId, original.Sku, type, units, original.OccurredAt, original.Reference, note, null, original.CreatedAt, original.CreatedBy, baseline, original.Id);
+                marketplaceId, original.Sku, type, units, original.OccurredAt, original.Reference, note, null,
+                newSend ? createdAt : original.CreatedAt, newSend ? createdBy : original.CreatedBy, baseline, original.Id);
 
             // The addition goes first, so the balance never dips below zero between the two entries.
             HomeStockMovement? corrected = null;
@@ -153,7 +157,9 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
 
             if (wasSend && isSend && corrected is not null)
             {
-                // Amazon's progress on the send carries over; it closes once Amazon shows every unit.
+                // Amazon's progress on the send carries over; it closes once Amazon shows every unit. A reconcile that
+                // matched the original but writes after this commit lands on the reversed original instead; the send
+                // then stays pending until the next reconcile matches the copy, so it errs on the safe side.
                 corrected.ReconciledUnits = original.ReconciledUnits;
                 var closed = original.ReconciledUnits >= -units;
                 corrected.ReconciledAt = closed ? original.ReconciledAt ?? createdAt : null;

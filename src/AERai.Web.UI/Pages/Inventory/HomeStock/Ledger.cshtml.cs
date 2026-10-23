@@ -13,7 +13,8 @@ namespace AERai.Web.UI.Pages.Inventory.HomeStock;
 /// <summary>
 /// The home-stock ledger: every unit received from the supplier, shipped to Amazon, or corrected by
 /// a recount, with dates and a running balance. Everyone can read it; Operators and Admins can log
-/// movements and reverse mistakes (entries are never edited or deleted).
+/// movements, reverse mistakes, and edit entries in place (an edit is recorded as a correction: the entry is
+/// reversed and a corrected copy logged, so nothing is overwritten or deleted).
 /// </summary>
 /// <param name="ledger">Ledger use cases.</param>
 /// <param name="items">Item service (families for the filter).</param>

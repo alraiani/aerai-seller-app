@@ -219,4 +219,22 @@ public sealed class HomeStockLedgerTests(SqlDatabaseFixture fixture) : IClassFix
             return newId;
         }
     }
+
+    [SqlFact]
+    public async Task Correct_EntryBecomingASend_IsLoggedAsOfTheEditWithTodaysBaseline()
+    {
+        await AddProductAsync("T-EDIT-3");
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var ledger = scope.ServiceProvider.GetRequiredService<IHomeStockLedgerRepository>();
+        await ledger.RecordAsync(Write("T-EDIT-3", HomeStockMovementType.ReceivedFromSupplier, 30), CancellationToken.None);
+        var (_, other) = await ledger.RecordAsync(Write("T-EDIT-3", HomeStockMovementType.Other, -6) with { Note = "gave away" }, CancellationToken.None);
+        var editedAt = Now.AddDays(2);
+        var baselines = new Dictionary<string, AmazonBaseline> { ["T-EDIT-3"] = new(17, editedAt.AddHours(-1)) };
+
+        var (outcome, copyId) = await ledger.CorrectAsync(MarketplaceIds.UnitedStates, other!.Value, HomeStockMovementType.ShippedToAmazon, -6, null, baselines, editedAt, "editor", CancellationToken.None);
+
+        Assert.Equal(HomeStockLedgerOutcome.Recorded, outcome);
+        var copy = await scope.ServiceProvider.GetRequiredService<AppDbContext>().HomeStockMovements.AsNoTracking().SingleAsync(m => m.Id == copyId);
+        Assert.Equal((editedAt, "editor", (int?)17, Now), (copy.CreatedAt, copy.CreatedBy, copy.AmazonBaselineUnits, copy.OccurredAt));
+    }
 }

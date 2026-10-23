@@ -323,6 +323,7 @@ public sealed class HomeStockLedgerServiceTests
     [InlineData(HomeStockMovementType.OpeningBalance, 5, "x")]
     [InlineData(HomeStockMovementType.CountCorrection, 0, "x")]
     [InlineData(HomeStockMovementType.Other, 4, null)]
+    [InlineData(HomeStockMovementType.ReceivedFromSupplier, int.MinValue, "x")]
     public async Task CorrectAsync_RefusesWhatCantBeLogged(HomeStockMovementType type, int units, string? note)
     {
         var result = await CorrectAsync(type, units, note);
