@@ -850,6 +850,11 @@ th .tip { text-transform: none; }
 .ledger-units.out { color: var(--negative); }
 .ledger-reversed { opacity: 0.55; }
 .ledger-reversed .ledger-units { text-decoration: line-through; }
+/* A row opened for editing (?edit=): its cells hold the form's inputs. */
+.ledger-table tr.ledger-editing > td { background: var(--brand-soft); }
+.ledger-table .ledger-edit-type { width: 12.5rem; }
+.ledger-table .ledger-edit-units { width: 5.5rem; margin-left: auto; }
+.ledger-table .ledger-edit-note { width: 100%; min-width: 9rem; }
 
 /* ---------- Print: the worksheet as a clean sheet of paper ---------- */
 @media print {

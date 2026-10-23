@@ -436,6 +436,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<int>("BalanceAfter")
                         .HasColumnType("int");
 
+                    b.Property<long?>("CorrectsId")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -487,6 +490,10 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CorrectsId")
+                        .IsUnique()
+                        .HasFilter("[CorrectsId] IS NOT NULL");
 
                     b.HasIndex("ReversesId")
                         .IsUnique()
@@ -2592,6 +2599,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AERai.Web.Domain.Core.HomeStockMovement", b =>
                 {
+                    b.HasOne("AERai.Web.Domain.Core.HomeStockMovement", null)
+                        .WithMany()
+                        .HasForeignKey("CorrectsId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
                         .WithMany()
                         .HasForeignKey("MarketplaceId")

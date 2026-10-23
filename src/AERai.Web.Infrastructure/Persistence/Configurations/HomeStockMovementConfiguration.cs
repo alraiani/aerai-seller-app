@@ -39,6 +39,10 @@ internal sealed class HomeStockMovementConfiguration : IEntityTypeConfiguration<
         // One reversal per entry, so an entry can't be undone twice.
         builder.HasIndex(m => m.ReversesId).IsUnique().HasFilter("[ReversesId] IS NOT NULL");
         builder.HasOne<HomeStockMovement>().WithMany().HasForeignKey(m => m.ReversesId).OnDelete(DeleteBehavior.Restrict);
+
+        // One correction per entry: editing a corrected entry corrects the latest copy instead.
+        builder.HasIndex(m => m.CorrectsId).IsUnique().HasFilter("[CorrectsId] IS NOT NULL");
+        builder.HasOne<HomeStockMovement>().WithMany().HasForeignKey(m => m.CorrectsId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Product>().WithMany().HasForeignKey(m => m.Sku).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Marketplace>().WithMany().HasForeignKey(m => m.MarketplaceId).OnDelete(DeleteBehavior.Restrict);
     }

@@ -216,6 +216,63 @@ public sealed partial class HomeStockLedgerService(
     }
 
     /// <inheritdoc/>
+    public async Task<Result<string>> CorrectAsync(string marketplaceId, HomeStockCorrectionInput input, string user, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentException.ThrowIfNullOrWhiteSpace(user);
+
+        var note = Tidy(input.Note);
+        var limit = InventoryItemService.MaxHomeStock;
+
+        // Range-checked as a long first: Math.Abs(int.MinValue) would overflow.
+        if (input.Units == 0 || Math.Abs((long)input.Units) > limit)
+        {
+            return Result.Failure<string>($"Enter the units, from 1 to {limit:N0} (+ adds, − removes for a count correction or other).");
+        }
+
+        // Received and shipped have a direction of their own, so only the amount typed matters.
+        var units = input.Type switch
+        {
+            HomeStockMovementType.ReceivedFromSupplier => Math.Abs(input.Units),
+            HomeStockMovementType.ShippedToAmazon => -Math.Abs(input.Units),
+            _ => input.Units,
+        };
+        string? error =
+            !Enum.IsDefined(input.Type) || input.Type == HomeStockMovementType.OpeningBalance ? "Choose what kind of movement this is."
+            : input.Type == HomeStockMovementType.Other && note is null ? "Add a note saying what this movement was."
+            : note?.Length > MaxNoteLength ? $"The note can be at most {MaxNoteLength} characters."
+            : null;
+        if (error is not null)
+        {
+            return Result.Failure<string>(error);
+        }
+
+        var baselines = input.Type == HomeStockMovementType.ShippedToAmazon ? await BaselinesAsync(marketplaceId, cancellationToken).ConfigureAwait(false) : NoBaselines;
+        var (outcome, correctionId) = await repository.CorrectAsync(
+            marketplaceId, input.Id, input.Type, units, note, baselines, clock.GetUtcNow(), user, cancellationToken).ConfigureAwait(false);
+        switch (outcome)
+        {
+            case HomeStockLedgerOutcome.Recorded:
+                LogCorrected(input.Id, correctionId, input.Type, units, marketplaceId);
+                alerts.Request();
+                return Result.Success($"Entry #{input.Id} updated (logged as #{correctionId}; the original is kept in the history).");
+            case HomeStockLedgerOutcome.Unchanged:
+                return Result.Success("Nothing changed.");
+            case HomeStockLedgerOutcome.NotFound:
+                return Result.Failure<string>("That entry no longer exists.");
+            case HomeStockLedgerOutcome.CannotReverse:
+                return Result.Failure<string>("That entry can't be edited: it was reversed or edited already, or is a reversal or an opening balance.");
+            case HomeStockLedgerOutcome.WouldGoNegative:
+                return Result.Failure<string>("That would take home stock below zero, because units have since gone out. Check the units, or log a count correction.");
+            case HomeStockLedgerOutcome.AlreadyAtAmazon:
+                return Result.Failure<string>("Amazon already shows some of this send, so it can't go below those units or stop being a send to Amazon.");
+            default:
+                return Result.Failure<string>("The entry could not be updated.");
+        }
+    }
+
+    /// <inheritdoc/>
     public Task<PagedResult<HomeStockLedgerEntry>> ListAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
@@ -317,4 +374,7 @@ public sealed partial class HomeStockLedgerService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Reversed home-stock entry {Id} with {ReversalId} in {MarketplaceId}")]
     private partial void LogReversed(long id, long? reversalId, string marketplaceId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Corrected home-stock entry {Id} with {CorrectionId}: {Type} {Units} in {MarketplaceId}")]
+    private partial void LogCorrected(long id, long? correctionId, HomeStockMovementType type, int units, string marketplaceId);
 }

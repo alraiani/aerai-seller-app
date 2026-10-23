@@ -20,6 +20,7 @@ namespace AERai.Web.Application.Inventory;
 /// For a send to Amazon, the SKU's FBA stock when it was logged (see
 /// <see cref="HomeStockMovement.AmazonBaselineUnits"/>); otherwise <see langword="null"/>.
 /// </param>
+/// <param name="CorrectsId">The entry this one corrects (an edit on the ledger page), if any.</param>
 public sealed record HomeStockLedgerWrite(
     string MarketplaceId,
     string Sku,
@@ -31,4 +32,5 @@ public sealed record HomeStockLedgerWrite(
     long? ReversesId,
     DateTimeOffset CreatedAt,
     string CreatedBy,
-    AmazonBaseline? AmazonBaseline = null);
+    AmazonBaseline? AmazonBaseline = null,
+    long? CorrectsId = null);

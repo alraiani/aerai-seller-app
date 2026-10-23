@@ -50,6 +50,39 @@ public interface IHomeStockLedgerRepository
         IReadOnlyDictionary<string, AmazonBaseline> amazonBaselines,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Corrects an entry: reverses it and logs a copy with the new type, units, and note (linked by
+    /// <see cref="HomeStockMovement.CorrectsId"/>), keeping its date, reference, who and when it was logged,
+    /// and, for a send to Amazon, its baseline and the units Amazon already shows. One serializable
+    /// transaction, so the balance and the entries stay equal.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="id">The entry.</param>
+    /// <param name="type">The corrected kind of movement.</param>
+    /// <param name="units">The corrected signed units.</param>
+    /// <param name="note">The corrected note.</param>
+    /// <param name="amazonBaselines">
+    /// Each SKU's Amazon baseline now, used when an entry becomes a send to Amazon (it had none before).
+    /// </param>
+    /// <param name="createdAt">When the correction is made.</param>
+    /// <param name="createdBy">Email of the user making it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>
+    /// The outcome and the corrected copy's id: <see cref="HomeStockLedgerOutcome.Unchanged"/> when nothing
+    /// differs, <see cref="HomeStockLedgerOutcome.CannotReverse"/> for an entry that can't be edited,
+    /// <see cref="HomeStockLedgerOutcome.WouldGoNegative"/>, or <see cref="HomeStockLedgerOutcome.AlreadyAtAmazon"/>.
+    /// </returns>
+    Task<(HomeStockLedgerOutcome Outcome, long? Id)> CorrectAsync(
+        string marketplaceId,
+        long id,
+        HomeStockMovementType type,
+        int units,
+        string? note,
+        IReadOnlyDictionary<string, AmazonBaseline> amazonBaselines,
+        DateTimeOffset createdAt,
+        string createdBy,
+        CancellationToken cancellationToken);
+
     /// <summary>One page of a marketplace's entries, newest first.</summary>
     /// <param name="marketplaceId">Marketplace.</param>
     /// <param name="filter">SKU, family, type, and date range.</param>

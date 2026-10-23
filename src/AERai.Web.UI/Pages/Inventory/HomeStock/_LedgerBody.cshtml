@@ -123,10 +123,11 @@
                 </thead>
                 @if (grouped)
                 {
-                    @* One group per kind of movement; a lone group (one type, or one SKU with one kind) opens at once. *@
-                    var open = Model.Groups.Count == 1;
+                    @* One group per kind of movement; a lone group (one type, or one SKU with one kind) opens at once,
+                       and so does the group of the entry being edited. *@
                     foreach (var group in Model.Groups)
                     {
+                        var open = Model.Groups.Count == 1 || group.Entries.Any(e => e.Id == Model.EditId);
                         var groupId = $"movement-{group.Type}";
                         var label = LedgerModel.Label(group.Type);
                         <tbody class="order-group @(open ? "is-expanded" : "")" id="@groupId">
