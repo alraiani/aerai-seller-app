@@ -7,7 +7,10 @@
     var grouped = Model.View == HomeStockLedgerView.ByMovement;
     var count = grouped ? Model.Groups.Sum(g => g.EntryCount) : Model.Entries.TotalCount;
     var empty = grouped ? Model.Groups.Count == 0 : Model.Entries.Items.Count == 0;
-    var columns = Model.CanEdit ? 9 : 8;
+    // Operators get a tick-box column first (bulk reason) and an actions column last.
+    var lead = Model.CanEdit ? 1 : 0;
+    var columns = Model.CanEdit ? 10 : 8;
+    var editable = grouped ? Model.Groups.Any(g => g.Entries.Any(e => e.CanEdit)) : Model.Entries.Items.Any(e => e.CanEdit);
 
     // View links keep every filter, so switching views never loses them.
     string ViewLink(HomeStockLedgerView view) => Url.Page("Ledger", new
@@ -100,10 +103,33 @@
     }
     else
     {
+        @if (Model.CanEdit && editable)
+        {
+            @* Tick entries, or a whole movement with its group's box; the boxes belong to this form through form="…". *@
+            <form method="post" asp-page="Ledger" asp-page-handler="Reason" asp-all-route-data="@Model.ListRouteValues()" id="ledger-bulk-form"
+                  class="bulk-bar bulk-bar-row no-print" data-bulk-bar data-bulk-noun="row"
+                  data-confirm="Set the reason on the ticked rows? Each change is recorded as a correction; the originals stay in the history.">
+                <span class="bulk-count" data-bulk-count>Tick rows, or a whole movement, to set their reason at once.</span>
+                <select name="reasonType" class="form-select form-select-sm bulk-input" aria-label="Movement to set on the ticked rows" data-bulk-button>
+                    <option value="">Keep each movement</option>
+                    @foreach (var (type, typeLabel) in LedgerModel.LoggableTypes)
+                    {
+                        <option value="@type">@typeLabel</option>
+                    }
+                </select>
+                <input type="text" name="reasonNote" class="form-control form-control-sm bulk-input" maxlength="@HomeStockLedgerService.MaxNoteLength"
+                       placeholder="Note (blank keeps each note)" aria-label="Note to set on the ticked rows" autocomplete="off" data-bulk-button />
+                <button type="submit" class="btn btn-sm btn-soft" data-bulk-button><partial name="_Icon" model='"check"' /> Set reason</button>
+            </form>
+        }
         <div class="table-responsive">
             <table class="table data-table ledger-table align-middle mb-0 @(grouped ? "group-table" : "")">
                 <thead>
                     <tr>
+                        @if (Model.CanEdit)
+                        {
+                            <th class="select-col"><input type="checkbox" class="form-check-input" data-select-all aria-label="Select every row that can be edited" /></th>
+                        }
                         @if (grouped)
                         {
                             <th class="toggle-col"><span class="visually-hidden">Expand</span></th>
@@ -132,6 +158,15 @@
                         var label = LedgerModel.Label(group.Type);
                         <tbody class="order-group @(open ? "is-expanded" : "")" id="@groupId">
                             <tr class="group-row">
+                                @if (Model.CanEdit)
+                                {
+                                    <td class="select-col">
+                                        @if (group.Entries.Any(e => e.CanEdit))
+                                        {
+                                            <input type="checkbox" class="form-check-input" data-select-group aria-label="Select every @label row" />
+                                        }
+                                    </td>
+                                }
                                 <td class="toggle-col">
                                     <button type="button" class="btn btn-sm btn-icon group-toggle" data-expand-row aria-expanded="@(open ? "true" : "false")" aria-controls="@groupId"
                                             aria-label="Show the @label entries">
@@ -151,7 +186,7 @@
                                         <div class="cell-sub">@group.UnitsIn.ToString("+#,0", en) / @group.UnitsOut.ToString("−#,0;−#,0", en)</div>
                                     }
                                 </td>
-                                <td colspan="@(columns - 5)" class="text-end">
+                                <td colspan="@(columns - 5 - lead)" class="text-end">
                                     <button type="button" class="btn btn-sm btn-soft no-print" data-print-group="@groupId"
                                             data-bs-toggle="tooltip" data-bs-title="Print only the @label entries"><partial name="_Icon" model='"printer"' /> Print</button>
                                 </td>
@@ -163,8 +198,12 @@
                             @if (group.IsCapped)
                             {
                                 <tr class="group-child">
+                                    @if (Model.CanEdit)
+                                    {
+                                        <td class="select-col"></td>
+                                    }
                                     <td class="toggle-col"></td>
-                                    <td colspan="@(columns - 1)" class="cell-sub">
+                                    <td colspan="@(columns - 1 - lead)" class="cell-sub">
                                         Showing the newest @group.Entries.Count.ToString("N0", en) of @group.EntryCount.ToString("N0", en).
                                         <a href="@Model.AllEntriesLink(group.Type)">See every @label entry</a>
                                     </td>

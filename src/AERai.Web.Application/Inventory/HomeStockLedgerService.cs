@@ -36,6 +36,9 @@ public sealed partial class HomeStockLedgerService(
     /// </summary>
     public const int MaxGroupRows = 250;
 
+    /// <summary>Most entries one bulk reason change may touch (a full group of the grouped view).</summary>
+    public const int MaxBulkEntries = MaxGroupRows;
+
     private static readonly IReadOnlyDictionary<string, AmazonBaseline> NoBaselines = new Dictionary<string, AmazonBaseline>();
 
     /// <summary>How far ahead a movement may be dated (clock skew between browser and server).</summary>
@@ -222,13 +225,79 @@ public sealed partial class HomeStockLedgerService(
         ArgumentNullException.ThrowIfNull(input);
         ArgumentException.ThrowIfNullOrWhiteSpace(user);
 
+        var baselines = input.Type == HomeStockMovementType.ShippedToAmazon ? await BaselinesAsync(marketplaceId, cancellationToken).ConfigureAwait(false) : NoBaselines;
+        var (outcome, id, error) = await ApplyCorrectionAsync(marketplaceId, input, baselines, user, cancellationToken).ConfigureAwait(false);
+        return error is not null ? Result.Failure<string>(error)
+            : outcome == HomeStockLedgerOutcome.Unchanged ? Result.Success("Nothing changed.")
+            : Result.Success($"Entry #{input.Id} updated (logged as #{id}; the original is kept in the history).");
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result<HomeStockBulkCorrectionResult>> CorrectReasonAsync(
+        string marketplaceId, IReadOnlyCollection<long> ids, HomeStockMovementType? type, string? note, string user, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentException.ThrowIfNullOrWhiteSpace(user);
+
+        var unique = ids.Distinct().ToList();
+        var newNote = Tidy(note);
+        string? error =
+            unique.Count == 0 ? "Tick the entries to change."
+            : unique.Count > MaxBulkEntries ? $"Change at most {MaxBulkEntries:N0} entries at a time."
+            : type is null && newNote is null ? "Choose a movement or enter a note to set."
+            : null;
+        if (error is not null)
+        {
+            return Result.Failure<HomeStockBulkCorrectionResult>(error);
+        }
+
+        var entries = (await repository.GetEntriesAsync(marketplaceId, unique, cancellationToken).ConfigureAwait(false)).ToDictionary(e => e.Id);
+        var baselines = type == HomeStockMovementType.ShippedToAmazon ? await BaselinesAsync(marketplaceId, cancellationToken).ConfigureAwait(false) : NoBaselines;
+        var updated = 0;
+        var unchanged = 0;
+        var skipped = new List<string>();
+
+        // Each entry is its own correction, so one that can't change never holds the others back.
+        foreach (var id in unique)
+        {
+            if (!entries.TryGetValue(id, out var entry))
+            {
+                skipped.Add($"#{id}: that entry no longer exists.");
+                continue;
+            }
+
+            // A count correction or other movement keeps its own direction; received and shipped take theirs.
+            var input = new HomeStockCorrectionInput(id, type ?? entry.Type, entry.Units, newNote ?? entry.Note);
+            var (outcome, _, failure) = await ApplyCorrectionAsync(marketplaceId, input, baselines, user, cancellationToken).ConfigureAwait(false);
+            if (failure is not null)
+            {
+                skipped.Add($"#{id} {entry.Sku}: {failure}");
+            }
+            else if (outcome == HomeStockLedgerOutcome.Unchanged)
+            {
+                unchanged++;
+            }
+            else
+            {
+                updated++;
+            }
+        }
+
+        return Result.Success(new HomeStockBulkCorrectionResult(updated, unchanged, skipped));
+    }
+
+    /// <summary>Validates an edit and records it as a correction; the error is set when it can't be made.</summary>
+    private async Task<(HomeStockLedgerOutcome Outcome, long? Id, string? Error)> ApplyCorrectionAsync(
+        string marketplaceId, HomeStockCorrectionInput input, IReadOnlyDictionary<string, AmazonBaseline> baselines, string user, CancellationToken cancellationToken)
+    {
         var note = Tidy(input.Note);
         var limit = InventoryItemService.MaxHomeStock;
 
         // Range-checked as a long first: Math.Abs(int.MinValue) would overflow.
         if (input.Units == 0 || Math.Abs((long)input.Units) > limit)
         {
-            return Result.Failure<string>($"Enter the units, from 1 to {limit:N0} (+ adds, − removes for a count correction or other).");
+            return (HomeStockLedgerOutcome.Unchanged, null, $"Enter the units, from 1 to {limit:N0} (+ adds, − removes for a count correction or other).");
         }
 
         // Received and shipped have a direction of their own, so only the amount typed matters.
@@ -245,10 +314,9 @@ public sealed partial class HomeStockLedgerService(
             : null;
         if (error is not null)
         {
-            return Result.Failure<string>(error);
+            return (HomeStockLedgerOutcome.Unchanged, null, error);
         }
 
-        var baselines = input.Type == HomeStockMovementType.ShippedToAmazon ? await BaselinesAsync(marketplaceId, cancellationToken).ConfigureAwait(false) : NoBaselines;
         var (outcome, correctionId) = await repository.CorrectAsync(
             marketplaceId, input.Id, input.Type, units, note, baselines, clock.GetUtcNow(), user, cancellationToken).ConfigureAwait(false);
         switch (outcome)
@@ -256,19 +324,19 @@ public sealed partial class HomeStockLedgerService(
             case HomeStockLedgerOutcome.Recorded:
                 LogCorrected(input.Id, correctionId, input.Type, units, marketplaceId);
                 alerts.Request();
-                return Result.Success($"Entry #{input.Id} updated (logged as #{correctionId}; the original is kept in the history).");
+                return (outcome, correctionId, null);
             case HomeStockLedgerOutcome.Unchanged:
-                return Result.Success("Nothing changed.");
+                return (outcome, null, null);
             case HomeStockLedgerOutcome.NotFound:
-                return Result.Failure<string>("That entry no longer exists.");
+                return (outcome, null, "That entry no longer exists.");
             case HomeStockLedgerOutcome.CannotReverse:
-                return Result.Failure<string>("That entry can't be edited: it was reversed or edited already, or is a reversal or an opening balance.");
+                return (outcome, null, "That entry can't be edited: it was reversed or edited already, or is a reversal or an opening balance.");
             case HomeStockLedgerOutcome.WouldGoNegative:
-                return Result.Failure<string>("That would take home stock below zero, because units have since gone out. Check the units, or log a count correction.");
+                return (outcome, null, "That would take home stock below zero, because units have since gone out. Check the units, or log a count correction.");
             case HomeStockLedgerOutcome.AlreadyAtAmazon:
-                return Result.Failure<string>("Amazon already shows some of this send, so it can't go below those units or stop being a send to Amazon.");
+                return (outcome, null, "Amazon already shows some of this send, so it can't go below those units or stop being a send to Amazon.");
             default:
-                return Result.Failure<string>("The entry could not be updated.");
+                return (outcome, null, "The entry could not be updated.");
         }
     }
 

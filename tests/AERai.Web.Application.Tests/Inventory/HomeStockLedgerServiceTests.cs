@@ -342,4 +342,57 @@ public sealed class HomeStockLedgerServiceTests
         Assert.True(result.IsFailure);
         Assert.Contains("Amazon already shows", result.Error, StringComparison.Ordinal);
     }
+
+    private HomeStockLedgerEntry Listed(long id, HomeStockMovementType type, int units, string? note = null)
+    {
+        var entry = new HomeStockLedgerEntry(id, "FOB00BL", null, null, _clock.GetUtcNow(), type, units, 50, null, note, null, null, _clock.GetUtcNow(), User);
+        _repository.Listed.Add(entry);
+        return entry;
+    }
+
+    [Fact]
+    public async Task CorrectReasonAsync_NoteOnly_KeepsEachEntrysTypeAndUnits()
+    {
+        Listed(1, HomeStockMovementType.ReceivedFromSupplier, 20);
+        Listed(2, HomeStockMovementType.ShippedToAmazon, -5);
+        Listed(3, HomeStockMovementType.Other, -2, "audit");
+
+        var result = await CreateService().CorrectReasonAsync(Us, [1, 2, 3], null, " audit ", User, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(new HomeStockBulkCorrectionResult(2, 1, []), result.Value with { Skipped = [] });
+        Assert.Empty(result.Value.Skipped);
+        Assert.Equal(
+            [(1L, HomeStockMovementType.ReceivedFromSupplier, 20, "audit"), (2L, HomeStockMovementType.ShippedToAmazon, -5, "audit"), (3L, HomeStockMovementType.Other, -2, "audit")],
+            _repository.Corrections);
+    }
+
+    [Fact]
+    public async Task CorrectReasonAsync_NewType_TakesItsDirectionAndSkipsWhatCantChange()
+    {
+        Listed(1, HomeStockMovementType.ReceivedFromSupplier, 20);
+        Listed(2, HomeStockMovementType.CountCorrection, -4);
+
+        var toShipped = await CreateService().CorrectReasonAsync(Us, [1, 2], HomeStockMovementType.ShippedToAmazon, null, User, CancellationToken.None);
+        var toOther = await CreateService().CorrectReasonAsync(Us, [2, 404], HomeStockMovementType.Other, null, User, CancellationToken.None);
+
+        Assert.Equal([(1L, HomeStockMovementType.ShippedToAmazon, -20, (string?)null), (2L, HomeStockMovementType.ShippedToAmazon, -4, null)], _repository.Corrections);
+        Assert.Equal(2, toShipped.Value.Updated);
+        Assert.Equal(0, toOther.Value.Updated);
+        Assert.Collection(
+            toOther.Value.Skipped,
+            s => Assert.StartsWith("#2 FOB00BL: Add a note", s, StringComparison.Ordinal),
+            s => Assert.StartsWith("#404:", s, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false, HomeStockMovementType.Other, "x")]
+    [InlineData(true, null, " ")]
+    public async Task CorrectReasonAsync_NothingToDo_Fails(bool withIds, HomeStockMovementType? type, string? note)
+    {
+        var result = await CreateService().CorrectReasonAsync(Us, withIds ? [1L] : [], type, note, User, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(_repository.Corrections);
+    }
 }

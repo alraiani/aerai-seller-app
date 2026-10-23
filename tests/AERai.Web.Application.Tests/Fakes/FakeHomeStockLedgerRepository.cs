@@ -89,6 +89,13 @@ internal sealed class FakeHomeStockLedgerRepository : IHomeStockLedgerRepository
 
     public (long Id, HomeStockMovementType Type, int Units, string? Note, bool HadBaselines)? LastCorrection { get; private set; }
 
+    public List<(long Id, HomeStockMovementType Type, int Units, string? Note)> Corrections { get; } = [];
+
+    public List<HomeStockLedgerEntry> Listed { get; } = [];
+
+    public Task<IReadOnlyList<HomeStockLedgerEntry>> GetEntriesAsync(string marketplaceId, IReadOnlyCollection<long> ids, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<HomeStockLedgerEntry>>(Listed.Where(e => ids.Contains(e.Id)).ToList());
+
     public Task<(HomeStockLedgerOutcome Outcome, long? Id)> CorrectAsync(
         string marketplaceId,
         long id,
@@ -101,7 +108,12 @@ internal sealed class FakeHomeStockLedgerRepository : IHomeStockLedgerRepository
         CancellationToken cancellationToken)
     {
         LastCorrection = (id, type, units, note, amazonBaselines.Count > 0);
-        return Task.FromResult<(HomeStockLedgerOutcome, long?)>((CorrectOutcome, CorrectOutcome == HomeStockLedgerOutcome.Recorded ? 99 : null));
+        Corrections.Add((id, type, units, note));
+
+        // Like the SQL repository, an edit that changes nothing records nothing.
+        var listed = Listed.FirstOrDefault(e => e.Id == id);
+        var outcome = listed is not null && listed.Type == type && listed.Units == units && listed.Note == note ? HomeStockLedgerOutcome.Unchanged : CorrectOutcome;
+        return Task.FromResult<(HomeStockLedgerOutcome, long?)>((outcome, outcome == HomeStockLedgerOutcome.Recorded ? 99 : null));
     }
 
     public List<HomeStockLedgerGroup> Groups { get; } = [];

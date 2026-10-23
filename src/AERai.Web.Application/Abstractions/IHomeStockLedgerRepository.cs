@@ -83,6 +83,13 @@ public interface IHomeStockLedgerRepository
         string createdBy,
         CancellationToken cancellationToken);
 
+    /// <summary>A marketplace's entries by id (any that aren't its own are left out).</summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="ids">The entries.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The entries found.</returns>
+    Task<IReadOnlyList<HomeStockLedgerEntry>> GetEntriesAsync(string marketplaceId, IReadOnlyCollection<long> ids, CancellationToken cancellationToken);
+
     /// <summary>One page of a marketplace's entries, newest first.</summary>
     /// <param name="marketplaceId">Marketplace.</param>
     /// <param name="filter">SKU, family, type, and date range.</param>
