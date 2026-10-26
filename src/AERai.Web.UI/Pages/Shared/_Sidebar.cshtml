@@ -9,7 +9,7 @@
         (prefix == "/" ? currentPath == "/" : currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             && (except is null || !currentPath.StartsWith(except, StringComparison.OrdinalIgnoreCase));
 
-    var operationsCurrent = IsActive("/Inventory") || IsActive("/Orders") || IsActive("/Products");
+    var operationsCurrent = IsActive("/Inventory") || IsActive("/Orders") || IsActive("/Advertising") || IsActive("/Products");
 
     // Inventory's sub-pages have their own links (same order as the tab bar on those pages); every other
     // inventory page (Edit, bulk home stock, uploads, families) keeps the Inventory link current.
@@ -85,6 +85,7 @@
                     </details>
                 </div>
                 @{ await NavLink("/Orders/Index", "cart", "Orders", IsActive("/Orders")); }
+                @{ await NavLink("/Advertising/Index", "megaphone", "Advertising", IsActive("/Advertising")); }
                 @{ await NavLink("/Products/Index", "tag", "Products & COGS", IsActive("/Products")); }
             </div>
         </details>

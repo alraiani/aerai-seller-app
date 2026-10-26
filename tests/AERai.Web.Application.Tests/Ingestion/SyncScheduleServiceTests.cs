@@ -428,6 +428,21 @@ public sealed class SyncScheduleServiceTests
     }
 
     [Fact]
+    public async Task BackfillAllAsync_AdsSpend_StartsAtTheNinetyFiveDayLimitWithANote()
+    {
+        await AddScheduleAsync("Ads spend", AmazonReportType.AdsSpend);
+        var now = _clock.GetUtcNow();
+
+        var result = await CreateService().BackfillAllAsync(new BackfillWindow(now.AddDays(-200), now), "ops", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var ads = Assert.Single(result.Value.Schedules);
+        Assert.Equal(4, ads.Runs); // 94 days is four 30-day windows.
+        Assert.Contains("95 days", ads.Note, StringComparison.Ordinal);
+        Assert.Equal(now - ReportIngestionService.MaxAdsReportAge, _channel.Enqueued[0].Backfill!.Start);
+    }
+
+    [Fact]
     public async Task BackfillAllAsync_OnlySettlementsAndTheWholeRangeIsTooOld_FailsAndExplains()
     {
         await AddScheduleAsync("Settlements", AmazonReportType.Settlements);
@@ -485,6 +500,20 @@ public sealed class SyncScheduleServiceTests
         var id = (await CreateService().CreateAsync(input, "ops", CancellationToken.None)).Value;
 
         Assert.True((await CreateService().BackfillAsync(id, BackfillWindow.LastDays(30, _clock.GetUtcNow()), "ops", CancellationToken.None)).IsFailure);
+        Assert.Empty(_channel.Enqueued);
+    }
+
+    [Fact]
+    public async Task BackfillAsync_AdsSpendOlderThanAmazonKeeps_FailsAndExplains()
+    {
+        var input = Input() with { ReportType = AmazonReportType.AdsSpend };
+        var id = (await CreateService().CreateAsync(input, "ops", CancellationToken.None)).Value;
+        var now = _clock.GetUtcNow();
+
+        var result = await CreateService().BackfillAsync(id, new BackfillWindow(now.AddDays(-130), now.AddDays(-110)), "ops", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("95 days", result.Error, StringComparison.Ordinal);
         Assert.Empty(_channel.Enqueued);
     }
 

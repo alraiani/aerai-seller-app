@@ -42,4 +42,11 @@ public sealed class IngestionOptions
     /// <summary>Give up waiting for a report after this long.</summary>
     [Range(typeof(TimeSpan), "00:01:00", "04:00:00")]
     public TimeSpan ReportMaxWait { get; set; } = TimeSpan.FromMinutes(45);
+
+    /// <summary>
+    /// How long an Amazon Ads report may take before its run fails. Amazon Ads generates reports on its own
+    /// queue and says they can take up to three hours at busy times, much longer than SP-API reports.
+    /// </summary>
+    [Range(typeof(TimeSpan), "00:01:00", "12:00:00")]
+    public TimeSpan AdsReportMaxWait { get; set; } = TimeSpan.FromHours(3);
 }

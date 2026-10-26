@@ -475,6 +475,7 @@ a.pill:hover { filter: brightness(0.95); }
 .tag-orders { color: var(--brand); background: var(--brand-soft); }
 .tag-inventory { color: var(--violet); background: var(--violet-soft); }
 .tag-settlements { color: var(--teal); background: var(--teal-soft); }
+.tag-ads { color: var(--warning); background: var(--warning-soft); }
 
 .cell-sub { font-size: 0.78rem; color: var(--muted); }
 .cell-sub.text-warn { color: var(--warning); }
@@ -910,6 +911,10 @@ th .tip { text-transform: none; }
 .group-table .group-child > td { background: var(--surface-2); padding-top: 0.45rem; padding-bottom: 0.45rem; font-size: 0.82rem; }
 .group-table .group-child > td:nth-child(2) { padding-left: 1.5rem; }
 .group-table tbody.order-group.is-expanded .group-row > td { background: var(--brand-soft); }
+/* Advertising: the product column takes whatever width the figures leave and long titles end in "…", so the
+   table fits its card and its header sticks to the page instead of scrolling inside a box. */
+.ads-table .product-col { max-width: 0; width: 100%; min-width: 10rem; }
+.ads-table .product-title { max-width: 100%; }
 .child-desc { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .type-tag { display: inline-block; margin: 0 0.25rem 0.15rem 0; padding: 0.05rem 0.45rem; border: 1px solid var(--border); border-radius: 0.4rem; font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
 .js .group-table .group-row { cursor: pointer; }

@@ -1,0 +1,207 @@
+@using System.Globalization
+@using AERai.Web.Application.Advertising
+@using AERai.Web.UI.Pages.Advertising
+@model AERai.Web.UI.Pages.Advertising.IndexModel
+@{
+    var report = Model.Report;
+    var t = report.Totals;
+    var currency = Model.Marketplace.Currency;
+    var en = CultureInfo.InvariantCulture;
+    var range = report.From == report.To ? report.From.ToString("MMM d, yyyy", en) : $"{report.From.ToString("MMM d", en)} – {report.To.ToString("MMM d, yyyy", en)}";
+}
+
+@* ---------- Totals for what the range, family, and search select ---------- *@
+<div class="row g-3 mb-3">
+    <div class="col-6 col-xl-3">
+        <a class="card tile h-100" href="@Model.SortLink(AdSort.Spend)">
+            <div class="kpi">
+                <div class="kpi-label">Ad spend <partial name="_Tip" model='"What Sponsored Products clicks cost over these days, for the SKUs listed. Click to sort by spend."' /></div>
+                <div class="kpi-value">@DashboardFormat.Money(t.Spend, currency)</div>
+                <div class="kpi-foot">@AdvertisingFormat.Count(t.Clicks) click@(t.Clicks == 1 ? "" : "s")@(t.CostPerClick is { } cpc ? $" · {DashboardFormat.Price(cpc, currency)} each" : "")</div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-3">
+        <a class="card tile h-100" href="@Model.SortLink(AdSort.AdSales)">
+            <div class="kpi">
+                <div class="kpi-label">Ad sales <partial name="_Tip" model='"Sales Amazon credits to the ads: orders placed within 7 days of a click. Amazon keeps adding to recent days for about a week. Click to sort by ad sales."' /></div>
+                <div class="kpi-value">@DashboardFormat.Money(t.AdSales, currency)</div>
+                <div class="kpi-foot">@AdvertisingFormat.Count(t.AdOrders) order@(t.AdOrders == 1 ? "" : "s") from ads</div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-3">
+        <a class="card tile h-100" href="@Model.SortLink(AdSort.Acos)">
+            <div class="kpi">
+                <div class="kpi-label">ACoS <partial name="_Tip" model='"Advertising cost of sales: ad spend ÷ ad sales. Lower is better. Click to sort SKUs by ACoS, highest first."' /></div>
+                <div class="kpi-value @AdvertisingFormat.AcosClass(t.Acos)">@AdvertisingFormat.Percent(t.Acos)</div>
+                <div class="kpi-foot">spend ÷ ad sales</div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-3">
+        <a class="card tile h-100" href="@Model.SortLink(AdSort.Tacos)">
+            <div class="kpi">
+                <div class="kpi-label">TACoS <partial name="_Tip" model='"Total advertising cost of sales: ad spend ÷ every sale of the advertised SKUs over the same days (from Orders, cancelled left out), with an ad or not. Click to sort SKUs by TACoS, highest first."' /></div>
+                <div class="kpi-value">@AdvertisingFormat.Percent(t.Tacos)</div>
+                <div class="kpi-foot">of @DashboardFormat.Money(t.TotalSales, currency) total sales</div>
+            </div>
+        </a>
+    </div>
+</div>
+
+@* ---------- Range, family, and search ---------- *@
+<div class="list-toolbar mb-3">
+    <form method="get" class="filters" data-autosubmit-form role="search">
+        @if (Model.Sort != AdSort.Spend)
+        {
+            <input type="hidden" name="sort" value="@Model.Sort" />
+        }
+        @if (Model.Descending)
+        {
+            <input type="hidden" name="desc" value="true" />
+        }
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search SKU, ASIN, title, family…" aria-label="Search advertised SKUs" />
+        </div>
+        <select name="family" class="form-select form-select-sm" aria-label="Family">
+            <option value="">All families</option>
+            @foreach (var f in Model.Families)
+            {
+                <option value="@f.Id" selected="@(Model.FamilyId == f.Id)">@f.Name</option>
+            }
+            <option value="@AdvertisingFilter.NoFamily" selected="@(Model.FamilyId == AdvertisingFilter.NoFamily)">No family</option>
+        </select>
+        <label class="filter-label" for="ads-from">Days</label>
+        <input type="date" id="ads-from" name="from" value="@IndexModel.Format(report.From)" max="@IndexModel.Format(Model.LastDay)" class="form-control form-control-sm date-filter" aria-label="From" data-autosubmit />
+        <span class="text-muted-token" aria-hidden="true">–</span>
+        <input type="date" name="to" value="@IndexModel.Format(report.To)" max="@IndexModel.Format(Model.LastDay)" class="form-control form-control-sm date-filter" aria-label="To" data-autosubmit />
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
+        @if (Model.IsFiltered)
+        {
+            <a href="@Model.LinkWith(("q", null), ("family", null))" class="btn btn-sm btn-link">Clear filters</a>
+        }
+    </form>
+    <nav class="segmented" aria-label="Range">
+        @foreach (var days in IndexModel.PresetDays)
+        {
+            <a href="@Model.PresetLink(days)" class="@(Model.IsPreset(days) ? "active" : "")">@days days</a>
+        }
+    </nav>
+</div>
+
+@* ---------- One group per family, a row per advertised SKU ---------- *@
+<div class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@report.SkuCount.ToString("N0", en) advertised SKU@(report.SkuCount == 1 ? "" : "s")</span>
+            <span class="text-muted-token fw-normal">
+                in @Model.Marketplace.Name · @range
+                @if (report.SpendThrough is { } through)
+                {
+                    <span>· synced through @through.ToString("MMM d", en)</span>
+                }
+                @if (report.StartsBeforeSync)
+                {
+                    <span class="text-warn">· spend synced only from @report.SpendFrom!.Value.ToString("MMM d", en); total sales count from then too</span>
+                }
+            </span>
+            <partial name="_Tip" model='"Sponsored Products spend from the Amazon Ads API, by product family. Expand a family to see its SKUs. Spend is pulled through yesterday, by the days Amazon Ads reports (the advertising account’s time zone); the last two weeks are re-read on every sync while Amazon finishes crediting sales to them."' />
+        </span>
+        @if (report.Groups.Count > 0)
+        {
+            <div class="card-toolbar-group">
+                <span class="expand-controls">
+                    <button type="button" class="btn btn-sm btn-soft" data-expand-all="true">Expand all</button>
+                    <button type="button" class="btn btn-sm btn-soft" data-expand-all="false">Collapse all</button>
+                </span>
+            </div>
+        }
+    </div>
+    @if (report.Groups.Count == 0)
+    {
+        <div class="empty-state">
+            @if (Model.IsFiltered)
+            {
+                <div class="empty-title">No advertised SKUs match</div>
+                <div class="empty-detail">Try a different search or family.</div>
+                <a href="@Model.LinkWith(("q", null), ("family", null))" class="btn btn-sm btn-soft">Clear filters</a>
+            }
+            else if (report.SpendThrough is null)
+            {
+                <div class="empty-title">No ad spend yet</div>
+                <div class="empty-detail">Spend appears once the Ads spend sync runs for @Model.Marketplace.Name (Tools → Amazon sync).</div>
+                <a asp-page="/Tools/Schedules/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"plug"' /> Amazon sync</a>
+            }
+            else
+            {
+                <div class="empty-title">No advertising on these days</div>
+                <div class="empty-detail">Choose a longer range; spend is synced through @report.SpendThrough.Value.ToString("MMM d, yyyy", en).</div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table data-table group-table ads-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="toggle-col"><span class="visually-hidden">Expand</span></th>
+                        <th class="product-col">Family / SKU</th>
+                        <th class="text-end"><a href="@Model.SortLink(AdSort.Spend)" class="sort-link">Spend @Model.SortArrow(AdSort.Spend)</a></th>
+                        <th class="text-end">
+                            <a href="@Model.SortLink(AdSort.AdSales)" class="sort-link">Ad sales @Model.SortArrow(AdSort.AdSales)</a>
+                            <div><a href="@Model.SortLink(AdSort.Acos)" class="sort-link">ACoS @Model.SortArrow(AdSort.Acos)</a></div>
+                        </th>
+                        <th class="text-end">
+                            <a href="@Model.SortLink(AdSort.TotalSales)" class="sort-link">Total sales @Model.SortArrow(AdSort.TotalSales)</a> <partial name="_Tip" model='"Every sale of the SKU over these days (from Orders, cancelled left out), with an ad or not. TACoS is ad spend ÷ these sales."' />
+                            <div><a href="@Model.SortLink(AdSort.Tacos)" class="sort-link">TACoS @Model.SortArrow(AdSort.Tacos)</a></div>
+                        </th>
+                        <th class="text-end"><a href="@Model.SortLink(AdSort.Clicks)" class="sort-link">Clicks @Model.SortArrow(AdSort.Clicks)</a> <partial name="_Tip" model='"Clicks, with the cost per click under them."' /></th>
+                        <th class="text-end d-none d-xl-table-cell">Impressions <partial name="_Tip" model='"Times the ads were shown, with the click-through rate (clicks ÷ impressions) under them. Shown on wide screens."' /></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="totals-row">
+                        <td></td>
+                        <td class="product-col fw-semibold">All listed</td>
+                        <partial name="_AdMetricCells" model="(t, currency, true)" />
+                    </tr>
+                </tbody>
+                @for (var i = 0; i < report.Groups.Count; i++)
+                {
+                    var group = report.Groups[i];
+                    var groupId = $"family-{i}";
+                    var name = group.Family ?? "No family";
+                    <tbody class="order-group is-expanded" id="@groupId">
+                        <tr class="group-row">
+                            <td class="toggle-col">
+                                <button type="button" class="btn btn-sm btn-icon group-toggle" data-expand-row aria-expanded="true" aria-controls="@groupId"
+                                        aria-label="Show the SKUs of @name">
+                                    <partial name="_Icon" model='"chevron-down"' />
+                                </button>
+                            </td>
+                            <td class="product-col">
+                                <div class="fw-semibold">@name</div>
+                                <div class="cell-sub">@group.Skus.Count.ToString("N0", en) SKU@(group.Skus.Count == 1 ? "" : "s")</div>
+                            </td>
+                            <partial name="_AdMetricCells" model="(group.Totals, currency, true)" />
+                        </tr>
+                        @foreach (var sku in group.Skus)
+                        {
+                            <tr class="group-child">
+                                <td></td>
+                                <td class="product-col">
+                                    <partial name="_ProductCell" model="new ProductCellModel(sku.Sku, sku.Asin, sku.Title, null, sku.ImagePath, null)" />
+                                    <div class="cell-sub">@sku.Campaigns.ToString("N0", en) campaign@(sku.Campaigns == 1 ? "" : "s")</div>
+                                </td>
+                                <partial name="_AdMetricCells" model="(sku.Metrics, currency, false)" />
+                            </tr>
+                        }
+                    </tbody>
+                }
+            </table>
+        </div>
+    }
+</div>

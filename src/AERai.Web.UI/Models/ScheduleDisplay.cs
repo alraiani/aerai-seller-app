@@ -37,6 +37,7 @@ public static class ScheduleDisplay
         (AmazonReportType.AwdInventory, "A snapshot of stock in Amazon Warehousing & Distribution (AWD, US only). Once a day is plenty."),
         (AmazonReportType.Settlements, "Amazon publishes these every ~14 days; a daily check picks up new ones once."),
         (AmazonReportType.DeferredTransactions, "Sales Amazon is holding back (paid out about 7 days after delivery), shown on Settlements. Once a day is plenty."),
+        (AmazonReportType.AdsSpend, "Sponsored Products spend per SKU from the Amazon Ads API, shown on Advertising. Each run re-reads the last 14 days; once a day is plenty."),
     ];
 
     /// <summary>Plain-English description of how often a schedule runs.</summary>
@@ -150,6 +151,7 @@ public static class ScheduleDisplay
         AmazonReportType.FbaInventory or AmazonReportType.FbaReservedInventory or AmazonReportType.RestockRecommendations
             or AmazonReportType.AwdInventory => "tag tag-inventory",
         AmazonReportType.Settlements or AmazonReportType.DeferredTransactions => "tag tag-settlements",
+        AmazonReportType.AdsSpend => "tag tag-ads",
         _ => "tag",
     };
 

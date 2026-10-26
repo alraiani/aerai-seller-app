@@ -1,0 +1,10 @@
+@page
+@model AERai.Web.UI.Pages.Advertising.IndexModel
+@{
+    ViewData["Title"] = "Advertising";
+}
+
+@* The range, family, search, and sorts reload only this section (site.js partial reloads). *@
+<div data-fragment="advertising">
+    <partial name="_AdvertisingBody" />
+</div>

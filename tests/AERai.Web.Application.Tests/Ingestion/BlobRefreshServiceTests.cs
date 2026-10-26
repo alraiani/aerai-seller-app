@@ -34,6 +34,7 @@ public sealed class BlobRefreshServiceTests
     private readonly FakeStagingRepository _staged = new();
     private readonly FakePromotionService _promotion = new();
     private readonly FakeAmazonOrderRepository _orders = new();
+    private readonly FakeAdSpendRepository _adSpend = new();
     private readonly FakeMarketplaceQueries _marketplaces = new();
     private readonly FakeTimeProvider _clock = new(Now);
     private readonly FakeAppliedBlobRepository _applied;
@@ -46,7 +47,7 @@ public sealed class BlobRefreshServiceTests
             [new OrderLineMapper(), new SettlementLineMapper()],
             _rawFiles, _staged, new FakeImportBatchQueries(), Options.Create(new ImportOptions()), _clock,
             NullLogger<StagingImportService>.Instance);
-        return new BlobRefreshService(_rawFiles, staging, _promotion, _orders, _applied, _marketplaces, _clock, NullLogger<BlobRefreshService>.Instance);
+        return new BlobRefreshService(_rawFiles, staging, _promotion, _orders, _adSpend, _applied, _marketplaces, _clock, NullLogger<BlobRefreshService>.Instance);
     }
 
     private static BlobRefreshRequest Request(bool promote = true, bool reprocess = false, string marketplaceId = MarketplaceIds.UnitedStates) =>
@@ -136,6 +137,34 @@ public sealed class BlobRefreshServiceTests
         var order = Assert.Single(write.Orders);
         Assert.Equal(("111-9", "Shipped", 19.98m), (order.AmazonOrderId, order.Status, order.Lines.Single().ItemPrice));
         Assert.Equal("1 order", Assert.Single(_applied.Ledger).Outcome);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_HandUploadedAdsReport_ReplacesTheDaysItHasRowsFor()
+    {
+        await UploadAsync("adsspend/2026/10/01/ads.json", """
+            [{"date":"2026-09-28","advertisedSku":"A-1","campaignId":31,"cost":1.25,"clicks":2},
+             {"date":"2026-09-30","advertisedSku":"A-2","campaignId":31,"cost":0.50,"clicks":1}]
+            """);
+
+        var result = await CreateService().RefreshAsync(Request(), "ops", CancellationToken.None);
+
+        Assert.Equal(1, result.Value.Loaded);
+        var replaced = Assert.Single(_adSpend.Replaced);
+        Assert.Equal((MarketplaceIds.UnitedStates, new DateOnly(2026, 9, 28), new DateOnly(2026, 9, 30), 2),
+            (replaced.MarketplaceId, replaced.Start, replaced.End, replaced.Rows.Count));
+        Assert.StartsWith("Ads spend 2026-09-28 to 2026-09-30", Assert.Single(_applied.Ledger).Outcome, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_AdsReportTheAppSavedItself_IsSkippedBecauseItWasAppliedWhenItArrived()
+    {
+        await UploadAsync("adsspend/2026/10/01/ads.json", "[]", writtenByApp: true);
+
+        var result = await CreateService().RefreshAsync(Request(), "ops", CancellationToken.None);
+
+        Assert.Equal((0, 1), (result.Value.Loaded, result.Value.AlreadyLoaded));
+        Assert.Empty(_adSpend.Replaced);
     }
 
     [Fact]

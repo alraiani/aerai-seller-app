@@ -7,7 +7,7 @@ namespace AERai.Web.Application.Ingestion;
 public sealed record BlobRefreshRequest(string DefaultMarketplaceId, bool Promote = true, bool Reprocess = false);
 
 /// <summary>What a blob refresh would pick up, without doing it.</summary>
-/// <param name="NewReportFiles">Report files (orders, settlements, generic inventory) not loaded yet.</param>
+/// <param name="NewReportFiles">Report files (orders, settlements, generic inventory, Amazon Ads spend) not loaded yet.</param>
 /// <param name="NewOrderPages">Orders API pages not loaded yet.</param>
 /// <param name="AlreadyLoaded">Files that were loaded before.</param>
 /// <param name="SnapshotFiles">Inventory snapshot files, which a refresh never loads because they are dated by the day they arrive.</param>

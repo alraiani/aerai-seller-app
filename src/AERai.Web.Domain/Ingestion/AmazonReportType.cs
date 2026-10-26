@@ -1,8 +1,9 @@
 namespace AERai.Web.Domain.Ingestion;
 
 /// <summary>
-/// The SP-API data the app ingests automatically, and how each is obtained. Every value but
-/// <see cref="AwdInventory"/>, <see cref="OrdersApi"/>, and <see cref="DeferredTransactions"/> is a Reports API report.
+/// The Amazon data the app ingests automatically, and how each is obtained. Every value but
+/// <see cref="AwdInventory"/>, <see cref="OrdersApi"/>, <see cref="DeferredTransactions"/>, and <see cref="AdsSpend"/>
+/// is an SP-API Reports API report.
 /// </summary>
 public enum AmazonReportType
 {
@@ -54,4 +55,11 @@ public enum AmazonReportType
     /// straight to <c>core.DeferredTransaction</c>; a snapshot of what is held now, so it cannot be backfilled.
     /// </summary>
     DeferredTransactions = 8,
+
+    /// <summary>
+    /// Sponsored Products spend per SKU and day from the Amazon Ads API (<c>spAdvertisedProduct</c>, reporting v3):
+    /// not SP-API but a separate API with its own authorization. Requested on demand for a date range like the
+    /// Reports API, then written straight to <c>core.AdSpend</c>, replacing that range.
+    /// </summary>
+    AdsSpend = 9,
 }

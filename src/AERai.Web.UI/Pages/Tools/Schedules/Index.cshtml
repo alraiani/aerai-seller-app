@@ -497,7 +497,7 @@
                         <ul class="small">
                             @foreach (var t in Model.BackfillAllTargets)
                             {
-                                <li>@t.Name <span class="text-muted-token">(@ScheduleDisplay.ReportLabel(t.ReportType)@(t.ReportType == AmazonReportType.OrdersApi ? ", whole range in one run" : ", 30-day runs"))</span></li>
+                                <li>@t.Name <span class="text-muted-token">(@ScheduleDisplay.ReportLabel(t.ReportType)@(t.ReportType == AmazonReportType.OrdersApi ? ", whole range in one run" : t.ReportType == AmazonReportType.AdsSpend ? ", 30-day runs, last 95 days only" : ", 30-day runs"))</span></li>
                             }
                         </ul>
                         <div class="form-label">Date range (UTC)</div>
@@ -562,7 +562,7 @@
                         </div>
                         <div class="modal-body">
                             <p class="small text-muted-token">
-                                Re-pull history from Amazon (@(s.ReportType == AmazonReportType.OrdersApi ? "any range, in one run" : $"up to {SyncScheduleService.MaxLookbackDays} days at a time")). Data already imported is
+                                Re-pull history from Amazon (@(s.ReportType == AmazonReportType.OrdersApi ? "any range, in one run" : s.ReportType == AmazonReportType.AdsSpend ? $"up to {SyncScheduleService.MaxLookbackDays} days at a time, within the last 95 days Amazon Ads keeps" : $"up to {SyncScheduleService.MaxLookbackDays} days at a time")). Data already imported is
                                 updated, never duplicated, and the regular schedule isn't affected.
                             </p>
                             <div class="form-label">Quick pick</div>
