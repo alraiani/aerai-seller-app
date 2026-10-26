@@ -192,6 +192,13 @@ public sealed partial class SyncScheduleService(
                 "Download older settlements from Seller Central, upload them to raw storage, and use Tools → Refresh from blobs.");
         }
 
+        // Amazon Ads keeps report data for 95 days; the run itself starts a partly older range at the limit.
+        var oldestAdsDay = now - ReportIngestionService.MaxAdsReportAge;
+        if (schedule.ReportType == AmazonReportType.AdsSpend && window.End <= oldestAdsDay)
+        {
+            return Result.Failure($"Amazon Ads only keeps advertising data for 95 days (since {oldestAdsDay:yyyy-MM-dd}), so older spend can't be pulled.");
+        }
+
         // The 30 days is Amazon's limit for one report. The Orders API pages through results instead of
         // building a report, so it can take any range in one run.
         if (schedule.ReportType != AmazonReportType.OrdersApi && window.Span > TimeSpan.FromDays(MaxLookbackDays))
@@ -317,10 +324,9 @@ public sealed partial class SyncScheduleService(
 
         // The Orders API takes any range in one run, so it goes last: the scheduler does one thing at a
         // time and that run is the slow one, which would otherwise hold up every quick run behind it.
-        var oldestListable = now - ReportIngestionService.MaxListingAge;
         var plan = targets
             .OrderBy(s => s.ReportType == AmazonReportType.OrdersApi ? 1 : 0)
-            .Select(s => PlanFor(s, clamped, oldestListable))
+            .Select(s => PlanFor(s, clamped, now))
             .ToList();
 
         var total = plan.Sum(p => p.Windows.Count);
@@ -361,31 +367,40 @@ public sealed partial class SyncScheduleService(
 
     /// <summary>
     /// The windows one schedule needs for a "backfill all" range. The Orders API takes the whole range in one
-    /// run; report-based schedules need 30-day windows; Settlements can only list the last 90 days, so
-    /// anything older is dropped and the result says so.
+    /// run; report-based schedules need 30-day windows. Settlements can only be listed for the last 90 days and
+    /// Amazon Ads keeps 95 days of data, so anything older is dropped and the result says so.
     /// </summary>
     private static (SyncSchedule Schedule, IReadOnlyList<BackfillWindow> Windows, string? Note) PlanFor(
-        SyncSchedule schedule, BackfillWindow range, DateTimeOffset oldestListable)
+        SyncSchedule schedule, BackfillWindow range, DateTimeOffset now)
     {
         if (schedule.ReportType == AmazonReportType.OrdersApi)
         {
             return (schedule, [range], null);
         }
 
-        if (schedule.ReportType != AmazonReportType.Settlements || range.Start >= oldestListable)
+        if (HistoryLimit(schedule.ReportType, now) is not { } limit || range.Start >= limit.Oldest)
         {
             return (schedule, BackfillSplitter.Split(range, MaxLookbackDays), null);
         }
 
-        const string upload = "Amazon only lists settlement reports from the last 90 days; download older ones from Seller Central, upload them to raw storage, and use Refresh from blobs.";
-        if (range.End <= oldestListable)
+        if (range.End <= limit.Oldest)
         {
-            return (schedule, [], $"Nothing queued: the whole range is older than 90 days. {upload}");
+            return (schedule, [], $"Nothing queued: the whole range is older than {limit.Days} days. {limit.Advice}");
         }
 
-        var listable = range with { Start = oldestListable };
-        return (schedule, BackfillSplitter.Split(listable, MaxLookbackDays), $"Starts at {oldestListable:yyyy-MM-dd} instead of {range.Start:yyyy-MM-dd}. {upload}");
+        var available = range with { Start = limit.Oldest };
+        return (schedule, BackfillSplitter.Split(available, MaxLookbackDays), $"Starts at {limit.Oldest:yyyy-MM-dd} instead of {range.Start:yyyy-MM-dd}. {limit.Advice}");
     }
+
+    /// <summary>How far back Amazon can still provide a report type, when it has a limit.</summary>
+    private static (DateTimeOffset Oldest, int Days, string Advice)? HistoryLimit(AmazonReportType reportType, DateTimeOffset now) => reportType switch
+    {
+        AmazonReportType.Settlements => (now - ReportIngestionService.MaxListingAge, 90,
+            "Amazon only lists settlement reports from the last 90 days; download older ones from Seller Central, upload them to raw storage, and use Refresh from blobs."),
+        AmazonReportType.AdsSpend => (now - ReportIngestionService.MaxAdsReportAge, 95,
+            "Amazon Ads only keeps advertising data for 95 days, so older spend can't be pulled."),
+        _ => null,
+    };
 
     /// <inheritdoc/>
     public async Task<BackfillCoverage?> FindCoveringBackfillAsync(int id, BackfillWindow window, CancellationToken cancellationToken)

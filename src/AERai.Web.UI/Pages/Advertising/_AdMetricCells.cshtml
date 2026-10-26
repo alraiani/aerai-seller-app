@@ -1,0 +1,27 @@
+@using AERai.Web.Application.Advertising
+@model (AdMetrics Metrics, string Currency, bool Strong)
+@{
+    var m = Model.Metrics;
+    var currency = Model.Currency;
+    var strong = Model.Strong ? "fw-semibold" : "";
+}
+@* The seven figure cells shared by the totals, family, and SKU rows, so they always line up. *@
+<td class="text-end money @strong">@SettlementFormat.Money(m.Spend, currency)</td>
+<td class="text-end money">@SettlementFormat.Money(m.AdSales, currency)</td>
+<td class="text-end money @strong @AdvertisingFormat.AcosClass(m.Acos)">@AdvertisingFormat.Percent(m.Acos)</td>
+<td class="text-end money">@SettlementFormat.Money(m.TotalSales, currency)</td>
+<td class="text-end money">@AdvertisingFormat.Percent(m.Tacos)</td>
+<td class="text-end money">
+    @AdvertisingFormat.Count(m.Clicks)
+    @if (m.CostPerClick is { } cpc)
+    {
+        <div class="cell-sub">@DashboardFormat.Price(cpc, currency) / click</div>
+    }
+</td>
+<td class="text-end money">
+    @AdvertisingFormat.Count(m.Impressions)
+    @if (m.ClickThroughRate is { } ctr)
+    {
+        <div class="cell-sub">@AdvertisingFormat.Percent(ctr) CTR</div>
+    }
+</td>

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using AERai.Web.Application.Abstractions;
+using AERai.Web.Application.Common;
 using AERai.Web.Application.Imports;
 using AERai.Web.Domain.Core;
 using AERai.Web.Domain.Ingestion;
@@ -23,6 +24,9 @@ namespace AERai.Web.Application.Ingestion;
 ///   <see cref="RunAsync"/>, land each page in raw storage, and replace the day's AWD snapshot.</item>
 ///   <item><b>Searched by API</b> (Orders API): page through <c>searchOrders</c> inside <see cref="RunAsync"/>,
 ///   land each page in raw storage, and upsert its orders straight into <c>core</c> as each page arrives.</item>
+///   <item><b>Requested from Amazon Ads</b> (Ads spend): like a requested report, but from the Amazon Ads API;
+///   once ready the report is landed in raw storage, read back from there, and replaces its days in
+///   <c>core.AdSpend</c>.</item>
 /// </list>
 /// Report documents are landed in raw blob storage and staged through
 /// <see cref="IStagingImportService.StageRawFileAsync"/> — the same path as a manual upload.
@@ -95,6 +99,31 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// </summary>
     private const int MaxOrdersPages = 2_000;
 
+    /// <summary>Raw landing-zone folder for Amazon Ads spend reports.</summary>
+    public const string AdsSpendRawFolder = "adsspend";
+
+    /// <summary>Blob metadata key holding the first day an Ads spend report covers (<c>yyyy-MM-dd</c>).</summary>
+    public const string AdsSpendStartMetadata = "datastart";
+
+    /// <summary>Blob metadata key holding the last day an Ads spend report covers (<c>yyyy-MM-dd</c>).</summary>
+    public const string AdsSpendEndMetadata = "dataend";
+
+    /// <summary>
+    /// How many days before the last successful run's end each Ads spend run starts again. Amazon keeps adding
+    /// sales to a day for 7 days after a click (and corrects invalid clicks later still), so recent days are
+    /// re-read until their figures have settled.
+    /// </summary>
+    public const int AdsAttributionOverlapDays = 14;
+
+    /// <summary>Most days one Amazon Ads report may cover.</summary>
+    public const int MaxAdsReportDays = 31;
+
+    /// <summary>
+    /// How far back Amazon Ads still has data: it keeps 95 days, so one day inside that for time-zone and
+    /// clock differences.
+    /// </summary>
+    public static readonly TimeSpan MaxAdsReportAge = TimeSpan.FromDays(94);
+
     private readonly IAmazonReportsGateway _gateway;
     private readonly IAmazonAwdGateway _awdGateway;
     private readonly IAwdInventoryRepository _awdInventory;
@@ -102,6 +131,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     private readonly IAmazonOrderRepository _apiOrders;
     private readonly IAmazonFinancesGateway _financesGateway;
     private readonly IDeferredTransactionRepository _deferred;
+    private readonly IAmazonAdsGateway _adsGateway;
+    private readonly IAdSpendRepository _adSpend;
     private readonly IRawFileStore _rawFiles;
     private readonly IStagingImportService _staging;
     private readonly IPromotionService _promotion;
@@ -120,6 +151,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// <param name="apiOrders">Orders API order persistence.</param>
     /// <param name="financesGateway">SP-API Finances gateway (deferred transactions).</param>
     /// <param name="deferred">Deferred transaction persistence.</param>
+    /// <param name="adsGateway">Amazon Ads reporting gateway.</param>
+    /// <param name="adSpend">Ad spend persistence.</param>
     /// <param name="rawFiles">Raw landing zone.</param>
     /// <param name="staging">Staging use cases.</param>
     /// <param name="promotion">Promotion into core.</param>
@@ -137,6 +170,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         IAmazonOrderRepository apiOrders,
         IAmazonFinancesGateway financesGateway,
         IDeferredTransactionRepository deferred,
+        IAmazonAdsGateway adsGateway,
+        IAdSpendRepository adSpend,
         IRawFileStore rawFiles,
         IStagingImportService staging,
         IPromotionService promotion,
@@ -156,6 +191,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         _apiOrders = apiOrders;
         _financesGateway = financesGateway;
         _deferred = deferred;
+        _adsGateway = adsGateway;
+        _adSpend = adSpend;
         _rawFiles = rawFiles;
         _staging = staging;
         _promotion = promotion;
@@ -211,6 +248,13 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             {
                 await IngestListedReportsAsync(context, cancellationToken).ConfigureAwait(false);
             }
+            else if (schedule.ReportType == AmazonReportType.AdsSpend)
+            {
+                if (await RequestAdsSpendAsync(context, cancellationToken).ConfigureAwait(false))
+                {
+                    return Summarize(context);
+                }
+            }
             else if (await RequestReportAsync(context, cancellationToken).ConfigureAwait(false))
             {
                 return Summarize(context);
@@ -251,6 +295,13 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         try
         {
             context.Marketplace = await ResolveMarketplaceAsync(schedule, cancellationToken).ConfigureAwait(false);
+            if (schedule.ReportType == AmazonReportType.AdsSpend)
+            {
+                return await CheckAdsSpendAsync(context, cancellationToken).ConfigureAwait(false)
+                    ? Summarize(context)
+                    : await FinishAsync(context, cancellationToken).ConfigureAwait(false);
+            }
+
             if (run.PendingReportId is not { } reportId)
             {
                 // Held back by the report's request cooldown: ask Amazon now (or wait again if another run asked meanwhile).
@@ -729,6 +780,192 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             ? $"Orders API: {context.RowsWritten:N0} order{(context.RowsWritten == 1 ? "" : "s")} ({inserted:N0} new, {updated:N0} updated) across {pages:N0} page{(pages == 1 ? "" : "s")}."
             : "Amazon returned no orders for this window.");
         context.CoveredUntil = end;
+    }
+
+    /// <summary>
+    /// Works out the days an Ads spend run covers and asks Amazon Ads for the report. The run then waits, like a
+    /// requested report, and <see cref="CheckAdsSpendAsync"/> collects it.
+    /// </summary>
+    /// <remarks>
+    /// Days are the marketplace's local days. Amazon Ads dates its reports in the advertising profile's time zone
+    /// (Pacific for US and Canada profiles), which can still be on the day before, so runs end yesterday: asking
+    /// for a day the profile has not reached yet is refused. A scheduled run reaches back
+    /// <see cref="AdsAttributionOverlapDays"/> days up to yesterday (or its lookback on the first run); a backfill
+    /// takes its own range, whose end is exclusive. Either starts no earlier than Amazon still keeps and covers at
+    /// most <see cref="MaxAdsReportDays"/> days, the most one report allows: a schedule left off for longer
+    /// catches up on the latest month, and older days need a backfill.
+    /// </remarks>
+    /// <returns><see langword="true"/> when the run is now waiting; <see langword="false"/> when there was nothing to ask for.</returns>
+    private async Task<bool> RequestAdsSpendAsync(RunContext context, CancellationToken cancellationToken)
+    {
+        var now = _clock.GetUtcNow();
+        var run = context.Run;
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(context.Marketplace.TimeZoneId);
+        var yesterday = LocalTime.DateOf(now, zone).AddDays(-1);
+        var oldest = LocalTime.DateOf(now - MaxAdsReportAge, zone);
+
+        DateOnly start;
+        DateOnly end;
+        if (context.Backfill is { } window)
+        {
+            start = LocalTime.DateOf(window.Start, zone);
+            var last = LocalTime.DateOf(window.End.AddTicks(-1), zone);
+            end = last < yesterday ? last : yesterday;
+        }
+        else
+        {
+            // The last success covered through the day before its end, so this re-reads that many days.
+            end = yesterday;
+            start = context.Schedule.LastSuccessfulDataEnd is { } previousEnd
+                ? LocalTime.DateOf(previousEnd, zone).AddDays(-AdsAttributionOverlapDays)
+                : yesterday.AddDays(-(context.Schedule.LookbackDays - 1));
+        }
+
+        if (start < oldest)
+        {
+            start = oldest;
+        }
+
+        if (end.DayNumber - start.DayNumber >= MaxAdsReportDays)
+        {
+            // A backfill keeps its start (the splitter gives it 30 days at most); a catch-up keeps the latest days.
+            if (context.Backfill is null)
+            {
+                start = end.AddDays(-(MaxAdsReportDays - 1));
+            }
+            else
+            {
+                end = start.AddDays(MaxAdsReportDays - 1);
+            }
+        }
+
+        if (start > end)
+        {
+            context.Notes.Add(context.Backfill is null
+                ? "Nothing to pull yet: Ads spend is pulled through yesterday."
+                : "Nothing to pull: Amazon Ads only keeps advertising data for 95 days, through yesterday.");
+            return false;
+        }
+
+        run.DataStart = LocalTime.StartOfDay(start, zone);
+        run.DataEnd = LocalTime.StartOfDay(end.AddDays(1), zone);
+
+        var reportId = await _adsGateway.RequestSpendReportAsync(context.Marketplace, start, end, cancellationToken).ConfigureAwait(false);
+        context.ReportIds.Add(reportId);
+        run.AmazonReportIds = reportId;
+        run.PendingReportId = reportId;
+        run.ReportRequestedAt = now;
+        run.PollAttempts = 0;
+        run.NextCheckAt = now + PollDelay(0);
+        await _runs.SaveProgressAsync(run, cancellationToken).ConfigureAwait(false);
+        LogAwaitingReport(run.Id, reportId, run.NextCheckAt.Value);
+        return true;
+    }
+
+    /// <summary>One check on a waiting Ads spend report: wait again, record the failure, or ingest it.</summary>
+    /// <returns><see langword="true"/> when the run is still waiting.</returns>
+    private async Task<bool> CheckAdsSpendAsync(RunContext context, CancellationToken cancellationToken)
+    {
+        var run = context.Run;
+        var reportId = run.PendingReportId
+            ?? throw new InvalidOperationException("The Ads spend run has no report to check on.");
+        context.ReportIds.Add(reportId);
+
+        var status = await _adsGateway.GetReportStatusAsync(context.Marketplace, reportId, cancellationToken).ConfigureAwait(false);
+        switch (status.State)
+        {
+            case AdsReportState.Pending:
+                var now = _clock.GetUtcNow();
+                if (now >= (run.ReportRequestedAt ?? run.StartedAt) + _options.AdsReportMaxWait)
+                {
+                    throw new TimeoutException($"Amazon Ads report {reportId} was not ready after {_options.AdsReportMaxWait.TotalMinutes:0} minutes.");
+                }
+
+                run.PollAttempts++;
+                run.NextCheckAt = now + PollDelay(run.PollAttempts);
+                await _runs.SaveProgressAsync(run, cancellationToken).ConfigureAwait(false);
+                return true;
+
+            case AdsReportState.Failed:
+                Fail(run, string.IsNullOrWhiteSpace(status.FailureReason)
+                    ? $"Amazon Ads could not generate report {reportId}."
+                    : $"Amazon Ads could not generate report {reportId}: {status.FailureReason}");
+                return false;
+
+            default:
+                await IngestAdsSpendAsync(context, reportId, cancellationToken).ConfigureAwait(false);
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Lands a finished Ads spend report in raw storage, reads it back from there (the same path the blob
+    /// refresh takes), and replaces the run's days in <c>core.AdSpend</c>.
+    /// </summary>
+    private async Task IngestAdsSpendAsync(RunContext context, string reportId, CancellationToken cancellationToken)
+    {
+        var run = context.Run;
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(context.Marketplace.TimeZoneId);
+
+        // Both are set when the report is requested; the end is the start of the day after the last.
+        var start = LocalTime.DateOf(run.DataStart ?? run.StartedAt, zone);
+        var end = LocalTime.DateOf(run.DataEnd ?? run.StartedAt, zone).AddDays(-1);
+
+        var fileName = string.Create(CultureInfo.InvariantCulture, $"ads-spend-run{run.Id}-{start:yyyyMMdd}-{end:yyyyMMdd}.json.gz");
+        var path = RawFilePaths.BuildInFolder(AdsSpendRawFolder, _clock.GetUtcNow(), Guid.NewGuid(), fileName);
+        var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["source"] = AdsSpendRawFolder,
+            ["marketplaceid"] = context.Schedule.MarketplaceId,
+            ["amazonreportid"] = reportId,
+            ["syncrunid"] = run.Id.ToString(CultureInfo.InvariantCulture),
+            ["uploadedby"] = run.TriggeredBy,
+            [AdsSpendStartMetadata] = start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            [AdsSpendEndMetadata] = end.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        };
+
+        var download = await _adsGateway.OpenReportAsync(context.Marketplace, reportId, cancellationToken).ConfigureAwait(false);
+        await using (download.ConfigureAwait(false))
+        {
+            await _rawFiles.SaveAsync(path, download, metadata, cancellationToken).ConfigureAwait(false);
+        }
+
+        var landed = await _rawFiles.OpenReadAsync(path, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"The Ads spend report just saved to {path} could not be read back.");
+        List<AdSpendRow> rows;
+        await using (landed.ConfigureAwait(false))
+        {
+            // Amazon reports only the days asked for; anything else is not this range's to replace.
+            rows = [.. (await AdSpendReportParser.ParseAsync(landed, cancellationToken).ConfigureAwait(false)).Where(r => r.Date >= start && r.Date <= end)];
+        }
+
+        context.RowsWritten = await _adSpend.ReplaceRangeAsync(
+            context.Schedule.MarketplaceId, start, end, rows, context.Marketplace.Currency, _clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        context.Notes.Add(DescribeAdSpend(start, end, rows, context.Marketplace.Currency));
+        context.CoveredUntil = run.DataEnd;
+    }
+
+    /// <summary>The run message for an ingested Ads spend report.</summary>
+    /// <param name="start">First day.</param>
+    /// <param name="end">Last day.</param>
+    /// <param name="rows">The report's rows.</param>
+    /// <param name="currency">The marketplace's currency, for rows without one.</param>
+    /// <returns>e.g. "Ads spend 2026-10-01 to 2026-10-14: 112 rows, 8 SKUs, 245.10 USD."</returns>
+    public static string DescribeAdSpend(DateOnly start, DateOnly end, IReadOnlyCollection<AdSpendRow> rows, string currency)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
+        if (rows.Count == 0)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"Ads spend {start:yyyy-MM-dd} to {end:yyyy-MM-dd}: no advertising activity.");
+        }
+
+        var skus = rows.Select(r => r.Sku).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        var totals = string.Join(", ", rows
+            .GroupBy(r => r.Currency ?? currency, StringComparer.OrdinalIgnoreCase)
+            .Select(g => string.Create(CultureInfo.InvariantCulture, $"{g.Sum(r => r.Cost):N2} {g.Key}")));
+        return string.Create(CultureInfo.InvariantCulture,
+            $"Ads spend {start:yyyy-MM-dd} to {end:yyyy-MM-dd}: {rows.Count:N0} row{(rows.Count == 1 ? "" : "s")}, {skus:N0} SKU{(skus == 1 ? "" : "s")}, {totals} spent.");
     }
 
     /// <summary>Keeps one JSON API response page in the raw landing zone, byte-for-byte as Amazon sent it.</summary>

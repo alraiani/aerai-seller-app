@@ -118,6 +118,9 @@ public static partial class DatabaseInitializer
                 // What Amazon still holds back; once a day keeps the Settlements tile current. The listing always
                 // reaches back as far as Amazon allows, so the lookback is not used.
                 DefaultSchedule(m, "Deferred payments — daily 7:15 AM", AmazonReportType.DeferredTransactions, ScheduleFrequency.Daily, null, new TimeOnly(7, 15), 1, now),
+                // Sponsored Products spend from the Amazon Ads API. Each run re-reads the last two weeks, whose
+                // attributed sales Amazon is still revising, so the lookback covers a first run the same way.
+                DefaultSchedule(m, "Ads spend — daily 5:45 AM", AmazonReportType.AdsSpend, ScheduleFrequency.Daily, null, new TimeOnly(5, 45), 14, now),
                 // AWD only operates in the US; other marketplaces get no default.
                 .. m.Code == "US"
                     ? [DefaultSchedule(m, "AWD inventory — daily 6:05 AM", AmazonReportType.AwdInventory, ScheduleFrequency.Daily, null, new TimeOnly(6, 5), 1, now)]

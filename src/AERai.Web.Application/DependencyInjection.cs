@@ -1,3 +1,4 @@
+using AERai.Web.Application.Advertising;
 using AERai.Web.Application.Alerts;
 using AERai.Web.Application.Bookkeeping;
 using AERai.Web.Application.Dashboard;
@@ -70,6 +71,7 @@ public static class DependencyInjection
         services.AddScoped<IStockAlertService, StockAlertService>();
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<IAdvertisingService, AdvertisingService>();
         services.AddScoped<IProductCostTemplateService, ProductCostTemplateService>();
         services.AddScoped<IBookkeepingService, BookkeepingService>();
         services.AddScoped<ISettlementExchangeRateService, SettlementExchangeRateService>();

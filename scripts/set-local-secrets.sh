@@ -4,7 +4,7 @@
 #     the docker-compose SQL Server and take the SA password from .env so the two stay in sync.
 #   - Selling Partner API (SP-API): reports for orders, inventory, settlements. Also switches local
 #     runs to Live mode.
-#   - Amazon Ads API: stored for the upcoming advertising features (not yet used by the app).
+#   - Amazon Ads API: Sponsored Products spend for the Advertising page (profiles are found automatically).
 #   - Resend: API key for real email (password resets, sign-in codes). Also switches local runs from
 #     Mailpit to Resend; remove Email:Provider from user-secrets to go back to Mailpit.
 #
@@ -83,7 +83,6 @@ else
   read -rsp "  Ads client secret (hidden): " ads_client_secret; echo
 fi
 read -rsp "  Ads refresh token (hidden, Atzr|…; issued for the advertising scope): " ads_refresh_token; echo
-read -rp  "  Ads profile id (numeric, one per marketplace/account; optional): " ads_profile_id
 
 echo
 echo "== Email via Resend (resend.com → API Keys) — Enter to keep using the local Mailpit inbox =="
@@ -93,7 +92,7 @@ read -rsp "  Resend API key (hidden, re_…): " resend_api_key; echo
 # which other processes can see). Only non-empty values are written, so skipping a prompt never
 # erases a stored secret.
 json="$(DB="$db_connection" SP_ID="$sp_client_id" SP_SECRET="$sp_client_secret" SP_TOKEN="$sp_refresh_token" SP_EU_TOKEN="$sp_eu_refresh_token" \
-  ADS_ID="$ads_client_id" ADS_SECRET="$ads_client_secret" ADS_TOKEN="$ads_refresh_token" ADS_PROFILE="$ads_profile_id" RESEND_KEY="$resend_api_key" \
+  ADS_ID="$ads_client_id" ADS_SECRET="$ads_client_secret" ADS_TOKEN="$ads_refresh_token" RESEND_KEY="$resend_api_key" \
   python3 -c '
 import json, os
 pairs = {
@@ -105,12 +104,13 @@ pairs = {
     "AmazonAds:ClientId": os.environ["ADS_ID"],
     "AmazonAds:ClientSecret": os.environ["ADS_SECRET"],
     "AmazonAds:RefreshToken": os.environ["ADS_TOKEN"],
-    "AmazonAds:ProfileId": os.environ["ADS_PROFILE"],
     "Email:ResendApiKey": os.environ["RESEND_KEY"],
 }
 values = {k: v.strip() for k, v in pairs.items() if v.strip()}
 if all(values.get(k) for k in ("SpApi:ClientId", "SpApi:ClientSecret", "SpApi:RefreshToken")):
     values["SpApi:Mode"] = "Live"
+if all(values.get(k) for k in ("AmazonAds:ClientId", "AmazonAds:ClientSecret", "AmazonAds:RefreshToken")):
+    values["AmazonAds:Mode"] = "Live"
 if values.get("Email:ResendApiKey"):
     values["Email:Provider"] = "Resend"
 print(json.dumps(values))')"

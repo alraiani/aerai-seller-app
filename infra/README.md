@@ -45,6 +45,18 @@ Azure SQL, Blob Storage, and Key Vault through its **system-assigned managed ide
 
    Restart the app. The **Amazon sync** page shows "Live" with no warning once the first three are present;
    then switch on the schedules you want. Secret rotation = update the secret and restart.
+
+   For the **Advertising** page (Sponsored Products spend per SKU), also add the Amazon Ads API secrets.
+   The Ads API is authorized separately from SP-API (an advertising-scoped grant, usually for the same LWA app):
+
+   | Secret | Value |
+   |---|---|
+   | `AmazonAds--ClientId` | LWA client id of the app authorized for Amazon Ads |
+   | `AmazonAds--ClientSecret` | Its client secret |
+   | `AmazonAds--RefreshToken` | Advertising refresh token (covers every advertising account the login can reach) |
+
+   No profile id is needed: each marketplace's advertising profile is found automatically. Then switch on the
+   "Ads spend" schedules.
 7. **Email (password resets, sign-in codes).** The default provider is **Resend**
    (`emailProvider = 'Resend'`): verify the `aeraigroup.com` domain in Resend (Domains → add the DNS
    records it lists), create an API key with *Sending access*, and add it as the Key Vault secret

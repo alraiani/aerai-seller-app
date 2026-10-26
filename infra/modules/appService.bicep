@@ -83,6 +83,9 @@ resource site 'Microsoft.Web/sites@2024-04-01' = {
         // SP-API credentials are Key Vault secrets (SpApi--ClientId, SpApi--ClientSecret, SpApi--RefreshToken,
         // optional SpApi--Europe--RefreshToken for the UK), never app settings.
         { name: 'SpApi__Mode', value: 'Live' }
+        // Amazon Ads credentials are Key Vault secrets too (AmazonAds--ClientId, AmazonAds--ClientSecret,
+        // AmazonAds--RefreshToken); until they exist, Ads spend runs fail with a message saying so.
+        { name: 'AmazonAds__Mode', value: 'Live' }
         // Emailed links are built from this, never from the request Host header (prevents reset poisoning).
         { name: 'App__PublicBaseUrl', value: publicBaseUrl }
         // Resend's API key is the Key Vault secret Email--ResendApiKey, never an app setting.
