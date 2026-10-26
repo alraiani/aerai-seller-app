@@ -92,9 +92,7 @@
                         <th class="text-end">Units</th>
                         <th class="text-end"><a href="@Model.SortLink(SettlementGroupSort.Amount)" class="sort-link">Amount @Model.SortArrow(SettlementGroupSort.Amount)</a></th>
                     </tr>
-                </thead>
-                @* The totals of the whole summary row (every page, whatever the filter), so it always matches the Summary page. *@
-                <tbody class="totals-group">
+                    @* The totals of the whole summary row (every page, whatever the filter), so it always matches the Summary page; it sticks under the header. *@
                     <tr class="totals-row">
                         <td></td>
                         <td colspan="3">
@@ -104,7 +102,7 @@
                         <td class="text-end money fw-semibold">@g.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
                         <td class="text-end money fw-semibold @SettlementFormat.AmountClass(gm.Net)">@SettlementFormat.Money(gm.Net, gm.Currency)</td>
                     </tr>
-                </tbody>
+                </thead>
                 @for (var i = 0; i < groups.Count; i++)
                 {
                     var group = groups[i];

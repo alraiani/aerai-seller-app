@@ -122,6 +122,31 @@
                             <th class="text-end">Deferred <partial name="_Tip" model='"Units of this SKU and price sold in this period that Amazon held back, and what it pays out for them in a later settlement. Not in Net."' /></th>
                         }
                     </tr>
+                    @if (!Model.IsFiltered)
+                    {
+                        @* The settlement total sits under the header (and sticks with it). Converted rows are each rounded, so in the marketplace's currency they can differ from it by a cent or two. *@
+                        <tr class="totals-row">
+                            <td colspan="2">Settlement total</td>
+                            <td class="text-end money">@s.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
+                            <td></td>
+                            <td class="text-end money">@SettlementFormat.Money(total.Sales, total.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(parts.RefundedSales, parts.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(parts.RefundedExpenses, parts.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(parts.Shipping, parts.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(parts.FbaFees, parts.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(parts.Commission, parts.Currency)</td>
+                            <td class="text-end money" title="@otherTitle">@SettlementFormat.Money(parts.OtherExpenses, parts.Currency)</td>
+                            @if (anyReserve)
+                            {
+                                <td class="text-end money">@SettlementFormat.Money(total.Reserve, total.Currency)</td>
+                            }
+                            <td class="text-end money">@SettlementFormat.Money(total.Net, total.Currency)</td>
+                            @if (anyDeferred)
+                            {
+                                <td class="text-end money">@(Model.DeferredOut is { } footHeld ? SettlementFormat.Money(footHeld.Amount, footHeld.Currency) : "")</td>
+                            }
+                        </tr>
+                    }
                 </thead>
                 <tbody>
                     @foreach (var r in rows)
@@ -165,33 +190,6 @@
                         </tr>
                     }
                 </tbody>
-                @if (!Model.IsFiltered)
-                {
-                    @* Converted rows are each rounded, so in the marketplace's currency they can differ from the settlement total by a cent or two. *@
-                    <tfoot>
-                        <tr>
-                            <td colspan="2">Settlement total</td>
-                            <td class="text-end money">@s.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
-                            <td></td>
-                            <td class="text-end money">@SettlementFormat.Money(total.Sales, total.Currency)</td>
-                            <td class="text-end money">@SettlementFormat.Money(parts.RefundedSales, parts.Currency)</td>
-                            <td class="text-end money">@SettlementFormat.Money(parts.RefundedExpenses, parts.Currency)</td>
-                            <td class="text-end money">@SettlementFormat.Money(parts.Shipping, parts.Currency)</td>
-                            <td class="text-end money">@SettlementFormat.Money(parts.FbaFees, parts.Currency)</td>
-                            <td class="text-end money">@SettlementFormat.Money(parts.Commission, parts.Currency)</td>
-                            <td class="text-end money" title="@otherTitle">@SettlementFormat.Money(parts.OtherExpenses, parts.Currency)</td>
-                            @if (anyReserve)
-                            {
-                                <td class="text-end money">@SettlementFormat.Money(total.Reserve, total.Currency)</td>
-                            }
-                            <td class="text-end money">@SettlementFormat.Money(total.Net, total.Currency)</td>
-                            @if (anyDeferred)
-                            {
-                                <td class="text-end money">@(Model.DeferredOut is { } footHeld ? SettlementFormat.Money(footHeld.Amount, footHeld.Currency) : "")</td>
-                            }
-                        </tr>
-                    </tfoot>
-                }
             </table>
         </div>
     }
