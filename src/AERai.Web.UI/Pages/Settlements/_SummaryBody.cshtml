@@ -4,6 +4,8 @@
 @{
     var s = Model.Settlement;
     var total = SettlementMoney.Of(s, Model.Amounts);
+    var parts = SettlementBreakdown.Of(s, Model.Amounts);
+    var otherTitle = SettlementFormat.ExpenseItemsTitle(Model.OtherExpenses, parts.Currency);
     var rows = Model.Rows.Items;
     var anyReserve = s.Reserve != 0;
     var anyDeferred = Model.SkuDeferrals.Count > 0;
@@ -30,7 +32,7 @@
                 </a>
             }
         </div>
-        <partial name="_SettlementBreakdown" model="(total.Sales, total.Refunds, total.Expenses, total.Reserve, total.Net, total.Currency)" />
+        <partial name="_SettlementCategoryBreakdown" model="(parts, otherTitle)" />
     </div>
 </div>
 
@@ -104,8 +106,12 @@
                         <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Units)" class="sort-link">Units @Model.SortArrow(SettlementSkuSort.Units)</a></th>
                         <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Orders)" class="sort-link">Orders @Model.SortArrow(SettlementSkuSort.Orders)</a></th>
                         <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Sales)" class="sort-link">Sales @Model.SortArrow(SettlementSkuSort.Sales)</a></th>
-                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Refunds)" class="sort-link">Refunds @Model.SortArrow(SettlementSkuSort.Refunds)</a></th>
-                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Expenses)" class="sort-link">Expenses @Model.SortArrow(SettlementSkuSort.Expenses)</a></th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.RefundedSales)" class="sort-link">Refunded sales @Model.SortArrow(SettlementSkuSort.RefundedSales)</a> <partial name="_Tip" model='"Price, shipping, and tax given back to customers."' /></th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.RefundedExpenses)" class="sort-link">Refunded expenses @Model.SortArrow(SettlementSkuSort.RefundedExpenses)</a> <partial name="_Tip" model='"Fees on refunds: the commission Amazon gives back, less its refund commission, and refunded shipping chargebacks and promotions."' /></th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Shipping)" class="sort-link">Shipping @Model.SortArrow(SettlementSkuSort.Shipping)</a> <partial name="_Tip" model='"Shipping to customers (shipping chargebacks and shipping promotions) and into Amazon (inbound transportation, partnered carrier, AWD transportation)."' /></th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.FbaFees)" class="sort-link">FBA fees @Model.SortArrow(SettlementSkuSort.FbaFees)</a> <partial name="_Tip" model='"Every FBA fee: fulfillment per unit, storage, inbound placement, customer returns, removals and disposals, and AWD processing and storage."' /></th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.Commission)" class="sort-link">Commission @Model.SortArrow(SettlementSkuSort.Commission)</a> <partial name="_Tip" model='"Amazon referral fees on sales."' /></th>
+                        <th class="text-end"><a href="@Model.SortLink(SettlementSkuSort.OtherExpenses)" class="sort-link">Other expenses @Model.SortArrow(SettlementSkuSort.OtherExpenses)</a> <partial name="_Tip" model='"Everything else Amazon charged: advertising, subscriptions, deals, promotions, clawbacks, deductions. Hover an amount to see what it is made of."' /></th>
                         @if (anyReserve)
                         {
                             <th class="text-end">Reserve</th>
@@ -121,6 +127,7 @@
                     @foreach (var r in rows)
                     {
                         var m = SettlementMoney.Of(r, Model.Amounts);
+                        var p = SettlementBreakdown.Of(r, Model.Amounts);
                         <tr>
                             <td>
                                 <a asp-page="Lines" asp-route-id="@r.SettlementId" asp-route-sku="@r.Sku" asp-route-price="@r.SalePrice?.ToString(CultureInfo.InvariantCulture)" asp-route-amounts="@amountsRoute" class="fw-semibold">@(r.Sku ?? "No SKU (service fees)")</a>
@@ -133,8 +140,12 @@
                             <td class="text-end money">@r.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
                             <td class="text-end money">@r.OrderCount.ToString("N0", CultureInfo.InvariantCulture)</td>
                             <td class="text-end money">@SettlementFormat.Money(m.Sales, m.Currency)</td>
-                            <td class="text-end money @SettlementFormat.AmountClass(m.Refunds)">@SettlementFormat.Money(m.Refunds, m.Currency)</td>
-                            <td class="text-end money @SettlementFormat.AmountClass(m.Expenses)">@SettlementFormat.Money(m.Expenses, m.Currency)</td>
+                            <td class="text-end money @SettlementFormat.AmountClass(p.RefundedSales)">@SettlementFormat.Money(p.RefundedSales, p.Currency)</td>
+                            <td class="text-end money @SettlementFormat.AmountClass(p.RefundedExpenses)">@SettlementFormat.Money(p.RefundedExpenses, p.Currency)</td>
+                            <td class="text-end money @SettlementFormat.AmountClass(p.Shipping)">@SettlementFormat.Money(p.Shipping, p.Currency)</td>
+                            <td class="text-end money @SettlementFormat.AmountClass(p.FbaFees)">@SettlementFormat.Money(p.FbaFees, p.Currency)</td>
+                            <td class="text-end money @SettlementFormat.AmountClass(p.Commission)">@SettlementFormat.Money(p.Commission, p.Currency)</td>
+                            <td class="text-end money @SettlementFormat.AmountClass(p.OtherExpenses)" title="@Model.OtherExpensesTitle(r, p.Currency)">@SettlementFormat.Money(p.OtherExpenses, p.Currency)</td>
                             @if (anyReserve)
                             {
                                 <td class="text-end money @SettlementFormat.AmountClass(m.Reserve)">@SettlementFormat.Money(m.Reserve, m.Currency)</td>
@@ -163,8 +174,12 @@
                             <td class="text-end money">@s.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
                             <td></td>
                             <td class="text-end money">@SettlementFormat.Money(total.Sales, total.Currency)</td>
-                            <td class="text-end money">@SettlementFormat.Money(total.Refunds, total.Currency)</td>
-                            <td class="text-end money">@SettlementFormat.Money(total.Expenses, total.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(parts.RefundedSales, parts.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(parts.RefundedExpenses, parts.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(parts.Shipping, parts.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(parts.FbaFees, parts.Currency)</td>
+                            <td class="text-end money">@SettlementFormat.Money(parts.Commission, parts.Currency)</td>
+                            <td class="text-end money" title="@otherTitle">@SettlementFormat.Money(parts.OtherExpenses, parts.Currency)</td>
                             @if (anyReserve)
                             {
                                 <td class="text-end money">@SettlementFormat.Money(total.Reserve, total.Currency)</td>

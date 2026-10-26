@@ -87,4 +87,22 @@ internal sealed class AdvertisingQueries(AppDbContext dbContext) : IAdvertisingQ
             .ConfigureAwait(false);
         return range is null ? null : (range.First, range.Last);
     }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<AdFamilySpend>> GetFamilySpendAsync(string marketplaceId, DateOnly from, DateOnly to, CancellationToken cancellationToken)
+    {
+        // Added up in SQL: a list of settlements can cover months of daily rows per SKU and campaign.
+        var rows = await (
+                from s in dbContext.AdSpends.AsNoTracking()
+                where s.MarketplaceId == marketplaceId && s.Date >= @from && s.Date <= to
+                join p in dbContext.Products on s.Sku equals p.Sku into products
+                from p in products.DefaultIfEmpty()
+                join f in dbContext.ProductFamilies on p.FamilyId equals f.Id into families
+                from f in families.DefaultIfEmpty()
+                group s.Cost by new { FamilyId = (int?)f.Id, Family = f.Name } into g
+                select new { g.Key.FamilyId, g.Key.Family, Spend = g.Sum() })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return [.. rows.Select(r => new AdFamilySpend(r.FamilyId, r.Family, r.Spend))];
+    }
 }

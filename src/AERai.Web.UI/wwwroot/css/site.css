@@ -542,6 +542,14 @@ a.tile:hover { border-color: var(--brand); }
 .tile-bad .kpi-value { color: var(--negative); }
 
 /* Settlements: payouts Amazon still holds, a full-width tile under the totals. */
+/* Ad costs card on the Settlements list: the amount charged (sorts the list) beside spend per family. */
+.ad-costs-tile-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.75rem 2rem; }
+.ad-costs-charged { color: inherit; text-decoration: none; min-width: 10rem; }
+.ad-costs-charged:hover .kpi-value { color: var(--brand); }
+.ad-costs-families { flex: 1 1 20rem; }
+.ad-costs-families .amount-breakdown { margin-top: 0.35rem; }
+.ad-costs-families dt a { color: inherit; text-decoration: none; }
+.ad-costs-families dt a:hover { color: var(--brand); text-decoration: underline; }
 .deferred-tile-body { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0.25rem 1.5rem; }
 .deferred-tile .kpi-label .icon { width: 1em; height: 1em; vertical-align: -0.125em; }
 .deferred-tile-foot { text-align: right; }
@@ -659,7 +667,8 @@ a.deferred-out:hover strong { color: var(--brand); }
 .tip { display: inline-flex; vertical-align: -0.1em; color: var(--muted); cursor: help; font-size: 0.85em; }
 .tip:hover, .tip:focus-visible { color: var(--brand); outline: none; }
 .tooltip { --bs-tooltip-bg: var(--text); --bs-tooltip-color: var(--surface); --bs-tooltip-max-width: 18rem; --bs-tooltip-font-size: 0.78rem; --bs-tooltip-opacity: 1; }
-.tooltip-inner { text-align: left; padding: 0.45rem 0.65rem; line-height: 1.4; }
+/* pre-line: a tip may list items one per line (e.g. what a settlement's other expenses are). */
+.tooltip-inner { text-align: left; padding: 0.45rem 0.65rem; line-height: 1.4; white-space: pre-line; }
 .kpi-label .tip, th .tip { margin-left: 0.15rem; }
 th .tip { text-transform: none; }
 

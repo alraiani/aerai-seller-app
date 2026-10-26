@@ -6,20 +6,24 @@ namespace AERai.Web.UI.Models;
 
 /// <summary>
 /// Presentation helpers for the Settlements pages: money in the marketplace's currency, signed-amount
-/// classes, bucket pills, and the labels of their filters and sorts. Formatting only.
+/// classes, category pills, and the labels of their filters and sorts. Formatting only.
 /// </summary>
 public static class SettlementFormat
 {
     private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("en-US");
 
-    /// <summary>Bucket filter choices for the Lines page, "All" first.</summary>
-    public static IReadOnlyList<(SettlementBucket? Bucket, string Label)> BucketFilters { get; } =
+    /// <summary>Category filter choices for the Lines page, "All" first, in the order of the Summary's columns.</summary>
+    public static IReadOnlyList<(SettlementCategory? Category, string Label)> CategoryFilters { get; } =
     [
         (null, "All amounts"),
-        (SettlementBucket.Sales, "With sales"),
-        (SettlementBucket.Refunds, "With refunds"),
-        (SettlementBucket.Expenses, "With expenses"),
-        (SettlementBucket.Reserve, "With reserve"),
+        (SettlementCategory.Sales, "With sales"),
+        (SettlementCategory.RefundedSales, "With refunded sales"),
+        (SettlementCategory.RefundedExpenses, "With refunded expenses"),
+        (SettlementCategory.Shipping, "With shipping"),
+        (SettlementCategory.FbaFees, "With FBA fees"),
+        (SettlementCategory.Commission, "With commission"),
+        (SettlementCategory.OtherExpenses, "With other expenses"),
+        (SettlementCategory.Reserve, "With reserve"),
     ];
 
     /// <summary>Sort choices for the Lines page.</summary>
@@ -134,46 +138,49 @@ public static class SettlementFormat
     public static string Posted(DateTimeOffset? posted) =>
         posted?.ToUniversalTime().ToString("MMM d, HH:mm", Culture) ?? string.Empty;
 
-    /// <summary>
-    /// The column a line counts toward, read from the bucket amounts <c>rpt.vw_SettlementLine</c>
-    /// filled in (the rule itself lives only in the view).
-    /// </summary>
-    /// <param name="line">Settlement line.</param>
-    /// <returns>The bucket, or <see langword="null"/> for a zero amount.</returns>
-    public static SettlementBucket? BucketOf(SettlementLineDetail line)
+    /// <summary>The label of the category a line counts toward (the rule itself lives only in <c>rpt.vw_SettlementLine</c>).</summary>
+    /// <param name="category">Category.</param>
+    /// <returns>e.g. "FBA fee".</returns>
+    public static string CategoryLabel(SettlementCategory category) => category switch
     {
-        ArgumentNullException.ThrowIfNull(line);
-        return line switch
-        {
-            { Sales: not 0 } => SettlementBucket.Sales,
-            { Expenses: not 0 } => SettlementBucket.Expenses,
-            { Refunds: not 0 } => SettlementBucket.Refunds,
-            { Reserve: not 0 } => SettlementBucket.Reserve,
-            _ => null,
-        };
-    }
-
-    /// <summary>The label of a bucket.</summary>
-    /// <param name="bucket">Bucket.</param>
-    /// <returns>e.g. "Expense".</returns>
-    public static string BucketLabel(SettlementBucket bucket) => bucket switch
-    {
-        SettlementBucket.Sales => "Sale",
-        SettlementBucket.Expenses => "Expense",
-        SettlementBucket.Refunds => "Refund",
+        SettlementCategory.Sales => "Sale",
+        SettlementCategory.RefundedSales => "Refunded sale",
+        SettlementCategory.RefundedExpenses => "Refunded expense",
+        SettlementCategory.Shipping => "Shipping",
+        SettlementCategory.FbaFees => "FBA fee",
+        SettlementCategory.Commission => "Commission",
+        SettlementCategory.OtherExpenses => "Other expense",
         _ => "Reserve",
     };
 
-    /// <summary>The pill class of a bucket.</summary>
-    /// <param name="bucket">Bucket.</param>
+    /// <summary>The pill class of a category: sales green, refunds red, expenses amber, reserve blue.</summary>
+    /// <param name="category">Category.</param>
     /// <returns>A CSS class list.</returns>
-    public static string BucketPill(SettlementBucket bucket) => bucket switch
+    public static string CategoryPill(SettlementCategory category) => category switch
     {
-        SettlementBucket.Sales => "pill pill-ok",
-        SettlementBucket.Expenses => "pill pill-warn",
-        SettlementBucket.Refunds => "pill pill-bad",
-        _ => "pill pill-info",
+        SettlementCategory.Sales => "pill pill-ok",
+        SettlementCategory.RefundedSales or SettlementCategory.RefundedExpenses => "pill pill-bad",
+        SettlementCategory.Reserve => "pill pill-info",
+        _ => "pill pill-warn",
     };
+
+    /// <summary>A tooltip listing the charges behind an amount, one per line, largest first.</summary>
+    /// <param name="items">The charges (see <see cref="SettlementOtherExpenses"/>).</param>
+    /// <param name="currency">Currency of the amounts.</param>
+    /// <returns>e.g. "Advertising: −$1,200.00" and "Subscription Fee: −$39.99" on separate lines, or <see langword="null"/> when there is nothing to list.</returns>
+    public static string? ExpenseItemsTitle(IReadOnlyList<SettlementExpenseItem>? items, string? currency) =>
+        items is null || items.Count == 0
+            ? null
+            : string.Join("\n", items.Select(i => $"{i.Label}: {Money(i.Amount, currency)}"));
+
+    /// <summary>A range of local days, the year shown once at the end.</summary>
+    /// <param name="from">First day.</param>
+    /// <param name="to">Last day.</param>
+    /// <returns>e.g. "Oct 1 – Oct 15, 2026" or "Dec 20, 2025 – Jan 3, 2026".</returns>
+    public static string DayRange(DateOnly from, DateOnly to) =>
+        from == to ? to.ToString("MMM d, yyyy", Culture)
+        : from.Year == to.Year ? $"{from.ToString("MMM d", Culture)} – {to.ToString("MMM d, yyyy", Culture)}"
+        : $"{from.ToString("MMM d, yyyy", Culture)} – {to.ToString("MMM d, yyyy", Culture)}";
 
     /// <summary>A tooltip describing what Amazon deferred out of a payout.</summary>
     /// <param name="deferred">The settlement's deferrals.</param>

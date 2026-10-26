@@ -1,0 +1,56 @@
+@using System.Globalization
+@using AERai.Web.Application.Advertising
+@using AERai.Web.Application.Settlements
+@using AERai.Web.UI.Models
+@model (SettlementTotals Totals, SettlementAdSpend Spend, string SortLink)
+@* The Settlements list's ad costs card: what Amazon charged for advertising in the listed settlements (exact, part of Expenses), then Sponsored Products spend per family over the same days from the Ads API (settlements carry ads as one charge per invoice with no SKU, so only the Ads API can split them by family). *@
+@{
+    var t = Model.Totals;
+    var spend = Model.Spend;
+    var currency = t.Currency;
+    var iso = (DateOnly? day) => day?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+}
+<div class="card ad-costs-tile mb-3">
+    <div class="kpi ad-costs-tile-body">
+        <a class="ad-costs-charged" href="@Model.SortLink">
+            <div class="kpi-label">
+                Ad costs charged
+                <partial name="_Tip" model='"Sponsored Products advertising Amazon charged in the settlements listed (every page): Cost of Advertising, less any refund for advertisers. Already part of Expenses. Click to sort by ad costs."' />
+            </div>
+            <div class="kpi-value">@DashboardFormat.Money(t.AdCosts, currency)</div>
+            <div class="kpi-foot">@(t.AdCostRate is { } rate ? $"{SettlementFormat.Percent(rate)} of sales" : "No sales")</div>
+        </a>
+        <div class="ad-costs-families">
+            <div class="kpi-label">
+                Ad spend by family@(spend.IsSynced && spend.From is { } from && spend.To is { } to ? " · " + SettlementFormat.DayRange(from, to) : "")
+                <partial name="_Tip" model='"Spend per product family from the Amazon Ads API over the days these settlements cover, in the marketplace currency. Amazon bills ads later and in lump sums, so it rarely equals the amount charged. Click a family to see its SKUs on the Advertising page."' />
+            </div>
+            @if (!spend.IsSynced)
+            {
+                <div class="kpi-foot">Ads not synced yet. Turn on the <strong>Ads spend</strong> schedule in Tools → Amazon sync.</div>
+            }
+            else if (spend.Families.Count == 0)
+            {
+                <div class="kpi-foot">No ad spend in these days.</div>
+            }
+            else
+            {
+                <dl class="amount-breakdown">
+                    @foreach (var family in spend.Families)
+                    {
+                        <div>
+                            <dt><a asp-page="/Advertising/Index" asp-route-from="@iso(spend.From)" asp-route-to="@iso(spend.To)" asp-route-family="@((family.FamilyId ?? AdvertisingFilter.NoFamily).ToString(CultureInfo.InvariantCulture))">@(family.Family ?? "No family")</a></dt>
+                            <dd>@DashboardFormat.Money(-family.Spend, currency)</dd>
+                        </div>
+                    }
+                    <div class="amount-breakdown-total"><dt>All families</dt><dd>@DashboardFormat.Money(-spend.Total, currency)</dd></div>
+                </dl>
+                @if (spend.StartsBeforeSync || spend.EndsAfterSync)
+                {
+                    @* Both days are set once anything is synced (IsSynced checked above), so the "!"s only quiet the compiler. *@
+                    <div class="kpi-foot mt-1">Ad spend is synced @SettlementFormat.DayRange(spend.SpendFrom!.Value, spend.SpendThrough!.Value), so days outside that show none.</div>
+                }
+            }
+        </div>
+    </div>
+</div>

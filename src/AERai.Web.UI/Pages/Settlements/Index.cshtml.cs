@@ -1,4 +1,5 @@
 using AERai.Web.Application.Abstractions;
+using AERai.Web.Application.Advertising;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Marketplaces;
 using AERai.Web.Application.Security;
@@ -21,8 +22,9 @@ namespace AERai.Web.UI.Pages.Settlements;
 /// </remarks>
 /// <param name="reporting">Reporting queries.</param>
 /// <param name="deferred">What Amazon still holds back (the deferred tile).</param>
+/// <param name="advertising">Ad spend by family over the listed settlements' days (the ad costs card).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
-public sealed class IndexModel(IReportingQueries reporting, IDeferredPaymentService deferred, ICurrentMarketplace currentMarketplace) : ListPageModel
+public sealed class IndexModel(IReportingQueries reporting, IDeferredPaymentService deferred, IAdvertisingService advertising, ICurrentMarketplace currentMarketplace) : ListPageModel
 {
     /// <summary>Only periods ending on or after this local date, from <c>?from=</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "from")]
@@ -55,6 +57,9 @@ public sealed class IndexModel(IReportingQueries reporting, IDeferredPaymentServ
 
     /// <summary>What Amazon deferred out of each listed settlement's payout, by settlement id, in the marketplace's currency.</summary>
     public IReadOnlyDictionary<string, DeferredOut> DeferredOut { get; private set; } = new Dictionary<string, DeferredOut>();
+
+    /// <summary>Ad spend by family over the days the listed settlements cover (from the Ads API).</summary>
+    public SettlementAdSpend AdSpend { get; private set; } = SettlementAdSpend.None;
 
     /// <summary>The current page of settlements.</summary>
     public PagedResult<SettlementSummary> Settlements { get; private set; } = default!;
@@ -102,6 +107,7 @@ public sealed class IndexModel(IReportingQueries reporting, IDeferredPaymentServ
 
         Totals = await reporting.GetSettlementTotalsAsync(Marketplace.MarketplaceId, request, filter, cancellationToken)
             ?? SettlementTotals.Empty(Marketplace.Currency);
+        AdSpend = await advertising.GetSettlementSpendAsync(Marketplace, Totals.FirstPeriodStart, Totals.LastPeriodEnd, cancellationToken);
         Currencies = await reporting.GetSettlementCurrenciesAsync(Marketplace.MarketplaceId, request, filter, cancellationToken);
 
         Settlements = await reporting.GetSettlementsAsync(Marketplace.MarketplaceId, request, filter, cancellationToken);

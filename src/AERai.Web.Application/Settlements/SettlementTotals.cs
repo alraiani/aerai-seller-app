@@ -14,7 +14,21 @@ namespace AERai.Web.Application.Settlements;
 /// <param name="Refunds">Sum of their refunds (usually negative).</param>
 /// <param name="Reserve">Sum of their account level reserve amounts.</param>
 /// <param name="Net">Sum of their net payouts.</param>
-public sealed record SettlementTotals(string Currency, int Count, int AwaitingRate, decimal Sales, decimal Expenses, decimal Refunds, decimal Reserve, decimal Net)
+/// <param name="AdCosts">Sum of the advertising Amazon charged in them (negative); part of <paramref name="Expenses"/>.</param>
+/// <param name="FirstPeriodStart">Start of the earliest matched settlement period (rate or not), or <see langword="null"/>.</param>
+/// <param name="LastPeriodEnd">End of the latest matched settlement period (rate or not), or <see langword="null"/>.</param>
+public sealed record SettlementTotals(
+    string Currency,
+    int Count,
+    int AwaitingRate,
+    decimal Sales,
+    decimal Expenses,
+    decimal Refunds,
+    decimal Reserve,
+    decimal Net,
+    decimal AdCosts = 0,
+    DateTimeOffset? FirstPeriodStart = null,
+    DateTimeOffset? LastPeriodEnd = null)
 {
     /// <summary>No settlements.</summary>
     /// <param name="currency">The marketplace's currency.</param>
@@ -23,6 +37,9 @@ public sealed record SettlementTotals(string Currency, int Count, int AwaitingRa
 
     /// <summary>Expenses as a share of sales (0.15 = 15 %), or <see langword="null"/> without sales.</summary>
     public decimal? ExpenseRate => Sales > 0 ? -Expenses / Sales : null;
+
+    /// <summary>Ad costs as a share of sales (0.12 = 12 %), or <see langword="null"/> without sales.</summary>
+    public decimal? AdCostRate => Sales > 0 ? -AdCosts / Sales : null;
 
     /// <summary>Refunds as a share of sales, or <see langword="null"/> without sales.</summary>
     public decimal? RefundRate => Sales > 0 ? -Refunds / Sales : null;

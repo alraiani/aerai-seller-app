@@ -17,4 +17,7 @@ public enum SettlementSort
 
     /// <summary>Largest net payout first.</summary>
     Net = 4,
+
+    /// <summary>Largest advertising charges first (they are negative, so the most negative first).</summary>
+    AdCosts = 5,
 }

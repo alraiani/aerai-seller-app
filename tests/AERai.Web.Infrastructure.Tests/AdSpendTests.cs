@@ -86,5 +86,10 @@ public sealed class AdSpendTests(SqlDatabaseFixture fixture) : IClassFixture<Sql
         Assert.NotNull(synced);
         Assert.True(synced.Value.First <= day);
         Assert.Equal(day.AddDays(1), synced.Value.Last);
+
+        // Spend per family over the same days; SKUs without a family add up together.
+        var families = await queries.GetFamilySpendAsync(MarketplaceIds.Canada, day, day.AddDays(1), CancellationToken.None);
+        Assert.Equal(3.25m, Assert.Single(families, f => f.Family == "T-AD Family").Spend);
+        Assert.Equal(0.50m, Assert.Single(families, f => f.FamilyId is null).Spend);
     }
 }

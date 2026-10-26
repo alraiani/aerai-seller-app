@@ -1637,6 +1637,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<string>("AmountType")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<string>("Currency")
                         .HasColumnType("nvarchar(max)");
 
@@ -1724,6 +1729,10 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<string>("Asin")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal>("Commission")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("Currency")
                         .HasColumnType("nvarchar(max)");
 
@@ -1732,6 +1741,14 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasColumnType("decimal(19,10)");
 
                     b.Property<decimal>("Expenses")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("FbaFees")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("HomeCommission")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
@@ -1744,7 +1761,23 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal?>("HomeFbaFees")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal?>("HomeNet")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("HomeOtherExpenses")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("HomeRefundedExpenses")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("HomeRefundedSales")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
@@ -1764,6 +1797,10 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal?>("HomeShipping")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<int>("LineCount")
                         .HasColumnType("int");
 
@@ -1779,11 +1816,23 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<int>("OrderCount")
                         .HasColumnType("int");
 
+                    b.Property<decimal>("OtherExpenses")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTimeOffset?>("PeriodEnd")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<DateTimeOffset?>("PeriodStart")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<decimal>("RefundedExpenses")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("RefundedSales")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("Refunds")
                         .HasPrecision(18, 2)
@@ -1805,6 +1854,10 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal>("Shipping")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("Sku")
                         .HasColumnType("nvarchar(max)");
 
@@ -1821,6 +1874,14 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AERai.Web.Domain.Reporting.SettlementSummary", b =>
                 {
+                    b.Property<decimal>("AdCosts")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("Commission")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("Currency")
                         .HasColumnType("nvarchar(max)");
 
@@ -1835,6 +1896,18 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("FbaFees")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("HomeAdCosts")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("HomeCommission")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("HomeCurrency")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -1844,7 +1917,23 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal?>("HomeFbaFees")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal?>("HomeNet")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("HomeOtherExpenses")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("HomeRefundedExpenses")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("HomeRefundedSales")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
@@ -1860,12 +1949,20 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal?>("HomeShipping")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("MarketplaceId")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
 
                     b.Property<decimal>("Net")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("OtherExpenses")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
@@ -1877,6 +1974,14 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("RateSource")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("RefundedExpenses")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("RefundedSales")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("Refunds")
                         .HasPrecision(18, 2)
@@ -1893,6 +1998,10 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.Property<string>("SettlementId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Shipping")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("Units")
                         .HasColumnType("int");
