@@ -51,6 +51,27 @@ public sealed class SettlementSummary
     /// <summary>Account level reserve: held back from the payout (negative) or released from an earlier one (positive).</summary>
     public decimal Reserve { get; set; }
 
+    /// <summary>The part of <see cref="Refunds"/> that gave back price, shipping, and tax.</summary>
+    public decimal RefundedSales { get; set; }
+
+    /// <summary>The part of <see cref="Refunds"/> that gave back or charged fees.</summary>
+    public decimal RefundedExpenses { get; set; }
+
+    /// <summary>The part of <see cref="Expenses"/> spent on shipping to customers and into Amazon.</summary>
+    public decimal Shipping { get; set; }
+
+    /// <summary>The part of <see cref="Expenses"/> that is FBA fees (fulfillment, storage, placement, returns, removals, AWD).</summary>
+    public decimal FbaFees { get; set; }
+
+    /// <summary>The part of <see cref="Expenses"/> that is Amazon's referral fees.</summary>
+    public decimal Commission { get; set; }
+
+    /// <summary>The rest of <see cref="Expenses"/> (advertising, subscriptions, deals, promotions, clawbacks, deductions).</summary>
+    public decimal OtherExpenses { get; set; }
+
+    /// <summary>Advertising Amazon charged in the settlement (negative); part of <see cref="OtherExpenses"/>.</summary>
+    public decimal AdCosts { get; set; }
+
     /// <summary>Sum of all amounts — the payout.</summary>
     public decimal Net { get; set; }
 
@@ -65,6 +86,27 @@ public sealed class SettlementSummary
 
     /// <summary><see cref="Reserve"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
     public decimal? HomeReserve { get; set; }
+
+    /// <summary><see cref="RefundedSales"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeRefundedSales { get; set; }
+
+    /// <summary>The rest of <see cref="HomeRefunds"/> after converted refunded sales; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeRefundedExpenses { get; set; }
+
+    /// <summary><see cref="Shipping"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeShipping { get; set; }
+
+    /// <summary><see cref="FbaFees"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeFbaFees { get; set; }
+
+    /// <summary><see cref="Commission"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeCommission { get; set; }
+
+    /// <summary>The rest of <see cref="HomeExpenses"/> after converted shipping, FBA fees, and commission; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeOtherExpenses { get; set; }
+
+    /// <summary><see cref="AdCosts"/> in <see cref="HomeCurrency"/>; <see langword="null"/> without a rate.</summary>
+    public decimal? HomeAdCosts { get; set; }
 
     /// <summary><see cref="Net"/> in <see cref="HomeCurrency"/> (the amount entered by an Operator when they gave one); <see langword="null"/> without a rate.</summary>
     public decimal? HomeNet { get; set; }

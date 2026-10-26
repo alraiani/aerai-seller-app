@@ -72,8 +72,18 @@ public interface IReportingQueries
     /// <param name="sku">The row's SKU; <see langword="null"/> for amounts that belong to no SKU.</param>
     /// <param name="salePrice">The row's sale price; <see langword="null"/> when it has none.</param>
     /// <param name="request">Paging; search matches order id, transaction type, amount type, or description. A group matches when any of its lines does, and is then listed whole.</param>
-    /// <param name="filter">Bucket and order; <see langword="null"/> for <see cref="SettlementLineFilter.Default"/> (earliest posted first).</param>
+    /// <param name="filter">Category and order; <see langword="null"/> for <see cref="SettlementLineFilter.Default"/> (earliest posted first).</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>One page of groups, each with all its lines.</returns>
     Task<PagedResult<SettlementOrderGroup>> GetSettlementOrderGroupsAsync(string marketplaceId, string settlementId, string? sku, decimal? salePrice, PageRequest request, SettlementLineFilter? filter, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A settlement's Other expenses lines (see <c>rpt.vw_SettlementLine</c>), added up by per-SKU
+    /// summary row and kind of charge, to explain that column.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace to report on.</param>
+    /// <param name="settlementId">Amazon settlement identifier.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>One entry per row, transaction type, amount type, and description.</returns>
+    Task<IReadOnlyList<SettlementExpenseLine>> GetSettlementOtherExpensesAsync(string marketplaceId, string settlementId, CancellationToken cancellationToken);
 }

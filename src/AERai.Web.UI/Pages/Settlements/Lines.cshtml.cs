@@ -28,9 +28,9 @@ public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentServ
     [BindProperty(SupportsGet = true, Name = "price")]
     public string? Price { get; set; }
 
-    /// <summary>Only groups with an amount in this column, from <c>?bucket=</c>.</summary>
-    [BindProperty(SupportsGet = true, Name = "bucket")]
-    public SettlementBucket? Bucket { get; set; }
+    /// <summary>Only groups with an amount in this category, from <c>?category=</c>.</summary>
+    [BindProperty(SupportsGet = true, Name = "category")]
+    public SettlementCategory? Category { get; set; }
 
     /// <summary>Sort from <c>?sort=</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "sort")]
@@ -65,8 +65,11 @@ public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentServ
     /// <summary>The marketplace's time zone, in which release dates are shown.</summary>
     public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
 
-    /// <summary>Whether a search or bucket filter is applied.</summary>
-    public bool IsFiltered => !string.IsNullOrWhiteSpace(Search) || Bucket is not null;
+    /// <summary>What the row's Other expenses are made of, for the total's tooltip.</summary>
+    public IReadOnlyList<SettlementExpenseItem> OtherExpenses { get; private set; } = [];
+
+    /// <summary>Whether a search or category filter is applied.</summary>
+    public bool IsFiltered => !string.IsNullOrWhiteSpace(Search) || Category is not null;
 
     /// <summary>Loads the summary row and the requested page of its groups.</summary>
     /// <param name="id">Settlement id from the route.</param>
@@ -97,7 +100,9 @@ public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentServ
         Group = group;
         RatePanel = new SettlementRatePanel(settlement, Amounts, LinkWith(("amounts", null)), LinkWith(("amounts", SettlementAmounts.Original.ToString())));
         Groups = await reporting.GetSettlementOrderGroupsAsync(
-            marketplace.MarketplaceId, id, sku, price, ToPageRequest(), new SettlementLineFilter(Bucket, Sort, Descending, Amounts), cancellationToken);
+            marketplace.MarketplaceId, id, sku, price, ToPageRequest(), new SettlementLineFilter(Category, Sort, Descending, Amounts), cancellationToken);
+        var otherExpenses = await reporting.GetSettlementOtherExpensesAsync(marketplace.MarketplaceId, id, cancellationToken);
+        OtherExpenses = SettlementOtherExpenses.Items(otherExpenses.Where(l => l.Sku == sku && l.SalePrice == price), Amounts);
         Zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
         DeferredLines = await deferred.GetSkuLinesAsync(marketplace, settlement, sku, price, Amounts, cancellationToken);
         Now = time.GetUtcNow();
@@ -108,7 +113,7 @@ public sealed class LinesModel(IReportingQueries reporting, IDeferredPaymentServ
 
     /// <summary>A link back to this summary row with only its SKU and price (no search, filter, or sort).</summary>
     /// <returns>A relative URL.</returns>
-    public string ClearLink() => LinkWith(("q", null), ("bucket", null), ("sort", null), ("desc", null));
+    public string ClearLink() => LinkWith(("q", null), ("category", null), ("sort", null), ("desc", null));
 
     /// <summary>Link for a sortable column header: toggles direction when it's already the sort.</summary>
     /// <param name="column">Sort.</param>

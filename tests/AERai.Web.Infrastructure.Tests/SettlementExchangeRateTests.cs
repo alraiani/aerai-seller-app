@@ -75,6 +75,12 @@ public sealed class SettlementExchangeRateTests(SqlDatabaseFixture fixture) : IC
         Assert.Equal(62.86m, s.HomeNet);
         Assert.Equal((72.01m, 0m, -10.83m, 1.68m), (s.HomeSales, s.HomeRefunds, s.HomeExpenses, s.HomeReserve));
         Assert.Equal(s.HomeNet, s.HomeSales + s.HomeExpenses + s.HomeRefunds + s.HomeReserve);
+
+        // The categories of a converted column add up to it too: other expenses take what the roundings leave over.
+        Assert.Equal(-10.82m, s.HomeCommission);
+        Assert.Equal(-0.01m, s.HomeOtherExpenses);
+        Assert.Equal(s.HomeExpenses, s.HomeShipping + s.HomeFbaFees + s.HomeCommission + s.HomeOtherExpenses);
+        Assert.Equal(s.HomeRefunds, s.HomeRefundedSales + s.HomeRefundedExpenses);
     }
 
     [SqlFact]
@@ -117,6 +123,7 @@ public sealed class SettlementExchangeRateTests(SqlDatabaseFixture fixture) : IC
         var adjusted = await SummaryAsync("FX-CAD-2");
         Assert.Equal(("Manual", 219.13m), (adjusted.RateSource, adjusted.HomeNet));
         Assert.Equal(adjusted.HomeNet, adjusted.HomeSales + adjusted.HomeExpenses + adjusted.HomeRefunds + adjusted.HomeReserve);
+        Assert.Equal(adjusted.HomeExpenses, adjusted.HomeShipping + adjusted.HomeFbaFees + adjusted.HomeCommission + adjusted.HomeOtherExpenses);
 
         // The export posts the deposit the bank shows, and the entry still balances.
         await scope.ServiceProvider.GetRequiredService<Application.Bookkeeping.IBookkeepingService>().SaveMappingsAsync(

@@ -236,7 +236,25 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
             builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tOrder\t{orderId}\tItemPrice\tPrincipal\t{price:0.00}\t{posted:yyyy-MM-dd}\t{sku}\n");
             builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tOrder\t{orderId}\tItemFees\tCommission\t{-price * 0.15m:0.00}\t{posted:yyyy-MM-dd}\t{sku}\n");
             builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tOrder\t{orderId}\tItemFees\tFBAPerUnitFulfillmentFee\t{-(3 + random.NextDouble() * 3):0.00}\t{posted:yyyy-MM-dd}\t{sku}\n");
+
+            // A few shipping chargebacks and refunds, so every settlement column has something in it.
+            if (i % 5 == 0)
+            {
+                builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tOrder\t{orderId}\tItemFees\tShippingChargeback\t-2.49\t{posted:yyyy-MM-dd}\t{sku}\n");
+            }
+
+            if (i % 8 == 3)
+            {
+                var refunded = posted.AddDays(3);
+                builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tRefund\t{orderId}\tItemPrice\tPrincipal\t{-price:0.00}\t{refunded:yyyy-MM-dd}\t{sku}\n");
+                builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tRefund\t{orderId}\tItemFees\tCommission\t{price * 0.15m:0.00}\t{refunded:yyyy-MM-dd}\t{sku}\n");
+                builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tRefund\t{orderId}\tItemFees\tRefundCommission\t{-Math.Min(5m, price * 0.03m):0.00}\t{refunded:yyyy-MM-dd}\t{sku}\n");
+            }
         }
+
+        // Amazon bills advertising as SKU-less lump sums, and inbound shipping per shipment.
+        builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tServiceFee\t\tCost of Advertising\tTransactionTotalAmount\t{-(80 + random.NextDouble() * 120):0.00}\t{end.AddDays(-2):yyyy-MM-dd}\t\n");
+        builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tother-transaction\t\tother-transaction\tInbound Transportation Fee\t{-(20 + random.NextDouble() * 30):0.00}\t{end.AddDays(-3):yyyy-MM-dd}\t\n");
 #pragma warning restore CA5394
 
         builder.Append(CultureInfo.InvariantCulture, $"{settlementId}\t\t\t\t\t\tServiceFee\t\tother-transaction\tSubscription Fee\t-39.99\t{end.AddDays(-1):yyyy-MM-dd}\t\n");

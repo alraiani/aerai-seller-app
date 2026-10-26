@@ -28,4 +28,12 @@ public interface IAdvertisingQueries
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The days, or <see langword="null"/> when none is stored.</returns>
     Task<(DateOnly First, DateOnly Last)?> GetSpendRangeAsync(string marketplaceId, CancellationToken cancellationToken);
+
+    /// <summary>Ad spend per product family over a range of days (SKUs without a family together).</summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="from">First day.</param>
+    /// <param name="to">Last day (inclusive).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>One row per family with spend in the range, in no particular order.</returns>
+    Task<IReadOnlyList<AdFamilySpend>> GetFamilySpendAsync(string marketplaceId, DateOnly from, DateOnly to, CancellationToken cancellationToken);
 }

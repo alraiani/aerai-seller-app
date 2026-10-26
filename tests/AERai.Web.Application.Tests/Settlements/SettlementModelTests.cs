@@ -29,6 +29,7 @@ public sealed class SettlementModelTests
     [InlineData(SettlementSort.Net, true)]
     [InlineData(SettlementSort.Expenses, false)]
     [InlineData(SettlementSort.Refunds, false)]
+    [InlineData(SettlementSort.AdCosts, false)]
     public void IsDescendingByDefault_SettlementSort_PutsTheLargestAmountFirst(SettlementSort sort, bool expected) =>
         Assert.Equal(expected, sort.IsDescendingByDefault());
 
@@ -40,6 +41,12 @@ public sealed class SettlementModelTests
     [InlineData(SettlementSkuSort.Sku, false)]
     [InlineData(SettlementSkuSort.Expenses, false)]
     [InlineData(SettlementSkuSort.Refunds, false)]
+    [InlineData(SettlementSkuSort.RefundedSales, false)]
+    [InlineData(SettlementSkuSort.RefundedExpenses, true)]
+    [InlineData(SettlementSkuSort.Shipping, false)]
+    [InlineData(SettlementSkuSort.FbaFees, false)]
+    [InlineData(SettlementSkuSort.Commission, false)]
+    [InlineData(SettlementSkuSort.OtherExpenses, false)]
     public void IsDescendingByDefault_SkuSort_PutsTheLargestAmountFirst(SettlementSkuSort sort, bool expected) =>
         Assert.Equal(expected, sort.IsDescendingByDefault());
 

@@ -4,6 +4,7 @@ using AERai.Web.Application.Common;
 using AERai.Web.Application.Imports;
 using AERai.Web.Application.Settlements;
 using AERai.Web.Domain.Core;
+using AERai.Web.Domain.Reporting;
 using AERai.Web.Domain.Staging;
 using AERai.Web.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -166,6 +167,77 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     }
 
     [SqlFact]
+    public async Task Settlements_ExpensesAndRefundsBreakOutIntoCategoriesThatAddUpToTheirColumns()
+    {
+        static string Line(string type, string order, string sku, string quantity, string amountType, string description, string amount) =>
+            $"T-SET-C\t\t\t{type}\t{order}\t{(order.Length == 0 ? "" : "I-" + order)}\t{sku}\t{quantity}\t{amountType}\t{description}\t{amount}\t\n";
+
+        var tsv =
+            "settlement-id\tsettlement-start-date\tsettlement-end-date\ttransaction-type\torder-id\torder-item-code\tsku\tquantity-purchased\tamount-type\tamount-description\tamount\tcurrency\n" +
+            "T-SET-C\t2026-06-01 01:53:02 UTC\t2026-06-15 01:53:02 UTC\t\t\t\t\t\t\t\t\tUSD\n" +
+            Line("Order", "T-O-C1", "T-SKU-C", "1", "ItemPrice", "Principal", "50.00") +
+            Line("Order", "T-O-C1", "T-SKU-C", "", "ItemFees", "Commission", "-7.50") +
+            Line("Order", "T-O-C1", "T-SKU-C", "", "ItemFees", "FBAPerUnitFulfillmentFee", "-4.00") +
+            Line("Order", "T-O-C1", "T-SKU-C", "", "ItemFees", "ShippingChargeback", "-2.00") +
+            Line("Order", "T-O-C1", "T-SKU-C", "", "Promotion", "Shipping", "-3.00") +
+            Line("Order", "T-O-C1", "T-SKU-C", "", "Promotion", "Principal", "-1.00") +
+            Line("Refund", "T-O-C1", "T-SKU-C", "", "ItemPrice", "Principal", "-25.00") +
+            Line("Refund", "T-O-C1", "T-SKU-C", "", "ItemPrice", "Shipping", "-1.00") +
+            Line("Refund", "T-O-C1", "T-SKU-C", "", "ItemFees", "Commission", "3.75") +
+            Line("Refund", "T-O-C1", "T-SKU-C", "", "ItemFees", "RefundCommission", "-0.75") +
+            Line("FBAFees", "", "", "", "AWD Storage Fee", "Base fee", "-6.00") +
+            Line("FBAFees", "", "", "", "AWD Transportation Fee", "Base fee", "-2.50") +
+            Line("other-transaction", "", "", "", "other-transaction", "Inbound Transportation Fee", "-10.00") +
+            Line("other-transaction", "", "", "", "other-transaction", "Storage Fee", "-1.25") +
+            Line("ServiceFee", "", "", "", "Cost of Advertising", "TransactionTotalAmount", "-40.00") +
+            Line("ServiceFee", "", "", "", "Refund for Advertiser", "TransactionTotalAmount", "5.00") +
+            Line("ServiceFee", "", "", "", "other-transaction", "Subscription Fee", "-39.99");
+
+        await PromoteAsync(await StageAsync(ImportSource.Settlements, "settlement-categories.tsv", tsv));
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var reporting = scope.ServiceProvider.GetRequiredService<IReportingQueries>();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var s = await db.SettlementSummaries.SingleAsync(x => x.SettlementId == "T-SET-C");
+
+        // Shipping covers customer (chargeback, shipping promotion) and inbound (AWD transportation, inbound transportation)
+        // shipping; FBA fees every FBA fee; the rest (a principal promotion, ads, the subscription) is Other.
+        Assert.Equal((-26.00m, 3.00m), (s.RefundedSales, s.RefundedExpenses));
+        Assert.Equal((-17.50m, -11.25m, -7.50m, -75.99m), (s.Shipping, s.FbaFees, s.Commission, s.OtherExpenses));
+        Assert.Equal(-35.00m, s.AdCosts);
+        Assert.Equal((50.00m, -23.00m, -112.24m, -85.24m), (s.Sales, s.Refunds, s.Expenses, s.Net));
+        Assert.Equal(s.Refunds, s.RefundedSales + s.RefundedExpenses);
+        Assert.Equal(s.Expenses, s.Shipping + s.FbaFees + s.Commission + s.OtherExpenses);
+        Assert.Equal((s.HomeShipping, s.HomeFbaFees, s.HomeCommission, s.HomeOtherExpenses, s.HomeAdCosts), (s.Shipping, s.FbaFees, s.Commission, s.OtherExpenses, (decimal?)s.AdCosts));
+
+        // The SKU summary rows split the same way and add up to the settlement.
+        var rows = (await reporting.GetSettlementSkuSummaryAsync(s.MarketplaceId, "T-SET-C", new PageRequest(), null, CancellationToken.None)).Items;
+        // The refund is priced by its own principal, so it is a row of its own beside the sale's.
+        var sale = rows.Single(r => r.Sku == "T-SKU-C" && r.SalePrice == 50.00m);
+        var refund = rows.Single(r => r.Sku == "T-SKU-C" && r.SalePrice == 25.00m);
+        Assert.Equal((0m, 0m, -5.00m, -4.00m, -7.50m, -1.00m), (sale.RefundedSales, sale.RefundedExpenses, sale.Shipping, sale.FbaFees, sale.Commission, sale.OtherExpenses));
+        Assert.Equal((-26.00m, 3.00m, 0m), (refund.RefundedSales, refund.RefundedExpenses, refund.Expenses));
+        Assert.Equal(s.OtherExpenses, rows.Sum(r => r.OtherExpenses));
+        Assert.Equal(s.HomeRefundedExpenses, rows.Sum(r => r.HomeRefundedExpenses));
+
+        // Each line carries its category, and the Lines filter picks groups by it.
+        var categories = await db.SettlementLineDetails.Where(l => l.SettlementId == "T-SET-C" && l.Sku == "T-SKU-C").Select(l => l.Category).ToListAsync();
+        Assert.Equal(7, categories.Distinct().Count());
+        var shipping = await reporting.GetSettlementOrderGroupsAsync(s.MarketplaceId, "T-SET-C", null, null, new PageRequest(), new SettlementLineFilter(SettlementCategory.Shipping), CancellationToken.None);
+        Assert.Equal(["FBAFees", "other-transaction"], shipping.Items.Select(g => g.TransactionType).Order());
+
+        // Other expenses are explained by kind of charge, per row.
+        var other = await reporting.GetSettlementOtherExpensesAsync(s.MarketplaceId, "T-SET-C", CancellationToken.None);
+        var noSku = SettlementOtherExpenses.ByRow(other, SettlementAmounts.Home)[(null, null)];
+        Assert.Equal([("Subscription Fee", -39.99m), ("Advertising", -35.00m)], noSku.Select(i => (i.Label, i.Amount)));
+        Assert.Equal("Promotions", Assert.Single(SettlementOtherExpenses.ByRow(other, SettlementAmounts.Home)[("T-SKU-C", 50.00m)]).Label);
+
+        // The list totals carry the ad costs and the period range.
+        var totals = await reporting.GetSettlementTotalsAsync(s.MarketplaceId, new PageRequest(Search: "T-SET-C"), null, CancellationToken.None);
+        Assert.Equal((-35.00m, s.PeriodStart, s.PeriodEnd), (totals!.AdCosts, totals.FirstPeriodStart, totals.LastPeriodEnd));
+    }
+
+    [SqlFact]
     public async Task Settlements_SkuSummaryGroupsByPricePerItem_AndLinesExplainEachGroup()
     {
         const string tsv =
@@ -270,9 +342,9 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         var serviceFees = Assert.Single(fees.Items);
         Assert.Equal(("ServiceFee", false, 2, -44.99m), (serviceFees.TransactionType, serviceFees.IsOrder, serviceFees.Lines.Count, serviceFees.Amount));
 
-        // The refund bucket and a search both pick whole groups: the refunded order keeps its sale and fee lines.
+        // The refunded-sales category and a search both pick whole groups: the refunded order keeps its sale and fee lines.
         var price = refunded.Items[0].SalePrice;
-        var withRefund = await reporting.GetSettlementOrderGroupsAsync(marketplaceId, "T-SET-6", "T-SKU-F", price, new PageRequest(), new SettlementLineFilter(SettlementBucket.Refunds), ct);
+        var withRefund = await reporting.GetSettlementOrderGroupsAsync(marketplaceId, "T-SET-6", "T-SKU-F", price, new PageRequest(), new SettlementLineFilter(SettlementCategory.RefundedSales), ct);
         var refundedOrder = Assert.Single(withRefund.Items);
         Assert.Equal(("T-O-60", 3, -1.50m), (refundedOrder.AmazonOrderId, refundedOrder.Lines.Count, refundedOrder.Amount));
         var searched = await reporting.GetSettlementOrderGroupsAsync(marketplaceId, "T-SET-6", "T-SKU-F", price, new PageRequest(Search: "Commission"), null, ct);

@@ -161,14 +161,13 @@
                         <th class="text-end"><a href="@Model.SortLink(AdSort.Clicks)" class="sort-link">Clicks @Model.SortArrow(AdSort.Clicks)</a> <partial name="_Tip" model='"Clicks, with the cost per click under them."' /></th>
                         <th class="text-end d-none d-xl-table-cell">Impressions <partial name="_Tip" model='"Times the ads were shown, with the click-through rate (clicks ÷ impressions) under them. Shown on wide screens."' /></th>
                     </tr>
-                </thead>
-                <tbody>
+                    @* The totals of every listed family, under the header (and stuck with it). *@
                     <tr class="totals-row">
                         <td></td>
                         <td class="product-col fw-semibold">All listed</td>
                         <partial name="_AdMetricCells" model="(t, currency, true)" />
                     </tr>
-                </tbody>
+                </thead>
                 @for (var i = 0; i < report.Groups.Count; i++)
                 {
                     var group = report.Groups[i];

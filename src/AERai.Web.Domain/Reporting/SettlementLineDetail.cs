@@ -54,6 +54,9 @@ public sealed class SettlementLineDetail
     /// <summary>Signed amount.</summary>
     public decimal Amount { get; set; }
 
+    /// <summary>The finest column the line counts toward (a part of its sales, refunds, expenses, or reserve).</summary>
+    public SettlementCategory Category { get; set; }
+
     /// <summary>The amount when it counts as a sale, otherwise zero.</summary>
     public decimal Sales { get; set; }
 

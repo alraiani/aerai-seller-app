@@ -29,6 +29,7 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
             SettlementSort.Expenses => query.OrderBy(s => s.HomeExpenses ?? s.Expenses, descending),
             SettlementSort.Refunds => query.OrderBy(s => s.HomeRefunds ?? s.Refunds, descending),
             SettlementSort.Net => query.OrderBy(s => s.HomeNet ?? s.Net, descending),
+            SettlementSort.AdCosts => query.OrderBy(s => s.HomeAdCosts ?? s.AdCosts, descending),
             _ => query.OrderBy(s => s.PeriodEnd, descending),
         };
 
@@ -56,7 +57,10 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
                 g.Sum(s => s.HomeExpenses ?? 0),
                 g.Sum(s => s.HomeRefunds ?? 0),
                 g.Sum(s => s.HomeReserve ?? 0),
-                g.Sum(s => s.HomeNet ?? 0)))
+                g.Sum(s => s.HomeNet ?? 0),
+                g.Sum(s => s.HomeAdCosts ?? 0),
+                g.Min(s => s.PeriodStart),
+                g.Max(s => s.PeriodEnd)))
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
     }
@@ -170,6 +174,12 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
             SettlementSkuSort.Expenses => query.OrderBy(r => home ? r.HomeExpenses ?? r.Expenses : r.Expenses, descending),
             SettlementSkuSort.Refunds => query.OrderBy(r => home ? r.HomeRefunds ?? r.Refunds : r.Refunds, descending),
             SettlementSkuSort.Net => query.OrderBy(r => home ? r.HomeNet ?? r.Net : r.Net, descending),
+            SettlementSkuSort.RefundedSales => query.OrderBy(r => home ? r.HomeRefundedSales ?? r.RefundedSales : r.RefundedSales, descending),
+            SettlementSkuSort.RefundedExpenses => query.OrderBy(r => home ? r.HomeRefundedExpenses ?? r.RefundedExpenses : r.RefundedExpenses, descending),
+            SettlementSkuSort.Shipping => query.OrderBy(r => home ? r.HomeShipping ?? r.Shipping : r.Shipping, descending),
+            SettlementSkuSort.FbaFees => query.OrderBy(r => home ? r.HomeFbaFees ?? r.FbaFees : r.FbaFees, descending),
+            SettlementSkuSort.Commission => query.OrderBy(r => home ? r.HomeCommission ?? r.Commission : r.Commission, descending),
+            SettlementSkuSort.OtherExpenses => query.OrderBy(r => home ? r.HomeOtherExpenses ?? r.OtherExpenses : r.OtherExpenses, descending),
             _ => query.OrderBy(r => home ? r.HomeSales ?? r.Sales : r.Sales, descending),
         };
 
@@ -196,10 +206,10 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
 
         // A group is one order; lines without an order (service fees and the like) are grouped by
         // transaction type instead, so the key's second part is set only when the first is null.
-        // Search and the bucket filter pick groups, never single lines, so a listed group's lines
+        // Search and the category filter pick groups, never single lines, so a listed group's lines
         // always add up to its total.
         var search = request.SafeSearch;
-        var bucket = filter.Bucket;
+        var category = filter.Category;
         var home = filter.Amounts == SettlementAmounts.Home;
         var groups = lines
             .GroupBy(l => new { l.AmazonOrderId, NoOrderType = l.AmazonOrderId == null ? l.TransactionType : null })
@@ -218,13 +228,9 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
                     || l.TransactionType.Contains(search)
                     || (l.AmountType != null && l.AmountType.Contains(search))
                     || (l.AmountDescription != null && l.AmountDescription.Contains(search))),
-                BucketHits = bucket == null ? 1 : g.Count(l =>
-                    (bucket == SettlementBucket.Sales && l.Sales != 0)
-                    || (bucket == SettlementBucket.Expenses && l.Expenses != 0)
-                    || (bucket == SettlementBucket.Refunds && l.Refunds != 0)
-                    || (bucket == SettlementBucket.Reserve && l.Reserve != 0)),
+                CategoryHits = category == null ? 1 : g.Count(l => l.Category == category && l.Amount != 0),
             })
-            .Where(g => g.SearchHits > 0 && g.BucketHits > 0);
+            .Where(g => g.SearchHits > 0 && g.CategoryHits > 0);
 
         var descending = filter.Sort.IsDescendingByDefault() != filter.Descending;
         var ordered = filter.Sort switch
@@ -275,6 +281,25 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
         return new PagedResult<SettlementOrderGroup>(items, page.TotalCount, page.Page, page.PageSize);
     }
 
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<SettlementExpenseLine>> GetSettlementOtherExpensesAsync(string marketplaceId, string settlementId, CancellationToken cancellationToken)
+    {
+        // Added up in SQL: a settlement has tens of thousands of lines but only a few kinds of charge.
+        return await dbContext.SettlementLineDetails.AsNoTracking()
+            .Where(l => l.MarketplaceId == marketplaceId && l.SettlementId == settlementId && l.Category == SettlementCategory.OtherExpenses)
+            .GroupBy(l => new { l.Sku, l.SalePrice, l.TransactionType, l.AmountType, l.AmountDescription })
+            .Select(g => new SettlementExpenseLine(
+                g.Key.Sku,
+                g.Key.SalePrice,
+                g.Key.TransactionType,
+                g.Key.AmountType,
+                g.Key.AmountDescription,
+                g.Sum(l => l.Amount),
+                g.Sum(l => l.HomeAmount)))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     /// <summary>One order group's totals as SQL Server computes them, before its lines are attached.</summary>
     private sealed class GroupRow
     {
@@ -298,6 +323,6 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
 
         public int SearchHits { get; init; }
 
-        public int BucketHits { get; init; }
+        public int CategoryHits { get; init; }
     }
 }
