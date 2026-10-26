@@ -144,24 +144,28 @@
     else
     {
         <div class="table-responsive">
-            <table class="table data-table group-table align-middle mb-0">
+            <table class="table data-table group-table ads-table align-middle mb-0">
                 <thead>
                     <tr>
                         <th class="toggle-col"><span class="visually-hidden">Expand</span></th>
-                        <th>Family / SKU</th>
+                        <th class="product-col">Family / SKU</th>
                         <th class="text-end"><a href="@Model.SortLink(AdSort.Spend)" class="sort-link">Spend @Model.SortArrow(AdSort.Spend)</a></th>
-                        <th class="text-end"><a href="@Model.SortLink(AdSort.AdSales)" class="sort-link">Ad sales @Model.SortArrow(AdSort.AdSales)</a></th>
-                        <th class="text-end"><a href="@Model.SortLink(AdSort.Acos)" class="sort-link">ACoS @Model.SortArrow(AdSort.Acos)</a></th>
-                        <th class="text-end"><a href="@Model.SortLink(AdSort.TotalSales)" class="sort-link">Total sales @Model.SortArrow(AdSort.TotalSales)</a> <partial name="_Tip" model='"Every sale of the SKU over these days (from Orders, cancelled left out), with an ad or not."' /></th>
-                        <th class="text-end"><a href="@Model.SortLink(AdSort.Tacos)" class="sort-link">TACoS @Model.SortArrow(AdSort.Tacos)</a></th>
+                        <th class="text-end">
+                            <a href="@Model.SortLink(AdSort.AdSales)" class="sort-link">Ad sales @Model.SortArrow(AdSort.AdSales)</a>
+                            <div><a href="@Model.SortLink(AdSort.Acos)" class="sort-link">ACoS @Model.SortArrow(AdSort.Acos)</a></div>
+                        </th>
+                        <th class="text-end">
+                            <a href="@Model.SortLink(AdSort.TotalSales)" class="sort-link">Total sales @Model.SortArrow(AdSort.TotalSales)</a> <partial name="_Tip" model='"Every sale of the SKU over these days (from Orders, cancelled left out), with an ad or not. TACoS is ad spend ÷ these sales."' />
+                            <div><a href="@Model.SortLink(AdSort.Tacos)" class="sort-link">TACoS @Model.SortArrow(AdSort.Tacos)</a></div>
+                        </th>
                         <th class="text-end"><a href="@Model.SortLink(AdSort.Clicks)" class="sort-link">Clicks @Model.SortArrow(AdSort.Clicks)</a> <partial name="_Tip" model='"Clicks, with the cost per click under them."' /></th>
-                        <th class="text-end">Impressions <partial name="_Tip" model='"Times the ads were shown, with the click-through rate (clicks ÷ impressions) under them."' /></th>
+                        <th class="text-end d-none d-xl-table-cell">Impressions <partial name="_Tip" model='"Times the ads were shown, with the click-through rate (clicks ÷ impressions) under them. Shown on wide screens."' /></th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr class="totals-row">
                         <td></td>
-                        <td class="fw-semibold">All listed</td>
+                        <td class="product-col fw-semibold">All listed</td>
                         <partial name="_AdMetricCells" model="(t, currency, true)" />
                     </tr>
                 </tbody>
@@ -178,7 +182,7 @@
                                     <partial name="_Icon" model='"chevron-down"' />
                                 </button>
                             </td>
-                            <td>
+                            <td class="product-col">
                                 <div class="fw-semibold">@name</div>
                                 <div class="cell-sub">@group.Skus.Count.ToString("N0", en) SKU@(group.Skus.Count == 1 ? "" : "s")</div>
                             </td>
@@ -188,7 +192,7 @@
                         {
                             <tr class="group-child">
                                 <td></td>
-                                <td>
+                                <td class="product-col">
                                     <partial name="_ProductCell" model="new ProductCellModel(sku.Sku, sku.Asin, sku.Title, null, sku.ImagePath, null)" />
                                     <div class="cell-sub">@sku.Campaigns.ToString("N0", en) campaign@(sku.Campaigns == 1 ? "" : "s")</div>
                                 </td>

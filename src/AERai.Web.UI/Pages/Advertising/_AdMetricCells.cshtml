@@ -5,12 +5,17 @@
     var currency = Model.Currency;
     var strong = Model.Strong ? "fw-semibold" : "";
 }
-@* The seven figure cells shared by the totals, family, and SKU rows, so they always line up. *@
+@* The figure cells shared by the totals, family, and SKU rows, so they always line up. Each ratio sits under the
+   figure it is worked out from, which keeps the table narrow enough for its header to stick to the page. *@
 <td class="text-end money @strong">@SettlementFormat.Money(m.Spend, currency)</td>
-<td class="text-end money">@SettlementFormat.Money(m.AdSales, currency)</td>
-<td class="text-end money @strong @AdvertisingFormat.AcosClass(m.Acos)">@AdvertisingFormat.Percent(m.Acos)</td>
-<td class="text-end money">@SettlementFormat.Money(m.TotalSales, currency)</td>
-<td class="text-end money">@AdvertisingFormat.Percent(m.Tacos)</td>
+<td class="text-end money">
+    @SettlementFormat.Money(m.AdSales, currency)
+    <div class="cell-sub @strong @AdvertisingFormat.AcosClass(m.Acos)">ACoS @AdvertisingFormat.Percent(m.Acos)</div>
+</td>
+<td class="text-end money">
+    @SettlementFormat.Money(m.TotalSales, currency)
+    <div class="cell-sub">TACoS @AdvertisingFormat.Percent(m.Tacos)</div>
+</td>
 <td class="text-end money">
     @AdvertisingFormat.Count(m.Clicks)
     @if (m.CostPerClick is { } cpc)
@@ -18,7 +23,7 @@
         <div class="cell-sub">@DashboardFormat.Price(cpc, currency) / click</div>
     }
 </td>
-<td class="text-end money">
+<td class="text-end money d-none d-xl-table-cell">
     @AdvertisingFormat.Count(m.Impressions)
     @if (m.ClickThroughRate is { } ctr)
     {
