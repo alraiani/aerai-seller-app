@@ -102,6 +102,10 @@
                 {
                     <span>· synced through @through.ToString("MMM d", en)</span>
                 }
+                @if (report.StartsBeforeSync)
+                {
+                    <span class="text-warn">· spend synced only from @report.SpendFrom!.Value.ToString("MMM d", en); total sales count from then too</span>
+                }
             </span>
             <partial name="_Tip" model='"Sponsored Products spend from the Amazon Ads API, by product family. Expand a family to see its SKUs. Spend is pulled through yesterday, by the days Amazon Ads reports (the advertising account’s time zone); the last two weeks are re-read on every sync while Amazon finishes crediting sales to them."' />
         </span>

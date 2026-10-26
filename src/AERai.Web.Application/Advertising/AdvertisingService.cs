@@ -19,17 +19,19 @@ public sealed class AdvertisingService(IAdvertisingQueries queries) : IAdvertisi
         ArgumentNullException.ThrowIfNull(filter);
 
         var (from, to) = Range(filter.From, filter.To);
-        var spendThrough = await queries.GetLatestSpendDateAsync(marketplace.MarketplaceId, cancellationToken).ConfigureAwait(false);
+        var synced = await queries.GetSpendRangeAsync(marketplace.MarketplaceId, cancellationToken).ConfigureAwait(false);
         var rows = (await queries.GetSkuSpendAsync(marketplace.MarketplaceId, from, to, cancellationToken).ConfigureAwait(false))
             .Where(r => Selected(r, filter))
             .ToList();
 
         // TACoS compares spend with every sale of the SKU over the same local days, as the Orders page counts them.
+        // Days before spend was first synced have no spend to compare, so their sales are left out as well.
         var zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
+        var salesFrom = synced is { First: var first } && first > from ? first : from;
         var sales = rows.Count == 0
             ? new Dictionary<string, (int Units, decimal Sales)>()
             : await queries.GetSalesBySkuAsync(
-                marketplace.MarketplaceId, LocalTime.StartOfDay(from, zone), LocalTime.StartOfDay(to.AddDays(1), zone), [.. rows.Select(r => r.Sku)], cancellationToken).ConfigureAwait(false);
+                marketplace.MarketplaceId, LocalTime.StartOfDay(salesFrom, zone), LocalTime.StartOfDay(to.AddDays(1), zone), [.. rows.Select(r => r.Sku)], cancellationToken).ConfigureAwait(false);
         rows = [.. rows.Select(r => sales.TryGetValue(r.Sku, out var s)
             ? r with { Metrics = r.Metrics with { TotalSales = s.Sales, TotalUnits = s.Units } }
             : r)];
@@ -45,7 +47,7 @@ public sealed class AdvertisingService(IAdvertisingQueries queries) : IAdvertisi
             })
             .ToList();
 
-        return new AdvertisingReport(from, to, groups, AdMetrics.Sum(groups.Select(g => g.Totals)), spendThrough);
+        return new AdvertisingReport(from, to, groups, AdMetrics.Sum(groups.Select(g => g.Totals)), synced?.First, synced?.Last);
     }
 
     /// <summary>The range in order and at most <see cref="MaxDays"/> long (the latest days are kept).</summary>

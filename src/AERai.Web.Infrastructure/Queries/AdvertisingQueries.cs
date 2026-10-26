@@ -77,9 +77,14 @@ internal sealed class AdvertisingQueries(AppDbContext dbContext) : IAdvertisingQ
     }
 
     /// <inheritdoc/>
-    public async Task<DateOnly?> GetLatestSpendDateAsync(string marketplaceId, CancellationToken cancellationToken) =>
-        await dbContext.AdSpends.AsNoTracking()
+    public async Task<(DateOnly First, DateOnly Last)?> GetSpendRangeAsync(string marketplaceId, CancellationToken cancellationToken)
+    {
+        var range = await dbContext.AdSpends.AsNoTracking()
             .Where(s => s.MarketplaceId == marketplaceId)
-            .MaxAsync(s => (DateOnly?)s.Date, cancellationToken)
+            .GroupBy(_ => 1)
+            .Select(g => new { First = g.Min(s => s.Date), Last = g.Max(s => s.Date) })
+            .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
+        return range is null ? null : (range.First, range.Last);
+    }
 }

@@ -82,6 +82,9 @@ public sealed class AdSpendTests(SqlDatabaseFixture fixture) : IClassFixture<Sql
         // Only the first day.
         var oneDay = await queries.GetSkuSpendAsync(MarketplaceIds.Canada, day, day, CancellationToken.None);
         Assert.Equal(1.25m, Assert.Single(oneDay, r => r.Sku == "T-ADQ-1").Metrics.Spend);
-        Assert.Equal(day.AddDays(1), await queries.GetLatestSpendDateAsync(MarketplaceIds.Canada, CancellationToken.None));
+        var synced = await queries.GetSpendRangeAsync(MarketplaceIds.Canada, CancellationToken.None);
+        Assert.NotNull(synced);
+        Assert.True(synced.Value.First <= day);
+        Assert.Equal(day.AddDays(1), synced.Value.Last);
     }
 }

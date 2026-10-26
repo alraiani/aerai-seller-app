@@ -60,6 +60,19 @@ public sealed class AdvertisingServiceTests
     }
 
     [Fact]
+    public async Task GetReportAsync_RangeStartsBeforeSpendWasSynced_CountsSalesFromTheFirstSyncedDay()
+    {
+        _queries.Rows.Add(Sku("A", 1, "F", 10m));
+        _queries.SyncedFrom = new DateOnly(2026, 10, 12);
+
+        var report = await ReportAsync();
+
+        Assert.True(report.StartsBeforeSync);
+        Assert.Equal(From, report.From);
+        Assert.Equal(new DateTimeOffset(2026, 10, 12, 4, 0, 0, TimeSpan.Zero), _queries.SalesFrom);
+    }
+
+    [Fact]
     public async Task GetReportAsync_WithoutSalesOrClicks_RatiosAreUnknownNotZero()
     {
         _queries.Rows.Add(Sku("A", null, null, 5m));
@@ -143,7 +156,9 @@ public sealed class AdvertisingServiceTests
             return Task.FromResult<IReadOnlyDictionary<string, (int Units, decimal Sales)>>(Sales);
         }
 
-        public Task<DateOnly?> GetLatestSpendDateAsync(string marketplaceId, CancellationToken cancellationToken) =>
-            Task.FromResult<DateOnly?>(Rows.Count > 0 ? To : null);
+        public DateOnly? SyncedFrom { get; set; }
+
+        public Task<(DateOnly First, DateOnly Last)?> GetSpendRangeAsync(string marketplaceId, CancellationToken cancellationToken) =>
+            Task.FromResult<(DateOnly First, DateOnly Last)?>(Rows.Count > 0 ? (SyncedFrom ?? From, To) : null);
     }
 }

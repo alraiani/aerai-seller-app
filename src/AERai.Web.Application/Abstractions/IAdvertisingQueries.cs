@@ -23,9 +23,9 @@ public interface IAdvertisingQueries
     Task<IReadOnlyDictionary<string, (int Units, decimal Sales)>> GetSalesBySkuAsync(
         string marketplaceId, DateTimeOffset from, DateTimeOffset before, IReadOnlyCollection<string> skus, CancellationToken cancellationToken);
 
-    /// <summary>The latest day with ad spend stored for the marketplace.</summary>
+    /// <summary>The first and last days with ad spend stored for the marketplace.</summary>
     /// <param name="marketplaceId">Marketplace.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The day, or <see langword="null"/> when none is stored.</returns>
-    Task<DateOnly?> GetLatestSpendDateAsync(string marketplaceId, CancellationToken cancellationToken);
+    /// <returns>The days, or <see langword="null"/> when none is stored.</returns>
+    Task<(DateOnly First, DateOnly Last)?> GetSpendRangeAsync(string marketplaceId, CancellationToken cancellationToken);
 }
