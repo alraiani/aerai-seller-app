@@ -23,4 +23,22 @@ public enum SettlementSkuSort
 
     /// <summary>Largest net first.</summary>
     Net = 6,
+
+    /// <summary>Largest refunded sales first (the most negative first).</summary>
+    RefundedSales = 7,
+
+    /// <summary>Largest refunded expenses first (usually fees given back, so the most positive first).</summary>
+    RefundedExpenses = 8,
+
+    /// <summary>Largest shipping costs first (the most negative first).</summary>
+    Shipping = 9,
+
+    /// <summary>Largest FBA fees first (the most negative first).</summary>
+    FbaFees = 10,
+
+    /// <summary>Largest commission first (the most negative first).</summary>
+    Commission = 11,
+
+    /// <summary>Largest other expenses first (the most negative first).</summary>
+    OtherExpenses = 12,
 }

@@ -4,6 +4,7 @@
 @{
     var g = Model.Group;
     var gm = SettlementMoney.Of(g, Model.Amounts);
+    var parts = SettlementBreakdown.Of(g, Model.Amounts);
     var groups = Model.Groups.Items;
     var label = g.Sku ?? "No SKU";
 }
@@ -18,7 +19,7 @@
 
 <partial name="_SettlementRate" model="Model.RatePanel" />
 
-@* ---------- Search, bucket filter, sort ---------- *@
+@* ---------- Search, category filter, sort ---------- *@
 <div class="list-toolbar mb-3">
     <form method="get" class="filters" data-autosubmit-form role="search">
         <input type="hidden" name="sku" value="@Model.Sku" />
@@ -35,10 +36,10 @@
             <partial name="_Icon" model='"search"' />
             <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search order, type, description…" aria-label="Search lines" />
         </div>
-        <select name="bucket" class="form-select form-select-sm" aria-label="Amounts">
-            @foreach (var (bucket, text) in SettlementFormat.BucketFilters)
+        <select name="category" class="form-select form-select-sm" aria-label="Amounts">
+            @foreach (var (category, text) in SettlementFormat.CategoryFilters)
             {
-                <option value="@(bucket?.ToString() ?? "")" selected="@(Model.Bucket == bucket)">@text</option>
+                <option value="@(category?.ToString() ?? "")" selected="@(Model.Category == category)">@text</option>
             }
         </select>
         <select name="sort" class="form-select form-select-sm" aria-label="Sort by">
@@ -91,19 +92,17 @@
                         <th class="text-end">Units</th>
                         <th class="text-end"><a href="@Model.SortLink(SettlementGroupSort.Amount)" class="sort-link">Amount @Model.SortArrow(SettlementGroupSort.Amount)</a></th>
                     </tr>
-                </thead>
-                @* The totals of the whole summary row (every page, whatever the filter), so it always matches the Summary page. *@
-                <tbody class="totals-group">
+                    @* The totals of the whole summary row (every page, whatever the filter), so it always matches the Summary page; it sticks under the header. *@
                     <tr class="totals-row">
                         <td></td>
                         <td colspan="3">
                             <div class="fw-semibold">Total · @g.LineCount.ToString("N0", CultureInfo.InvariantCulture) line@(g.LineCount == 1 ? "" : "s")@(g.OrderCount > 0 ? $" in {g.OrderCount:N0} order{(g.OrderCount == 1 ? "" : "s")}" : "")</div>
-                            <partial name="_SettlementBreakdown" model="(gm.Sales, gm.Refunds, gm.Expenses, gm.Reserve, gm.Net, gm.Currency)" />
+                            <partial name="_SettlementCategoryBreakdown" model="(parts, SettlementFormat.ExpenseItemsTitle(Model.OtherExpenses, parts.Currency))" />
                         </td>
                         <td class="text-end money fw-semibold">@g.Units.ToString("N0", CultureInfo.InvariantCulture)</td>
                         <td class="text-end money fw-semibold @SettlementFormat.AmountClass(gm.Net)">@SettlementFormat.Money(gm.Net, gm.Currency)</td>
                     </tr>
-                </tbody>
+                </thead>
                 @for (var i = 0; i < groups.Count; i++)
                 {
                     var group = groups[i];
@@ -140,15 +139,14 @@
                         </tr>
                         @foreach (var line in group.Lines)
                         {
-                            var bucket = SettlementFormat.BucketOf(line);
                             var (lineAmount, lineCurrency) = SettlementMoney.AmountOf(line, Model.Amounts);
                             <tr class="group-child">
                                 <td></td>
                                 <td>
                                     <div class="child-desc">
-                                        @if (bucket is { } b)
+                                        @if (line.Amount != 0)
                                         {
-                                            <span class="@SettlementFormat.BucketPill(b)">@SettlementFormat.BucketLabel(b)</span>
+                                            <span class="@SettlementFormat.CategoryPill(line.Category)">@SettlementFormat.CategoryLabel(line.Category)</span>
                                         }
                                         <span>@line.AmountDescription</span>
                                     </div>

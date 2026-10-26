@@ -27,5 +27,19 @@ internal sealed class SettlementSummaryConfiguration : IEntityTypeConfiguration<
         builder.Property(v => v.Refunds).HasPrecision(18, 2);
         builder.Property(v => v.Reserve).HasPrecision(18, 2);
         builder.Property(v => v.Net).HasPrecision(18, 2);
+        builder.Property(v => v.RefundedSales).HasPrecision(18, 2);
+        builder.Property(v => v.RefundedExpenses).HasPrecision(18, 2);
+        builder.Property(v => v.Shipping).HasPrecision(18, 2);
+        builder.Property(v => v.FbaFees).HasPrecision(18, 2);
+        builder.Property(v => v.Commission).HasPrecision(18, 2);
+        builder.Property(v => v.OtherExpenses).HasPrecision(18, 2);
+        builder.Property(v => v.AdCosts).HasPrecision(18, 2);
+        builder.Property(v => v.HomeRefundedSales).HasPrecision(18, 2);
+        builder.Property(v => v.HomeRefundedExpenses).HasPrecision(18, 2);
+        builder.Property(v => v.HomeShipping).HasPrecision(18, 2);
+        builder.Property(v => v.HomeFbaFees).HasPrecision(18, 2);
+        builder.Property(v => v.HomeCommission).HasPrecision(18, 2);
+        builder.Property(v => v.HomeOtherExpenses).HasPrecision(18, 2);
+        builder.Property(v => v.HomeAdCosts).HasPrecision(18, 2);
     }
 }

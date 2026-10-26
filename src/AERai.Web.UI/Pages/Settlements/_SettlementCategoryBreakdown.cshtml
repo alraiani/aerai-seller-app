@@ -1,0 +1,23 @@
+@using AERai.Web.Application.Settlements
+@using AERai.Web.UI.Models
+@model (SettlementBreakdown Amounts, string? OtherExpensesTitle)
+@* A settlement amount by category as a compact strip: Sales, the two parts of Refunds, the four parts of Expenses, Reserve (only when there is one), and Net. Hovering a refunds or expenses part shows its bucket's total; Other expenses lists what it is made of. *@
+@{
+    var b = Model.Amounts;
+    var refunds = "Refunds " + SettlementFormat.Money(b.Refunds, b.Currency);
+    var expenses = "Expenses " + SettlementFormat.Money(b.Expenses, b.Currency);
+}
+<dl class="amount-breakdown">
+    <div><dt>Sales</dt><dd>@SettlementFormat.Money(b.Sales, b.Currency)</dd></div>
+    <div title="@refunds"><dt>Refunded sales</dt><dd class="@SettlementFormat.AmountClass(b.RefundedSales)">@SettlementFormat.Money(b.RefundedSales, b.Currency)</dd></div>
+    <div title="@refunds"><dt>Refunded expenses</dt><dd class="@SettlementFormat.AmountClass(b.RefundedExpenses)">@SettlementFormat.Money(b.RefundedExpenses, b.Currency)</dd></div>
+    <div title="@expenses"><dt>Shipping</dt><dd class="@SettlementFormat.AmountClass(b.Shipping)">@SettlementFormat.Money(b.Shipping, b.Currency)</dd></div>
+    <div title="@expenses"><dt>FBA fees</dt><dd class="@SettlementFormat.AmountClass(b.FbaFees)">@SettlementFormat.Money(b.FbaFees, b.Currency)</dd></div>
+    <div title="@expenses"><dt>Commission</dt><dd class="@SettlementFormat.AmountClass(b.Commission)">@SettlementFormat.Money(b.Commission, b.Currency)</dd></div>
+    <div title="@(Model.OtherExpensesTitle ?? expenses)"><dt>Other expenses</dt><dd class="@SettlementFormat.AmountClass(b.OtherExpenses)">@SettlementFormat.Money(b.OtherExpenses, b.Currency)</dd></div>
+    @if (b.Reserve != 0)
+    {
+        <div><dt>Reserve</dt><dd class="@SettlementFormat.AmountClass(b.Reserve)">@SettlementFormat.Money(b.Reserve, b.Currency)</dd></div>
+    }
+    <div class="amount-breakdown-total"><dt>Net</dt><dd class="@SettlementFormat.AmountClass(b.Net)">@SettlementFormat.Money(b.Net, b.Currency)</dd></div>
+</dl>

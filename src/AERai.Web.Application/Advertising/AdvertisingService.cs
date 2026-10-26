@@ -50,6 +50,31 @@ public sealed class AdvertisingService(IAdvertisingQueries queries) : IAdvertisi
         return new AdvertisingReport(from, to, groups, AdMetrics.Sum(groups.Select(g => g.Totals)), synced?.First, synced?.Last);
     }
 
+    /// <inheritdoc/>
+    public async Task<SettlementAdSpend> GetSettlementSpendAsync(Marketplace marketplace, DateTimeOffset? periodStart, DateTimeOffset? periodEnd, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(marketplace);
+
+        var synced = await queries.GetSpendRangeAsync(marketplace.MarketplaceId, cancellationToken).ConfigureAwait(false);
+        if (periodStart is not { } start || periodEnd is not { } end)
+        {
+            return new SettlementAdSpend(null, null, [], synced?.First, synced?.Last);
+        }
+
+        // Amazon closes North America periods in the early hours UTC, the evening before locally, so the
+        // local day of the end is the period's last day; adjacent settlements never meet inside this range.
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
+        var (from, to) = Range(LocalTime.DateOf(start, zone), LocalTime.DateOf(end, zone));
+        var families = synced is null
+            ? []
+            : (await queries.GetFamilySpendAsync(marketplace.MarketplaceId, from, to, cancellationToken).ConfigureAwait(false))
+                .Where(f => f.Spend != 0)
+                .OrderBy(f => f.FamilyId is null ? 1 : 0)
+                .ThenBy(f => f.Family, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        return new SettlementAdSpend(from, to, families, synced?.First, synced?.Last);
+    }
+
     /// <summary>The range in order and at most <see cref="MaxDays"/> long (the latest days are kept).</summary>
     private static (DateOnly From, DateOnly To) Range(DateOnly from, DateOnly to)
     {

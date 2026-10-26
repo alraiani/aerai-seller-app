@@ -7,6 +7,7 @@
     var rows = Model.Settlements.Items;
     var anyConverted = rows.Any(r => r.Currency is not null && r.Currency != r.HomeCurrency);
     var anyReserve = rows.Any(r => r.Reserve != 0);
+    var anyAdCosts = rows.Any(r => r.AdCosts != 0);
     var anyDeferred = Model.DeferredOut.Count > 0;
 }
 
@@ -49,6 +50,9 @@
         </a>
     </div>
 </div>
+
+@* ---------- Advertising charged in these settlements, and spend by family from the Ads API ---------- *@
+<partial name="_AdCostsTile" model="(t, Model.AdSpend, Model.SortLink(SettlementSort.AdCosts))" />
 
 @* ---------- What Amazon holds back and has not paid out (from the Finances API) ---------- *@
 <partial name="_DeferredTile" model="(Model.Deferred, Model.Zone)" />
@@ -150,6 +154,10 @@
                         <th class="text-end"><a href="@Model.SortLink(SettlementSort.Sales)" class="sort-link">Sales @Model.SortArrow(SettlementSort.Sales)</a></th>
                         <th class="text-end"><a href="@Model.SortLink(SettlementSort.Refunds)" class="sort-link">Refunds @Model.SortArrow(SettlementSort.Refunds)</a></th>
                         <th class="text-end"><a href="@Model.SortLink(SettlementSort.Expenses)" class="sort-link">Expenses @Model.SortArrow(SettlementSort.Expenses)</a></th>
+                        @if (anyAdCosts)
+                        {
+                            <th class="text-end"><a href="@Model.SortLink(SettlementSort.AdCosts)" class="sort-link">Ad costs @Model.SortArrow(SettlementSort.AdCosts)</a> <partial name="_Tip" model='"Sponsored Products advertising Amazon charged in this settlement (Cost of Advertising, less any refund for advertisers). Already part of Expenses."' /></th>
+                        }
                         @if (anyReserve)
                         {
                             <th class="text-end">Reserve <partial name="_Tip" model='"Account level reserve: money Amazon held back from a payout (negative) or released from an earlier hold (positive)."' /></th>
@@ -182,6 +190,11 @@
                             <td class="text-end money">@SettlementFormat.Money(m.Sales, m.Currency)</td>
                             <td class="text-end money @SettlementFormat.AmountClass(m.Refunds)">@SettlementFormat.Money(m.Refunds, m.Currency)</td>
                             <td class="text-end money @SettlementFormat.AmountClass(m.Expenses)">@SettlementFormat.Money(m.Expenses, m.Currency)</td>
+                            @if (anyAdCosts)
+                            {
+                                var adCosts = SettlementMoney.UseHome(SettlementAmounts.Home, s.ExchangeRate) ? s.HomeAdCosts ?? 0 : s.AdCosts;
+                                <td class="text-end money text-muted-token">@(adCosts == 0 ? "" : SettlementFormat.Money(adCosts, m.Currency))</td>
+                            }
                             @if (anyReserve)
                             {
                                 <td class="text-end money @SettlementFormat.AmountClass(m.Reserve)">@SettlementFormat.Money(m.Reserve, m.Currency)</td>

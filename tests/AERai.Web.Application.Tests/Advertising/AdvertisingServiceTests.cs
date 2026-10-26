@@ -129,8 +129,74 @@ public sealed class AdvertisingServiceTests
         Assert.Equal((report.From, To), (_queries.SpendFrom, _queries.SpendTo));
     }
 
+    [Fact]
+    public async Task GetSettlementSpendAsync_AddsUpTheLocalDaysFromTheFirstPeriodStartToTheLastPeriodEnd()
+    {
+        _queries.Rows.Add(Sku("MM-1", 1, "Microfiber Magic", 1m));
+        _queries.Families.AddRange([new AdFamilySpend(null, null, 4m), new AdFamilySpend(1, "Microfiber Magic", 30m), new AdFamilySpend(2, "Handkerchiefs", 6m), new AdFamilySpend(3, "Empty", 0m)]);
+
+        // Amazon closes US periods around 01:53 UTC, the evening before in New York.
+        var spend = await new AdvertisingService(_queries).GetSettlementSpendAsync(
+            TestMarketplaces.UnitedStates, new DateTimeOffset(2026, 10, 2, 1, 53, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 16, 1, 53, 0, TimeSpan.Zero), CancellationToken.None);
+
+        Assert.Equal((new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 15)), (spend.From, spend.To));
+        Assert.Equal((spend.From!.Value, spend.To!.Value), (_queries.FamilyFrom, _queries.FamilyTo));
+        Assert.Equal(["Handkerchiefs", "Microfiber Magic", null], spend.Families.Select(f => f.Family));
+        Assert.Equal(40m, spend.Total);
+        Assert.True(spend.IsSynced);
+        Assert.False(spend.StartsBeforeSync);
+    }
+
+    [Fact]
+    public async Task GetSettlementSpendAsync_SettlementsBeforeTheFirstSyncedDay_SaySo()
+    {
+        _queries.Rows.Add(Sku("MM-1", 1, "Microfiber Magic", 1m));
+        _queries.SyncedFrom = new DateOnly(2026, 10, 10);
+
+        var spend = await new AdvertisingService(_queries).GetSettlementSpendAsync(
+            TestMarketplaces.UnitedStates, new DateTimeOffset(2026, 10, 2, 12, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 16, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+
+        Assert.True(spend.StartsBeforeSync);
+        Assert.False(spend.EndsAfterSync);
+    }
+
+    [Fact]
+    public async Task GetSettlementSpendAsync_NothingSynced_ReadsNoSpend()
+    {
+        var spend = await new AdvertisingService(_queries).GetSettlementSpendAsync(
+            TestMarketplaces.UnitedStates, new DateTimeOffset(2026, 10, 2, 12, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 16, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+
+        Assert.False(spend.IsSynced);
+        Assert.Empty(spend.Families);
+        Assert.Equal(default, _queries.FamilyFrom);
+    }
+
+    [Fact]
+    public async Task GetSettlementSpendAsync_NoSettlements_HasNoRange()
+    {
+        _queries.Rows.Add(Sku("MM-1", 1, "Microfiber Magic", 1m));
+
+        var spend = await new AdvertisingService(_queries).GetSettlementSpendAsync(TestMarketplaces.UnitedStates, null, null, CancellationToken.None);
+
+        Assert.Equal((null, null), (spend.From, spend.To));
+        Assert.True(spend.IsSynced);
+        Assert.Empty(spend.Families);
+    }
+
     private sealed class FakeAdvertisingQueries : IAdvertisingQueries
     {
+        public List<AdFamilySpend> Families { get; } = [];
+
+        public DateOnly FamilyFrom { get; private set; }
+
+        public DateOnly FamilyTo { get; private set; }
+
+        public Task<IReadOnlyList<AdFamilySpend>> GetFamilySpendAsync(string marketplaceId, DateOnly from, DateOnly to, CancellationToken cancellationToken)
+        {
+            (FamilyFrom, FamilyTo) = (from, to);
+            return Task.FromResult<IReadOnlyList<AdFamilySpend>>(Families);
+        }
+
         public List<AdSkuRow> Rows { get; } = [];
 
         public Dictionary<string, (int Units, decimal Sales)> Sales { get; } = new(StringComparer.OrdinalIgnoreCase);

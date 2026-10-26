@@ -20,6 +20,10 @@ public sealed class SettlementMoneyTests
         HomeRefunds = rate is null ? null : 0m,
         HomeReserve = rate is null ? null : 0m,
         HomeNet = rate is null ? null : 61.2m,
+        Commission = -10m,
+        OtherExpenses = -5m,
+        HomeCommission = rate is null ? null : -7.2m,
+        HomeOtherExpenses = rate is null ? null : -3.6m,
     };
 
     [Theory]
@@ -71,5 +75,22 @@ public sealed class SettlementMoneyTests
 
         Assert.Equal((5.4m, "USD"), SettlementMoney.AmountOf(line, SettlementAmounts.Home));
         Assert.Equal((100m, "MXN"), SettlementMoney.AmountOf(line, SettlementAmounts.Original));
+    }
+
+    [Fact]
+    public void BreakdownOf_HomeWithARate_ShowsTheConvertedCategoriesThatAddUpToExpenses()
+    {
+        var parts = SettlementBreakdown.Of(Cad(0.72m), SettlementAmounts.Home);
+
+        Assert.Equal((-7.2m, -3.6m, "USD", true), (parts.Commission, parts.OtherExpenses, parts.Currency, parts.IsConverted));
+        Assert.Equal(-10.8m, parts.Expenses);
+    }
+
+    [Fact]
+    public void BreakdownOf_Original_ShowsTheCategoriesAsPaid()
+    {
+        var parts = SettlementBreakdown.Of(Cad(0.72m), SettlementAmounts.Original);
+
+        Assert.Equal((-10m, -5m, -15m, "CAD", false), (parts.Commission, parts.OtherExpenses, parts.Expenses, parts.Currency, parts.IsConverted));
     }
 }

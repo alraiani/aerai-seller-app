@@ -342,20 +342,21 @@
     });
 
     // ---------- Sticky table headers ----------
-    // A sticky header only sticks inside its nearest scroll container, and every .table-responsive is one
+    // Every table's header sticks to the window as the page scrolls, under the card's .card-toolbar when
+    // that sticks too (.has-sticky-head), and so does a totals row placed as the header's last row. A
+    // sticky header only sticks inside its nearest scroll container, and every .table-responsive is one
     // (for sideways scrolling). So a table that fits its card gets .is-sticky, which drops the wrapper's
-    // overflow so the header (and the card's .card-toolbar above it, via .has-sticky-head) sticks to the
-    // window as the page scrolls. A table too wide to fit gets .table-scroll instead: a box about a screen
-    // tall that scrolls both ways with the header stuck inside it. Width changes (window, sidebar rail,
-    // expanded rows) re-decide. Without script the tables simply scroll sideways as before.
+    // overflow and lets the header cells stick. A table too wide to fit keeps scrolling sideways and gets
+    // a floating copy of its header instead (.sticky-float, see buildFloatHead). Width changes (window,
+    // sidebar rail, expanded rows) re-decide. Without script the tables simply scroll sideways.
     function updateStickyTable(wrapper) {
         var table = wrapper.querySelector(":scope > table");
         if (!table) { return; }
         var fits = table.scrollWidth <= wrapper.clientWidth + 1;
         wrapper.classList.toggle("is-sticky", fits);
-        wrapper.classList.toggle("table-scroll", !fits);
+        wrapper.classList.toggle("has-float-head", !fits);
 
-        // A second header row (e.g. the Worksheet's totals) sticks right under the first.
+        // A second header row (a totals row) sticks right under the first.
         var first = table.tHead && table.tHead.rows.length > 1 ? table.tHead.rows[0] : null;
         if (first) {
             table.style.setProperty("--sticky-row1", Math.floor(first.getBoundingClientRect().height) + "px");
@@ -364,7 +365,7 @@
         // The toolbar sticks only when its card holds just this table, and the header sits right below it.
         var card = wrapper.parentElement;
         var toolbar = card && card.classList.contains("card") ? card.querySelector(":scope > .card-toolbar") : null;
-        var withToolbar = fits && toolbar !== null && card.querySelectorAll(":scope > .table-responsive").length === 1;
+        var withToolbar = toolbar !== null && card.querySelectorAll(":scope > .table-responsive").length === 1;
         if (card && card.classList.contains("card")) {
             card.classList.toggle("has-sticky-head", withToolbar);
             if (withToolbar) {
@@ -374,7 +375,136 @@
                 card.style.removeProperty("--sticky-head");
             }
         }
+
+        if (fits) {
+            removeFloatHead(wrapper);
+        } else {
+            buildFloatHead(wrapper, table);
+        }
     }
+
+    // A wide table's header can't stick to the window from inside its sideways-scrolling wrapper, so a
+    // copy of the whole header (totals row included) is laid over it in a sticky box just before the
+    // wrapper, cell widths copied, scrolled sideways with the table (both ways, so a swipe on the header
+    // scrolls the table). The real header stays for screen readers and is what the copy acts on: the copy
+    // loses ids, names, and behavior attributes so page scripts never find it, and a click on one of its
+    // links, buttons, or boxes is passed to the same element in the real header.
+    var floatKeep = { "data-bs-toggle": true, "data-bs-title": true };
+
+    function floatOf(wrapper) {
+        var previous = wrapper.previousElementSibling;
+        return previous && previous.classList.contains("sticky-float") ? previous : null;
+    }
+
+    function removeFloatHead(wrapper) {
+        var float = floatOf(wrapper);
+        if (wrapper.floatObserver) { wrapper.floatObserver.disconnect(); wrapper.floatObserver = null; }
+        if (!float) { return; }
+        disposeTooltips(float);
+        float.remove();
+    }
+
+    function buildFloatHead(wrapper, table) {
+        var head = table.tHead;
+        if (!head) { removeFloatHead(wrapper); return; }
+        var float = floatOf(wrapper);
+        if (!float) {
+            float = document.createElement("div");
+            float.className = "sticky-float";
+            float.setAttribute("aria-hidden", "true");
+            wrapper.parentNode.insertBefore(float, wrapper);
+            float.addEventListener("click", function (event) { forwardFloatClick(event, float, table); });
+            float.addEventListener("scroll", function () { if (wrapper.scrollLeft !== float.scrollLeft) { wrapper.scrollLeft = float.scrollLeft; } });
+            wrapper.addEventListener("scroll", function () { if (float.scrollLeft !== wrapper.scrollLeft) { float.scrollLeft = wrapper.scrollLeft; } });
+        }
+        if (!wrapper.floatObserver && window.MutationObserver) {
+            // Header text can change in place (e.g. the Worksheet's live "Sending N" total).
+            var pending = false;
+            wrapper.floatObserver = new MutationObserver(function () {
+                if (pending) { return; }
+                pending = true;
+                window.setTimeout(function () { pending = false; if (floatOf(wrapper)) { buildFloatHead(wrapper, table); } }, 0);
+            });
+            wrapper.floatObserver.observe(head, { childList: true, subtree: true, characterData: true });
+        }
+
+        disposeTooltips(float);
+        var copy = document.createElement("table");
+        copy.className = table.className;
+        copy.style.width = table.getBoundingClientRect().width + "px";
+        var rowOne = table.style.getPropertyValue("--sticky-row1");
+        if (rowOne) { copy.style.setProperty("--sticky-row1", rowOne); }
+        var headCopy = head.cloneNode(true);
+        copy.appendChild(headCopy);
+
+        // Same widths cell by cell, so the copy lines up with the columns below it.
+        var cells = head.querySelectorAll("th, td");
+        var copies = headCopy.querySelectorAll("th, td");
+        for (var i = 0; i < cells.length && i < copies.length; i++) {
+            var width = cells[i].getBoundingClientRect().width + "px";
+            copies[i].style.width = width;
+            copies[i].style.minWidth = width;
+            copies[i].style.maxWidth = width;
+        }
+
+        // Boxes keep their current state (cloning copies attributes, not what the user ticked).
+        var boxes = head.querySelectorAll("input");
+        var boxCopies = headCopy.querySelectorAll("input");
+        for (var b = 0; b < boxes.length && b < boxCopies.length; b++) {
+            boxCopies[b].checked = boxes[b].checked;
+            boxCopies[b].indeterminate = boxes[b].indeterminate;
+        }
+
+        var all = headCopy.querySelectorAll("*");
+        for (var j = 0; j < all.length; j++) { quietFloatElement(all[j]); }
+
+        float.replaceChildren(copy);
+        float.style.marginBottom = -head.getBoundingClientRect().height + "px";
+        float.scrollLeft = wrapper.scrollLeft;
+        setupTooltips(float);
+    }
+
+    function quietFloatElement(element) {
+        // A tip already set up moved its text to data-bs-original-title; the copy gets it back as a title.
+        var tip = element.getAttribute("data-bs-original-title");
+        if (tip && !element.getAttribute("title")) { element.setAttribute("title", tip); }
+        var names = [];
+        for (var a = 0; a < element.attributes.length; a++) { names.push(element.attributes[a].name); }
+        for (var n = 0; n < names.length; n++) {
+            var name = names[n];
+            if ((name.indexOf("data-") === 0 && !floatKeep[name]) || name === "id" || name === "name" || name === "for"
+                || name === "aria-describedby" || name === "aria-controls") {
+                element.removeAttribute(name);
+            }
+        }
+        if (element.matches("a, button, input, select, textarea, [tabindex]")) { element.setAttribute("tabindex", "-1"); }
+    }
+
+    function forwardFloatClick(event, float, table) {
+        var target = event.target.closest && event.target.closest("a, button, input, select, label");
+        var headCopy = float.querySelector("thead");
+        if (!target || !headCopy || !headCopy.contains(target) || !table.tHead) { return; }
+        var path = [];
+        for (var node = target; node && node !== headCopy; node = node.parentElement) {
+            path.unshift(Array.prototype.indexOf.call(node.parentElement.children, node));
+        }
+        var original = table.tHead;
+        for (var i = 0; i < path.length && original; i++) { original = original.children[path[i]]; }
+        if (!original) { return; }
+        event.preventDefault();
+        original.click();
+        var wrapper = float.nextElementSibling;
+        if (wrapper && wrapper.isConnected) { window.setTimeout(function () { buildFloatHead(wrapper, table); }, 0); }
+    }
+
+    // Ticking rows changes a header's select-all box (ticked, partly ticked), which the copy then shows too.
+    document.addEventListener("change", function (event) {
+        var wrapper = event.target.closest && event.target.closest(".table-responsive.has-float-head");
+        var table = wrapper && wrapper.querySelector(":scope > table");
+        if (table && table.tHead && table.tHead.querySelector("input")) {
+            window.setTimeout(function () { buildFloatHead(wrapper, table); }, 0);
+        }
+    });
 
     var stickyWrappers = [];
     var stickyObserver = null;
@@ -390,6 +520,7 @@
         var found = (root || document).querySelectorAll(root ? ".table-responsive" : ".app-content .table-responsive");
         stickyWrappers = stickyWrappers.filter(function (wrapper) {
             if (wrapper.isConnected) { return true; }
+            if (wrapper.floatObserver) { wrapper.floatObserver.disconnect(); wrapper.floatObserver = null; }
             if (stickyObserver) {
                 stickyObserver.unobserve(wrapper);
                 var table = wrapper.querySelector(":scope > table");

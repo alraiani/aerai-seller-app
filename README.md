@@ -59,7 +59,7 @@ AERAI_TEST_SQL="Server=localhost,1433;User Id=sa;Password=<pw>;TrustServerCertif
 | Inventory | all roles | `rpt.vw_InventoryPosition` |
 | Orders | all roles | `rpt.vw_OrderSummary` |
 | Products & COGS | all (edit: Operator+) | `core.Product` |
-| Settlements | all roles | `rpt.vw_SettlementSummary` |
+| Settlements (payouts, expenses broken out, ad costs by family) | all roles | `rpt.vw_SettlementSummary`, `rpt.vw_SettlementSkuSummary`, `rpt.vw_SettlementLine`, `core.AdSpend` |
 | QuickBooks export (review, IIF download, account mapping) | Operator, Admin | `core.Settlement*`, `core.Bookkeeping*` |
 | Tools → Import / Batches | Operator, Admin | `stg.*` |
 | Tools → Amazon sync | Operator, Admin | `ops.*` (schedules, run history) |
