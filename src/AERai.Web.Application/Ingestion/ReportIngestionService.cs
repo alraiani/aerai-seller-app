@@ -787,9 +787,11 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// requested report, and <see cref="CheckAdsSpendAsync"/> collects it.
     /// </summary>
     /// <remarks>
-    /// Days are the marketplace's local days, which is how Amazon Ads dates its reports. A scheduled run reaches
-    /// back <see cref="AdsAttributionOverlapDays"/> before the last success (or its lookback on the first run) up
-    /// to today; a backfill takes its own range. Either starts no earlier than Amazon still keeps and covers at
+    /// Days are the marketplace's local days. Amazon Ads dates its reports in the advertising profile's time zone
+    /// (Pacific for US and Canada profiles), which can still be on the day before, so runs end yesterday: asking
+    /// for a day the profile has not reached yet is refused. A scheduled run reaches back
+    /// <see cref="AdsAttributionOverlapDays"/> days up to yesterday (or its lookback on the first run); a backfill
+    /// takes its own range, whose end is exclusive. Either starts no earlier than Amazon still keeps and covers at
     /// most <see cref="MaxAdsReportDays"/> days, the most one report allows: a schedule left off for longer
     /// catches up on the latest month, and older days need a backfill.
     /// </remarks>
@@ -799,7 +801,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         var now = _clock.GetUtcNow();
         var run = context.Run;
         var zone = TimeZoneInfo.FindSystemTimeZoneById(context.Marketplace.TimeZoneId);
-        var today = LocalTime.DateOf(now, zone);
+        var yesterday = LocalTime.DateOf(now, zone).AddDays(-1);
         var oldest = LocalTime.DateOf(now - MaxAdsReportAge, zone);
 
         DateOnly start;
@@ -807,15 +809,16 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         if (context.Backfill is { } window)
         {
             start = LocalTime.DateOf(window.Start, zone);
-            var last = LocalTime.DateOf(window.End, zone);
-            end = last < today ? last : today;
+            var last = LocalTime.DateOf(window.End.AddTicks(-1), zone);
+            end = last < yesterday ? last : yesterday;
         }
         else
         {
-            end = today;
+            // The last success covered through the day before its end, so this re-reads that many days.
+            end = yesterday;
             start = context.Schedule.LastSuccessfulDataEnd is { } previousEnd
                 ? LocalTime.DateOf(previousEnd, zone).AddDays(-AdsAttributionOverlapDays)
-                : today.AddDays(-context.Schedule.LookbackDays);
+                : yesterday.AddDays(-(context.Schedule.LookbackDays - 1));
         }
 
         if (start < oldest)
@@ -838,7 +841,9 @@ public sealed partial class ReportIngestionService : IReportIngestionService
 
         if (start > end)
         {
-            context.Notes.Add("Nothing to pull: Amazon Ads only keeps advertising data for 95 days.");
+            context.Notes.Add(context.Backfill is null
+                ? "Nothing to pull yet: Ads spend is pulled through yesterday."
+                : "Nothing to pull: Amazon Ads only keeps advertising data for 95 days, through yesterday.");
             return false;
         }
 

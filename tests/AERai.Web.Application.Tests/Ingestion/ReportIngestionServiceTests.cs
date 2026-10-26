@@ -112,7 +112,7 @@ public sealed class ReportIngestionServiceTests
     }
 
     [Fact]
-    public async Task RunAsync_AdsSpendFirstRun_RequestsTheLookbackToTodayInLocalDaysAndWaits()
+    public async Task RunAsync_AdsSpendFirstRun_RequestsTheLookbackThroughYesterdayInLocalDaysAndWaits()
     {
         AddSchedule(AmazonReportType.AdsSpend);
 
@@ -120,13 +120,13 @@ public sealed class ReportIngestionServiceTests
 
         Assert.Equal(SyncRunStatus.Running, summary.Status);
 
-        // Now is 08:00 on 2 October in New York; the lookback is 7 days.
-        Assert.Equal((MarketplaceIds.UnitedStates, new DateOnly(2026, 9, 25), new DateOnly(2026, 10, 2)), Assert.Single(_ads.Requests));
+        // Now is 08:00 on 2 October in New York; the lookback is 7 days through yesterday.
+        Assert.Equal((MarketplaceIds.UnitedStates, new DateOnly(2026, 9, 25), new DateOnly(2026, 10, 1)), Assert.Single(_ads.Requests));
         var run = _runs.Stored[summary.RunId];
         Assert.Equal("ads-report-1", run.PendingReportId);
         Assert.NotNull(run.NextCheckAt);
         Assert.Equal(new DateTimeOffset(2026, 9, 25, 4, 0, 0, TimeSpan.Zero), run.DataStart);
-        Assert.Equal(new DateTimeOffset(2026, 10, 3, 4, 0, 0, TimeSpan.Zero), run.DataEnd);
+        Assert.Equal(new DateTimeOffset(2026, 10, 2, 4, 0, 0, TimeSpan.Zero), run.DataEnd);
         Assert.Empty(_adSpend.Replaced);
     }
 
@@ -139,7 +139,7 @@ public sealed class ReportIngestionServiceTests
         await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfill: null, CancellationToken.None);
 
         var request = Assert.Single(_ads.Requests);
-        Assert.Equal((new DateOnly(2026, 9, 18), new DateOnly(2026, 10, 2)), (request.Start, request.End));
+        Assert.Equal((new DateOnly(2026, 9, 18), new DateOnly(2026, 10, 1)), (request.Start, request.End));
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public sealed class ReportIngestionServiceTests
         await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfill: null, CancellationToken.None);
 
         var request = Assert.Single(_ads.Requests);
-        Assert.Equal((new DateOnly(2026, 9, 2), new DateOnly(2026, 10, 2)), (request.Start, request.End));
+        Assert.Equal((new DateOnly(2026, 9, 1), new DateOnly(2026, 10, 1)), (request.Start, request.End));
     }
 
     [Fact]
@@ -170,10 +170,10 @@ public sealed class ReportIngestionServiceTests
         Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
         var landed = Assert.Single(_rawFiles.Files, f => f.Key.StartsWith("adsspend/2026/10/02/", StringComparison.Ordinal));
         Assert.Equal("2026-09-25", landed.Value.Metadata[ReportIngestionService.AdsSpendStartMetadata]);
-        Assert.Equal("2026-10-02", landed.Value.Metadata[ReportIngestionService.AdsSpendEndMetadata]);
+        Assert.Equal("2026-10-01", landed.Value.Metadata[ReportIngestionService.AdsSpendEndMetadata]);
 
         var replaced = Assert.Single(_adSpend.Replaced);
-        Assert.Equal((MarketplaceIds.UnitedStates, new DateOnly(2026, 9, 25), new DateOnly(2026, 10, 2), "USD"),
+        Assert.Equal((MarketplaceIds.UnitedStates, new DateOnly(2026, 9, 25), new DateOnly(2026, 10, 1), "USD"),
             (replaced.MarketplaceId, replaced.Start, replaced.End, replaced.DefaultCurrency));
 
         // Ad groups of one campaign are summed, and a day outside the range is not written.
@@ -181,7 +181,7 @@ public sealed class ReportIngestionServiceTests
         var a1 = Assert.Single(replaced.Rows, r => r.Sku == "A-1");
         Assert.Equal((150L, 5L, 3.25m, 19.98m, 2), (a1.Impressions, a1.Clicks, a1.Cost, a1.AttributedSales, a1.AttributedUnits));
         Assert.Contains("2 SKUs", summary.Message, StringComparison.Ordinal);
-        Assert.Equal(new DateTimeOffset(2026, 10, 3, 4, 0, 0, TimeSpan.Zero), _schedules.Schedules[1].LastSuccessfulDataEnd);
+        Assert.Equal(new DateTimeOffset(2026, 10, 2, 4, 0, 0, TimeSpan.Zero), _schedules.Schedules[1].LastSuccessfulDataEnd);
     }
 
     [Fact]
@@ -206,9 +206,9 @@ public sealed class ReportIngestionServiceTests
 
         await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill, CancellationToken.None);
 
-        // 94 days before 2 October.
+        // 94 days before 2 October; the window's end is exclusive, so its last day is 14 July.
         var request = Assert.Single(_ads.Requests);
-        Assert.Equal((new DateOnly(2026, 6, 30), new DateOnly(2026, 7, 15)), (request.Start, request.End));
+        Assert.Equal((new DateOnly(2026, 6, 30), new DateOnly(2026, 7, 14)), (request.Start, request.End));
     }
 
     [Fact]

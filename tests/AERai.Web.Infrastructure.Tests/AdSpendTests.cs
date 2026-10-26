@@ -54,4 +54,34 @@ public sealed class AdSpendTests(SqlDatabaseFixture fixture) : IClassFixture<Sql
         await Assert.ThrowsAsync<ArgumentException>(() =>
             ReplaceAsync(MarketplaceIds.Canada, day, day, Row(day.AddDays(1), "T-AD-X", "1", 1m)));
     }
+
+    [SqlFact]
+    public async Task Queries_AddUpEachSkusDaysWithItsFamilyAndSalesInTheRange()
+    {
+        var day = new DateOnly(2026, 8, 10);
+        await using (var scope = fixture.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var family = new ProductFamily { Name = "T-AD Family" };
+            db.ProductFamilies.Add(family);
+            await db.SaveChangesAsync();
+            db.Products.Add(new Product { Sku = "T-ADQ-1", Title = "Towel", FamilyId = family.Id, CreatedAt = Now, UpdatedAt = Now });
+            await db.SaveChangesAsync();
+        }
+
+        await ReplaceAsync(MarketplaceIds.Canada, day, day.AddDays(1),
+            Row(day, "T-ADQ-1", "1", 1.25m), Row(day.AddDays(1), "T-ADQ-1", "2", 2.00m), Row(day, "T-ADQ-2", "1", 0.50m));
+
+        await using var queryScope = fixture.Services.CreateAsyncScope();
+        var queries = queryScope.ServiceProvider.GetRequiredService<IAdvertisingQueries>();
+        var rows = await queries.GetSkuSpendAsync(MarketplaceIds.Canada, day, day.AddDays(1), CancellationToken.None);
+        var towel = Assert.Single(rows, r => r.Sku == "T-ADQ-1");
+        Assert.Equal(("Towel", "T-AD Family", 2, 3.25m, 6L), (towel.Title, towel.Family, towel.Campaigns, towel.Metrics.Spend, towel.Metrics.Clicks));
+        Assert.Null(Assert.Single(rows, r => r.Sku == "T-ADQ-2").Family);
+
+        // Only the first day.
+        var oneDay = await queries.GetSkuSpendAsync(MarketplaceIds.Canada, day, day, CancellationToken.None);
+        Assert.Equal(1.25m, Assert.Single(oneDay, r => r.Sku == "T-ADQ-1").Metrics.Spend);
+        Assert.Equal(day.AddDays(1), await queries.GetLatestSpendDateAsync(MarketplaceIds.Canada, CancellationToken.None));
+    }
 }

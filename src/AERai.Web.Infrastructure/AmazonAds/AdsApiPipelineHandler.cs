@@ -87,13 +87,28 @@ internal sealed partial class AdsApiPipelineHandler(
                 return response;
             }
 
-            var delay = response.Headers.RetryAfter?.Delta is { } retryAfter && retryAfter < settings.MaxRetryDelay
-                ? retryAfter
-                : SpApiRetry.Backoff(attempt, settings.RetryBaseDelay, settings.MaxRetryDelay);
+            var delay = RetryDelay(response, attempt, settings);
             response.Dispose();
             LogRetry(operation, attempt + 1, delay.TotalSeconds);
             await Task.Delay(delay, clock, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Honors <c>Retry-After</c> (seconds or a date) when Amazon sends it, capped at the longest delay; otherwise
+    /// <see cref="SpApiRetry.Backoff(int, TimeSpan, TimeSpan)"/>.
+    /// </summary>
+    private TimeSpan RetryDelay(HttpResponseMessage response, int attempt, AmazonAdsOptions settings)
+    {
+        var retryAfter = response.Headers.RetryAfter is { } header
+            ? header.Delta ?? (header.Date is { } date ? date - clock.GetUtcNow() : null)
+            : null;
+        if (retryAfter is { } wait)
+        {
+            return wait < TimeSpan.Zero ? TimeSpan.Zero : wait < settings.MaxRetryDelay ? wait : settings.MaxRetryDelay;
+        }
+
+        return SpApiRetry.Backoff(attempt, settings.RetryBaseDelay, settings.MaxRetryDelay);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Amazon Ads {Operation} ({Region}) -> {StatusCode} (attempt {Attempt}, {ElapsedMs:0} ms)")]

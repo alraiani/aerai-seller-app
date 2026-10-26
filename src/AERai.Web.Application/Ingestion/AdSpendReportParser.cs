@@ -48,11 +48,18 @@ public static class AdSpendReportParser
         }
     }
 
+    /// <summary>Longest SKU the catalog stores (Amazon's own limit is 40).</summary>
+    private const int MaxSkuLength = 64;
+
+    /// <summary>Longest campaign id stored (Amazon's are numbers of up to 20 digits).</summary>
+    private const int MaxCampaignIdLength = 32;
+
     private static AdSpendRow? ReadRow(JsonElement row)
     {
+        // A value too long to store would fail the whole report's write, so such a row is dropped instead.
         if (row.ValueKind != JsonValueKind.Object
-            || Text(row, "advertisedSku") is not { } sku
-            || Text(row, "campaignId") is not { } campaignId
+            || Text(row, "advertisedSku") is not { Length: <= MaxSkuLength } sku
+            || Text(row, "campaignId") is not { Length: <= MaxCampaignIdLength } campaignId
             || !DateOnly.TryParseExact(Text(row, "date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
         {
             return null;
