@@ -17,6 +17,7 @@ namespace AERai.Web.Application.Inventory;
 /// <param name="ReversedById">The entry that reversed this one, if any.</param>
 /// <param name="CreatedAt">When it was logged.</param>
 /// <param name="CreatedBy">Who logged it.</param>
+/// <param name="Edit">The entry's previous version, when this entry is an edit of it (see <see cref="HomeStockMovement.CorrectsId"/>).</param>
 public sealed record HomeStockLedgerEntry(
     long Id,
     string Sku,
@@ -31,8 +32,12 @@ public sealed record HomeStockLedgerEntry(
     long? ReversesId,
     long? ReversedById,
     DateTimeOffset CreatedAt,
-    string CreatedBy)
+    string CreatedBy,
+    HomeStockLedgerEdit? Edit = null)
 {
     /// <summary>Whether this entry can still be reversed (not a reversal, not already reversed, not the opening balance).</summary>
     public bool CanReverse => ReversesId is null && ReversedById is null && Type != HomeStockMovementType.OpeningBalance;
+
+    /// <summary>Whether this entry can be edited: the same entries that can be reversed, since an edit reverses it.</summary>
+    public bool CanEdit => CanReverse;
 }

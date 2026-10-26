@@ -17,4 +17,10 @@ public enum HomeStockLedgerOutcome
 
     /// <summary>The entry being reversed was already reversed, or is itself a reversal.</summary>
     CannotReverse = 4,
+
+    /// <summary>
+    /// The correction would take a send to Amazon below the units Amazon already shows, or stop it being a
+    /// send once Amazon shows part of it.
+    /// </summary>
+    AlreadyAtAmazon = 5,
 }

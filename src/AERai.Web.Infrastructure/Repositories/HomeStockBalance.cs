@@ -31,6 +31,7 @@ internal static class HomeStockBalance
             Reference = write.Reference,
             Note = write.Note,
             ReversesId = write.ReversesId,
+            CorrectsId = write.CorrectsId,
             CreatedAt = write.CreatedAt,
             CreatedBy = write.CreatedBy,
             AmazonBaselineUnits = write.AmazonBaseline?.Units,

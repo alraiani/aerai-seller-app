@@ -31,6 +31,14 @@ public sealed partial class HomeStockLedgerService(
     /// <summary>Longest note accepted.</summary>
     public const int MaxNoteLength = 500;
 
+    /// <summary>
+    /// Most entries one group of the ledger's grouped view lists; the page links to the full list for the rest.
+    /// </summary>
+    public const int MaxGroupRows = 250;
+
+    /// <summary>Most entries one bulk reason change may touch (a full group of the grouped view).</summary>
+    public const int MaxBulkEntries = MaxGroupRows;
+
     private static readonly IReadOnlyDictionary<string, AmazonBaseline> NoBaselines = new Dictionary<string, AmazonBaseline>();
 
     /// <summary>How far ahead a movement may be dated (clock skew between browser and server).</summary>
@@ -211,6 +219,128 @@ public sealed partial class HomeStockLedgerService(
     }
 
     /// <inheritdoc/>
+    public async Task<Result<string>> CorrectAsync(string marketplaceId, HomeStockCorrectionInput input, string user, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentException.ThrowIfNullOrWhiteSpace(user);
+
+        var baselines = input.Type == HomeStockMovementType.ShippedToAmazon ? await BaselinesAsync(marketplaceId, cancellationToken).ConfigureAwait(false) : NoBaselines;
+        var (outcome, id, error) = await ApplyCorrectionAsync(marketplaceId, input, baselines, user, cancellationToken).ConfigureAwait(false);
+        return error is not null ? Result.Failure<string>(error)
+            : outcome == HomeStockLedgerOutcome.Unchanged ? Result.Success("Nothing changed.")
+            : Result.Success($"Entry #{input.Id} updated (logged as #{id}; the original is kept in the history).");
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result<HomeStockBulkCorrectionResult>> CorrectReasonAsync(
+        string marketplaceId, IReadOnlyCollection<long> ids, HomeStockMovementType? type, string? note, string user, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentException.ThrowIfNullOrWhiteSpace(user);
+
+        var unique = ids.Distinct().ToList();
+        var newNote = Tidy(note);
+        string? error =
+            unique.Count == 0 ? "Tick the entries to change."
+            : unique.Count > MaxBulkEntries ? $"Change at most {MaxBulkEntries:N0} entries at a time."
+            : type is null && newNote is null ? "Choose a movement or enter a note to set."
+            : null;
+        if (error is not null)
+        {
+            return Result.Failure<HomeStockBulkCorrectionResult>(error);
+        }
+
+        var entries = (await repository.GetEntriesAsync(marketplaceId, unique, cancellationToken).ConfigureAwait(false)).ToDictionary(e => e.Id);
+        var baselines = type == HomeStockMovementType.ShippedToAmazon ? await BaselinesAsync(marketplaceId, cancellationToken).ConfigureAwait(false) : NoBaselines;
+        var updated = 0;
+        var unchanged = 0;
+        var skipped = new List<string>();
+
+        // Each entry is its own correction, so one that can't change never holds the others back.
+        foreach (var id in unique)
+        {
+            if (!entries.TryGetValue(id, out var entry))
+            {
+                skipped.Add($"#{id}: that entry no longer exists.");
+                continue;
+            }
+
+            // A count correction or other movement keeps its own direction; received and shipped take theirs.
+            var input = new HomeStockCorrectionInput(id, type ?? entry.Type, entry.Units, newNote ?? entry.Note);
+            var (outcome, _, failure) = await ApplyCorrectionAsync(marketplaceId, input, baselines, user, cancellationToken).ConfigureAwait(false);
+            if (failure is not null)
+            {
+                skipped.Add($"#{id} {entry.Sku}: {failure}");
+            }
+            else if (outcome == HomeStockLedgerOutcome.Unchanged)
+            {
+                unchanged++;
+            }
+            else
+            {
+                updated++;
+            }
+        }
+
+        return Result.Success(new HomeStockBulkCorrectionResult(updated, unchanged, skipped));
+    }
+
+    /// <summary>Validates an edit and records it as a correction; the error is set when it can't be made.</summary>
+    private async Task<(HomeStockLedgerOutcome Outcome, long? Id, string? Error)> ApplyCorrectionAsync(
+        string marketplaceId, HomeStockCorrectionInput input, IReadOnlyDictionary<string, AmazonBaseline> baselines, string user, CancellationToken cancellationToken)
+    {
+        var note = Tidy(input.Note);
+        var limit = InventoryItemService.MaxHomeStock;
+
+        // Range-checked as a long first: Math.Abs(int.MinValue) would overflow.
+        if (input.Units == 0 || Math.Abs((long)input.Units) > limit)
+        {
+            return (HomeStockLedgerOutcome.Unchanged, null, $"Enter the units, from 1 to {limit:N0} (+ adds, − removes for a count correction or other).");
+        }
+
+        // Received and shipped have a direction of their own, so only the amount typed matters.
+        var units = input.Type switch
+        {
+            HomeStockMovementType.ReceivedFromSupplier => Math.Abs(input.Units),
+            HomeStockMovementType.ShippedToAmazon => -Math.Abs(input.Units),
+            _ => input.Units,
+        };
+        string? error =
+            !Enum.IsDefined(input.Type) || input.Type == HomeStockMovementType.OpeningBalance ? "Choose what kind of movement this is."
+            : input.Type == HomeStockMovementType.Other && note is null ? "Add a note saying what this movement was."
+            : note?.Length > MaxNoteLength ? $"The note can be at most {MaxNoteLength} characters."
+            : null;
+        if (error is not null)
+        {
+            return (HomeStockLedgerOutcome.Unchanged, null, error);
+        }
+
+        var (outcome, correctionId) = await repository.CorrectAsync(
+            marketplaceId, input.Id, input.Type, units, note, baselines, clock.GetUtcNow(), user, cancellationToken).ConfigureAwait(false);
+        switch (outcome)
+        {
+            case HomeStockLedgerOutcome.Recorded:
+                LogCorrected(input.Id, correctionId, input.Type, units, marketplaceId);
+                alerts.Request();
+                return (outcome, correctionId, null);
+            case HomeStockLedgerOutcome.Unchanged:
+                return (outcome, null, null);
+            case HomeStockLedgerOutcome.NotFound:
+                return (outcome, null, "That entry no longer exists.");
+            case HomeStockLedgerOutcome.CannotReverse:
+                return (outcome, null, "That entry can't be edited: it was reversed or edited already, or is a reversal or an opening balance.");
+            case HomeStockLedgerOutcome.WouldGoNegative:
+                return (outcome, null, "That would take home stock below zero, because units have since gone out. Check the units, or log a count correction.");
+            case HomeStockLedgerOutcome.AlreadyAtAmazon:
+                return (outcome, null, "Amazon already shows some of this send, so it can't go below those units or stop being a send to Amazon.");
+            default:
+                return (outcome, null, "The entry could not be updated.");
+        }
+    }
+
+    /// <inheritdoc/>
     public Task<PagedResult<HomeStockLedgerEntry>> ListAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
@@ -219,6 +349,26 @@ public sealed partial class HomeStockLedgerService(
 
         return repository.ListAsync(marketplaceId, filter, request, cancellationToken);
     }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<HomeStockLedgerGroup>> GetGroupsAsync(string marketplaceId, HomeStockLedgerFilter filter, string? search, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var groups = await repository.ListGroupsAsync(marketplaceId, filter, string.IsNullOrWhiteSpace(search) ? null : search.Trim(), MaxGroupRows, cancellationToken).ConfigureAwait(false);
+        return [.. groups.Where(g => g.EntryCount > 0).OrderBy(g => GroupOrder(g.Type))];
+    }
+
+    // Day-to-day movements first: sends and deliveries are what people look for, the opening balance least.
+    private static int GroupOrder(HomeStockMovementType type) => type switch
+    {
+        HomeStockMovementType.ShippedToAmazon => 0,
+        HomeStockMovementType.ReceivedFromSupplier => 1,
+        HomeStockMovementType.CountCorrection => 2,
+        HomeStockMovementType.Other => 3,
+        _ => 4,
+    };
 
     private static string? Validate(HomeStockMovementInput input, string sku, string? reference, string? note, DateTimeOffset now)
     {
@@ -292,4 +442,7 @@ public sealed partial class HomeStockLedgerService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Reversed home-stock entry {Id} with {ReversalId} in {MarketplaceId}")]
     private partial void LogReversed(long id, long? reversalId, string marketplaceId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Corrected home-stock entry {Id} with {CorrectionId}: {Type} {Units} in {MarketplaceId}")]
+    private partial void LogCorrected(long id, long? correctionId, HomeStockMovementType type, int units, string marketplaceId);
 }

@@ -238,6 +238,36 @@
         update();
     }
 
+    // A [data-select-group] box ticks or clears every [data-select-row] in its <tbody> (e.g. all the sends of one
+    // shipment) and shows whether all, some, or none of them are ticked. The rows' own change events keep the
+    // bulk bar's count right.
+    function syncSelectGroup(group) {
+        var box = group.querySelector("[data-select-group]");
+        if (!box) { return; }
+        var rows = group.querySelectorAll("[data-select-row]");
+        var ticked = 0;
+        rows.forEach(function (row) { if (row.checked) { ticked++; } });
+        box.checked = rows.length > 0 && ticked === rows.length;
+        box.indeterminate = ticked > 0 && ticked < rows.length;
+    }
+    document.addEventListener("change", function (event) {
+        var target = event.target;
+        if (!target.matches) { return; }
+        var group = target.closest("tbody");
+        if (target.matches("[data-select-group]") && group) {
+            // Read once: each row's change re-syncs this box, which would flip it partway through.
+            var on = target.checked;
+            group.querySelectorAll("[data-select-row]").forEach(function (row) {
+                row.checked = on;
+                row.dispatchEvent(new Event("change", { bubbles: true }));
+            });
+        } else if (target.matches("[data-select-row]") && group) {
+            syncSelectGroup(group);
+        } else if (target.matches("[data-select-all]")) {
+            document.querySelectorAll("[data-select-group]").forEach(function (box) { syncSelectGroup(box.closest("tbody")); });
+        }
+    });
+
     // ---------- Unsaved-changes bar ----------
     // In a [data-dirty-form], inputs marked [data-original] are compared with their starting value:
     // changed ones get .is-changed, the [data-save-bar] shows how many, and leaving the page asks first.
@@ -275,9 +305,27 @@
     // ---------- Worksheet send amounts ----------
     // Typing units to send into a [data-send-input] shows what home stock will be after the save
     // ("→ 70 at home after sending") under the same row's home count. The server does the real subtraction.
+    // The total row's [data-send-total] shows the sum of every box, so it says what will actually go out;
+    // the suggestion moves underneath ([data-send-suggested]). Without script the total is the suggestion.
+    function updateSendTotal() {
+        var total = document.querySelector("[data-send-total]");
+        var boxes = document.querySelectorAll("[data-send-input]");
+        // Viewers have no boxes, so their total stays the suggestion.
+        if (!total || boxes.length === 0) { return; }
+        var sum = 0;
+        boxes.forEach(function (box) {
+            var units = parseInt(box.value, 10);
+            if (units > 0) { sum += units; }
+        });
+        total.textContent = sum > 0 ? "Sending " + sum.toLocaleString("en-US") : "Sending 0";
+        var suggested = document.querySelector("[data-send-suggested]");
+        if (suggested) { suggested.hidden = false; }
+    }
+
     document.addEventListener("input", function (event) {
         var input = event.target;
         if (!input.matches || !input.matches("[data-send-input]")) { return; }
+        updateSendTotal();
         var row = input.closest("tr");
         var hint = row && row.querySelector("[data-after-send]");
         var home = row && row.querySelector(".home-input");
@@ -306,6 +354,12 @@
         var fits = table.scrollWidth <= wrapper.clientWidth + 1;
         wrapper.classList.toggle("is-sticky", fits);
         wrapper.classList.toggle("table-scroll", !fits);
+
+        // A second header row (e.g. the Worksheet's totals) sticks right under the first.
+        var first = table.tHead && table.tHead.rows.length > 1 ? table.tHead.rows[0] : null;
+        if (first) {
+            table.style.setProperty("--sticky-row1", Math.floor(first.getBoundingClientRect().height) + "px");
+        }
 
         // The toolbar sticks only when its card holds just this table, and the header sits right below it.
         var card = wrapper.parentElement;
@@ -373,10 +427,29 @@
         if (button) { window.print(); }
     });
 
+    // A [data-print-group="id"] button prints just that row group (e.g. one kind of ledger movement), opened:
+    // html.printing-group hides every other group in print (site.css); the page is put back afterwards.
+    document.addEventListener("click", function (event) {
+        var button = event.target.closest && event.target.closest("[data-print-group]");
+        var group = button && document.getElementById(button.getAttribute("data-print-group"));
+        if (!group) { return; }
+        var root = document.documentElement;
+        var wasOpen = group.classList.contains("is-expanded");
+        root.classList.add("printing-group");
+        group.classList.add("is-printing", "is-expanded");
+        window.addEventListener("afterprint", function () {
+            root.classList.remove("printing-group");
+            group.classList.remove("is-printing");
+            group.classList.toggle("is-expanded", wasOpen);
+        }, { once: true });
+        window.print();
+    });
+
     document.addEventListener("DOMContentLoaded", function () {
         setupTooltips();
         updateNavRail();
         setupStickyTables();
+        updateSendTotal();
 
         var dirty = document.querySelectorAll("[data-dirty-form]");
         for (var d = 0; d < dirty.length; d++) { setupDirtyForm(dirty[d]); }
@@ -436,8 +509,8 @@
     }
     document.addEventListener("click", function (event) {
         var row = event.target.closest && event.target.closest("[data-expand-row]");
-        // A click anywhere on a group's parent row (other than a link) toggles it too.
-        var parent = !row && event.target.closest && !event.target.closest("a, button") && event.target.closest(".group-row");
+        // A click anywhere on a group's parent row (other than a link or a form control) toggles it too.
+        var parent = !row && event.target.closest && !event.target.closest("a, button, input, select, textarea, label") && event.target.closest(".group-row");
         if (parent) { row = parent.querySelector("[data-expand-row]"); }
         if (row) {
             setExpanded(row, row.getAttribute("aria-expanded") !== "true");

@@ -1,0 +1,135 @@
+@using System.Globalization
+@using AERai.Web.UI.Pages.Inventory.HomeStock
+@model (LedgerModel Page, AERai.Web.Application.Inventory.HomeStockLedgerEntry Entry, bool Grouped)
+@* One ledger entry, shared by the All entries list and the By movement groups (where it is a child row
+   under its group's header, after an empty toggle column). *@
+@{
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var ledger = Model.Page;
+    var e = Model.Entry;
+    var when = ledger.Local(e.OccurredAt);
+    var editing = ledger.CanEdit && e.CanEdit && ledger.EditId == e.Id;
+    var css = (Model.Grouped ? "group-child " : "") + (e.ReversedById is not null ? "ledger-reversed " : "") + (editing ? "ledger-editing" : "");
+    var formId = $"edit-entry-{e.Id}";
+    var values = editing ? ledger.EditValues ?? new LedgerModel.CorrectionInput { Type = e.Type, Units = e.Units, Note = e.Note } : null;
+    var editSummary = ledger.EditSummary(e);
+}
+<tr class="@css">
+    @if (ledger.CanEdit)
+    {
+        <td class="select-col">
+            @if (e.CanEdit)
+            {
+                <input type="checkbox" class="form-check-input" name="ids" value="@e.Id" form="ledger-bulk-form" data-select-row aria-label="Select entry @e.Id (@e.Sku)" />
+            }
+        </td>
+    }
+    @if (Model.Grouped)
+    {
+        <td class="toggle-col"></td>
+    }
+    <td class="ledger-when">
+        <div>@when.ToString("MMM d, yyyy", en)</div>
+        <div class="cell-sub">@when.ToString("h:mm tt", en)</div>
+    </td>
+    <td class="@ColorFormat.CssClass(e.Color)">
+        <a asp-page="Ledger" asp-route-sku="@e.Sku" asp-route-view="@ledger.ViewParam" class="d-inline-flex align-items-center gap-2 text-decoration-none"><span class="swatch @(e.Color is null ? "swatch-none" : "")"></span><span class="fw-semibold">@e.Sku</span></a>
+        @if (e.Title is { } title)
+        {
+            <div class="cell-sub cell-truncate" title="@title">@title</div>
+        }
+    </td>
+    <td>
+        @if (values is not null)
+        {
+            <select name="correction.Type" form="@formId" class="form-select form-select-sm ledger-edit-type" aria-label="Movement for entry @e.Id">
+                @foreach (var (type, label) in LedgerModel.LoggableTypes)
+                {
+                    <option value="@type" selected="@(values.Type == type)">@label</option>
+                }
+            </select>
+        }
+        else
+        {
+            <span class="@LedgerModel.Pill(e.Type)">@LedgerModel.Label(e.Type)</span>
+        }
+        @if (editSummary is not null && values is null)
+        {
+            <div class="cell-sub">@editSummary</div>
+        }
+        @if (e.ReversesId is { } reverses)
+        {
+            <div class="cell-sub">reverses #@reverses</div>
+        }
+        else if (e.ReversedById is { } reversedBy)
+        {
+            <div class="cell-sub">reversed by #@reversedBy</div>
+        }
+    </td>
+    <td class="text-end">
+        @if (values is not null)
+        {
+            <input type="number" name="correction.Units" form="@formId" value="@values.Units" step="1" required
+                   class="form-control form-control-sm text-end ledger-edit-units" aria-label="Units for entry @e.Id"
+                   title="Received always adds and shipped always removes; for a count correction or other, + adds and − removes." />
+        }
+        else
+        {
+            <span class="ledger-units @(e.Units > 0 ? "in" : "out")">@e.Units.ToString("+#,0;−#,0", en)</span>
+        }
+    </td>
+    <td class="text-end fw-semibold">@e.BalanceAfter.ToString("N0", en)</td>
+    <td class="ledger-note">
+        @if (e.Reference is { } reference)
+        {
+            <div class="fw-semibold">@reference</div>
+        }
+        @if (values is not null)
+        {
+            <input type="text" name="correction.Note" form="@formId" value="@values.Note" maxlength="@AERai.Web.Application.Inventory.HomeStockLedgerService.MaxNoteLength"
+                   class="form-control form-control-sm ledger-edit-note" placeholder="Reason (required for Other)" aria-label="Note for entry @e.Id" />
+            @if (ledger.EditError is { } error)
+            {
+                <div class="small text-bad mt-1" role="alert">@error</div>
+            }
+        }
+        else if (e.Note is { } note)
+        {
+            <div class="cell-sub">@note</div>
+        }
+        @if (values is null && e.Reference is null && e.Note is null)
+        {
+            <span class="cell-sub">—</span>
+        }
+    </td>
+    <td>
+        <div class="cell-sub">@e.CreatedBy</div>
+        <div class="cell-sub">#@e.Id · @ledger.Local(e.CreatedAt).ToString("MMM d, h:mm tt", en)</div>
+    </td>
+    @if (ledger.CanEdit)
+    {
+        <td class="text-end no-print text-nowrap">
+            @if (values is not null)
+            {
+                @* The inputs in the other cells belong to this form through form="…": a form can't span table cells. *@
+                <form method="post" id="@formId" asp-page="Ledger" asp-page-handler="Edit" asp-all-route-data="@ledger.ListRouteValues()" asp-route-id="@e.Id" class="d-inline-flex gap-1">
+                    <button type="submit" class="btn btn-sm btn-primary btn-icon" aria-label="Save the edit" title="Save"><partial name="_Icon" model='"check"' /></button>
+                    <a href="@ledger.CancelEditLink()" class="btn btn-sm btn-soft btn-icon" aria-label="Cancel editing" title="Cancel"><partial name="_Icon" model='"x"' /></a>
+                </form>
+            }
+            else if (e.CanEdit)
+            {
+                <a href="@ledger.EditLink(e.Id)" class="btn btn-sm btn-soft btn-icon" aria-label="Edit entry @e.Id"
+                   data-bs-toggle="tooltip" data-bs-title="Edit the movement, units, or note (the original is kept in the history)"><partial name="_Icon" model='"edit"' /></a>
+            }
+            @if (values is null && e.CanReverse)
+            {
+                <form method="post" asp-page="Ledger" asp-page-handler="Reverse" class="d-inline" asp-route-id="@e.Id" asp-route-sku="@ledger.Sku" asp-route-family="@ledger.FamilyId" asp-route-view="@ledger.ViewParam" asp-route-p="@ledger.PageNumber"
+                      data-confirm="Reverse entry #@e.Id? A new entry will undo its @Math.Abs(e.Units).ToString("N0", en) units.">
+                    <button type="submit" class="btn btn-sm btn-soft btn-icon" aria-label="Reverse entry @e.Id"
+                            data-bs-toggle="tooltip" data-bs-title="Undo this entry with a reversing entry"><partial name="_Icon" model='"rewind"' /></button>
+                </form>
+            }
+        </td>
+    }
+</tr>
