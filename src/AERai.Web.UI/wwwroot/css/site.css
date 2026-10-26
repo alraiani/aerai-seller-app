@@ -475,6 +475,7 @@ a.pill:hover { filter: brightness(0.95); }
 .tag-orders { color: var(--brand); background: var(--brand-soft); }
 .tag-inventory { color: var(--violet); background: var(--violet-soft); }
 .tag-settlements { color: var(--teal); background: var(--teal-soft); }
+.tag-ads { color: var(--warning); background: var(--warning-soft); }
 
 .cell-sub { font-size: 0.78rem; color: var(--muted); }
 .cell-sub.text-warn { color: var(--warning); }

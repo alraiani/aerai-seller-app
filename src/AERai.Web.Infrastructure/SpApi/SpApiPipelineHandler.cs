@@ -91,7 +91,7 @@ internal sealed partial class SpApiPipelineHandler(
     }
 
     /// <summary>
-    /// Honors <c>Retry-After</c> when Amazon sends it; otherwise <see cref="SpApiRetry.Backoff"/>.
+    /// Honors <c>Retry-After</c> when Amazon sends it; otherwise <see cref="SpApiRetry.Backoff(int, SpApiOptions)"/>.
     /// </summary>
     private static TimeSpan RetryDelay(HttpResponseMessage response, int attempt, SpApiOptions settings)
     {

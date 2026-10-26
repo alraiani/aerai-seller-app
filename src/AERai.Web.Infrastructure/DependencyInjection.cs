@@ -1,6 +1,7 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Security;
 using AERai.Web.Infrastructure.Alerts;
+using AERai.Web.Infrastructure.AmazonAds;
 using AERai.Web.Infrastructure.Email;
 using AERai.Web.Infrastructure.ExchangeRates;
 using AERai.Web.Infrastructure.Identity;
@@ -19,6 +20,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace AERai.Web.Infrastructure;
@@ -126,6 +128,7 @@ public static class DependencyInjection
         services.AddScoped<ISettlementExchangeRateRepository, SettlementExchangeRateRepository>();
 
         AddSpApi(services, configuration);
+        AddAmazonAds(services, configuration);
         AddExchangeRates(services, configuration);
 
         services.AddSingleton<IManualRunChannel, ManualRunChannel>();
@@ -135,6 +138,41 @@ public static class DependencyInjection
         services.AddHostedService<StockAlertWorker>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Registers the Amazon Ads gateway for the configured <see cref="AmazonAdsMode"/>. Live mode wires the Ads
+    /// pipeline (its own LWA token cache and <see cref="AdsApiPipelineHandler"/>) on the typed Ads client; all
+    /// Ads API traffic goes through that one handler, and reports download on a separate token-less client.
+    /// </summary>
+    private static void AddAmazonAds(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<AmazonAdsOptions>().BindConfiguration(AmazonAdsOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+        services.AddScoped<IAdSpendRepository, AdSpendRepository>();
+
+        var mode = configuration.GetSection(AmazonAdsOptions.SectionName).GetValue(nameof(AmazonAdsOptions.Mode), AmazonAdsMode.Disabled);
+        switch (mode)
+        {
+            case AmazonAdsMode.Live:
+                services.AddSingleton<AdsTokenProvider>();
+                services.AddSingleton<AdsProfileCache>();
+                services.AddTransient<AdsApiPipelineHandler>();
+                services.TryAddTransient<SpApiConnectionRetryHandler>();
+                services.AddHttpClient(AdsTokenProvider.HttpClientName).AddHttpMessageHandler<SpApiConnectionRetryHandler>();
+                services.AddHttpClient(AdsApiClient.DownloadHttpClientName).AddHttpMessageHandler<SpApiConnectionRetryHandler>();
+                services.AddHttpClient<AdsApiClient>().AddHttpMessageHandler<AdsApiPipelineHandler>();
+                services.AddScoped<IAmazonAdsGateway, AdsApiGateway>();
+                break;
+
+            case AmazonAdsMode.Simulated:
+                // Singleton: the simulator keeps requested reports in memory between request and download.
+                services.AddSingleton<IAmazonAdsGateway, SimulatedAdsGateway>();
+                break;
+
+            default:
+                services.AddSingleton<IAmazonAdsGateway, UnavailableAdsGateway>();
+                break;
+        }
     }
 
     /// <summary>

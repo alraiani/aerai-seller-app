@@ -175,6 +175,7 @@ public static class DashboardFormat
         AmazonReportType.AwdInventory => "AWD inventory",
         AmazonReportType.OrdersApi => "Orders (live API)",
         AmazonReportType.DeferredTransactions => "Deferred payments",
+        AmazonReportType.AdsSpend => "Ads spend",
         _ => type.ToString(),
     };
 

@@ -45,9 +45,18 @@ internal static class SpApiRetry
     public static TimeSpan Backoff(int attempt, SpApiOptions settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        return Backoff(attempt, settings.RetryBaseDelay, settings.MaxRetryDelay);
+    }
 
-        var exponential = settings.RetryBaseDelay.TotalMilliseconds * Math.Pow(2, attempt);
-        var capped = Math.Min(exponential, settings.MaxRetryDelay.TotalMilliseconds);
+    /// <summary>Exponential backoff with full jitter, for clients with retry settings of their own (Amazon Ads).</summary>
+    /// <param name="attempt">Zero-based attempt that just failed.</param>
+    /// <param name="baseDelay">First retry delay; doubles each attempt.</param>
+    /// <param name="maxDelay">Upper bound for a single delay.</param>
+    /// <returns>The delay before the next attempt.</returns>
+    public static TimeSpan Backoff(int attempt, TimeSpan baseDelay, TimeSpan maxDelay)
+    {
+        var exponential = baseDelay.TotalMilliseconds * Math.Pow(2, attempt);
+        var capped = Math.Min(exponential, maxDelay.TotalMilliseconds);
 #pragma warning disable CA5394 // Jitter is not security-sensitive.
         return TimeSpan.FromMilliseconds(capped / 2 + Random.Shared.NextDouble() * capped / 2);
 #pragma warning restore CA5394

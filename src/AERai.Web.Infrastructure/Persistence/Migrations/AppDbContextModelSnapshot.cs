@@ -90,6 +90,78 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.ToTable("StockAlertRead", "ops");
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.AdSpend", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Asin")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<int>("AttributedOrders")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("AttributedSales")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("AttributedUnits")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CampaignId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("CampaignName")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<long>("Clicks")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("Cost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<long>("Impressions")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Sku");
+
+                    b.HasIndex("MarketplaceId", "Date", "Sku", "CampaignId")
+                        .IsUnique();
+
+                    b.ToTable("AdSpend", "core");
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.AwdInventorySnapshot", b =>
                 {
                     b.Property<long>("Id")
@@ -2522,6 +2594,21 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("StockAlertId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.AdSpend", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AERai.Web.Domain.Core.Product", null)
+                        .WithMany()
+                        .HasForeignKey("Sku")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

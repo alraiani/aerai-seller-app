@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -16,6 +17,7 @@ namespace AERai.Web.Application.Ingestion;
 /// <param name="staging">Stages a report file from raw storage.</param>
 /// <param name="promotion">Promotes a staged batch into the reports.</param>
 /// <param name="orders">Writes Orders API orders.</param>
+/// <param name="adSpend">Writes Amazon Ads spend.</param>
 /// <param name="applied">Which files are already loaded.</param>
 /// <param name="marketplaces">Marketplace lookups.</param>
 /// <param name="clock">Clock for the ledger timestamp.</param>
@@ -25,6 +27,7 @@ public sealed partial class BlobRefreshService(
     IStagingImportService staging,
     IPromotionService promotion,
     IAmazonOrderRepository orders,
+    IAdSpendRepository adSpend,
     IAppliedBlobRepository applied,
     IMarketplaceQueries marketplaces,
     TimeProvider clock,
@@ -38,6 +41,9 @@ public sealed partial class BlobRefreshService(
 
     /// <summary>Raw folder for Orders API pages (written by <see cref="ReportIngestionService"/>).</summary>
     private const string OrdersApiFolder = ReportIngestionService.OrdersApiRawFolder;
+
+    /// <summary>Raw folder for Amazon Ads spend reports (written by <see cref="ReportIngestionService"/>).</summary>
+    private const string AdsSpendFolder = ReportIngestionService.AdsSpendRawFolder;
 
     /// <summary>Metadata the app writes on files it saved itself; a hand-uploaded file has none.</summary>
     private const string AppWrittenMetadataKey = "syncrunid";
@@ -65,7 +71,7 @@ public sealed partial class BlobRefreshService(
 
         var plan = await PlanAsync(request, cancellationToken).ConfigureAwait(false);
         return new BlobRefreshPreview(
-            plan.Pending.Count(f => f.Kind == FileKind.Report),
+            plan.Pending.Count(f => f.Kind is FileKind.Report or FileKind.AdsSpendReport),
             plan.Pending.Count(f => f.Kind == FileKind.OrdersApiPage),
             plan.AlreadyLoaded,
             plan.SnapshotFiles);
@@ -111,9 +117,12 @@ public sealed partial class BlobRefreshService(
 
             try
             {
-                var outcome = file.Kind == FileKind.Report
-                    ? await LoadReportAsync(file, marketplaceId, request.Promote, user, cancellationToken).ConfigureAwait(false)
-                    : await LoadOrdersPageAsync(file, marketplace, user, cancellationToken).ConfigureAwait(false);
+                var outcome = file.Kind switch
+                {
+                    FileKind.Report => await LoadReportAsync(file, marketplaceId, request.Promote, user, cancellationToken).ConfigureAwait(false),
+                    FileKind.AdsSpendReport => await LoadAdsSpendAsync(file, marketplace, user, cancellationToken).ConfigureAwait(false),
+                    _ => await LoadOrdersPageAsync(file, marketplace, user, cancellationToken).ConfigureAwait(false),
+                };
 
                 loaded += outcome.Loaded ? 1 : 0;
                 empty += outcome.Empty ? 1 : 0;
@@ -172,13 +181,18 @@ public sealed partial class BlobRefreshService(
             {
                 kind = FileKind.OrdersApiPage;
             }
+            else if (folder == AdsSpendFolder)
+            {
+                kind = FileKind.AdsSpendReport;
+            }
             else
             {
                 continue; // Not one of ours (for example a stray upload): leave it alone.
             }
 
-            // A page the app saved itself was applied the moment it arrived, so only a hand-uploaded page is new.
-            var appliedByApp = kind == FileKind.OrdersApiPage && info.Metadata.ContainsKey(AppWrittenMetadataKey) && !request.Reprocess;
+            // A page or Ads report the app saved itself was applied the moment it arrived, so only a hand-uploaded one is new.
+            var appliedByApp = kind is FileKind.OrdersApiPage or FileKind.AdsSpendReport
+                && info.Metadata.ContainsKey(AppWrittenMetadataKey) && !request.Reprocess;
             if (loaded.Contains(info.Path) || appliedByApp)
             {
                 alreadyLoaded++;
@@ -270,6 +284,52 @@ public sealed partial class BlobRefreshService(
         return FileOutcome.OrdersLoaded(written);
     }
 
+    /// <summary>
+    /// Replaces the days an Ads spend report covers with its rows. The days come from the metadata the sync
+    /// writes; a hand-uploaded report without it covers the first to the last day it has rows for.
+    /// </summary>
+    private async Task<FileOutcome> LoadAdsSpendAsync(PendingFile file, Marketplace marketplace, string user, CancellationToken cancellationToken)
+    {
+        var content = await rawFiles.OpenReadAsync(file.Info.Path, cancellationToken).ConfigureAwait(false);
+        if (content is null)
+        {
+            return FileOutcome.Failed("the file disappeared before it could be read.");
+        }
+
+        IReadOnlyList<AdSpendRow> rows;
+        await using (content.ConfigureAwait(false))
+        {
+            try
+            {
+                rows = await AdSpendReportParser.ParseAsync(content, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidDataException)
+            {
+                return FileOutcome.Failed($"not a valid Amazon Ads report ({ex.Message}).");
+            }
+        }
+
+        var start = MetadataDate(file.Info, ReportIngestionService.AdsSpendStartMetadata) ?? (rows.Count > 0 ? rows.Min(r => r.Date) : null);
+        var end = MetadataDate(file.Info, ReportIngestionService.AdsSpendEndMetadata) ?? (rows.Count > 0 ? rows.Max(r => r.Date) : null);
+        if (start is not { } from || end is not { } to)
+        {
+            await MarkAppliedAsync(file, "empty file", user, cancellationToken).ConfigureAwait(false);
+            return FileOutcome.EmptyFile;
+        }
+
+        var inRange = rows.Where(r => r.Date >= from && r.Date <= to).ToList();
+        var written = await adSpend.ReplaceRangeAsync(
+            marketplace.MarketplaceId, from, to, inRange, marketplace.Currency, clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        await MarkAppliedAsync(file, ReportIngestionService.DescribeAdSpend(from, to, inRange, marketplace.Currency), user, cancellationToken).ConfigureAwait(false);
+        return FileOutcome.AdSpendLoaded(written);
+    }
+
+    private static DateOnly? MetadataDate(RawFileInfo info, string key) =>
+        info.Metadata.TryGetValue(key, out var text)
+            && DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+            ? date
+            : null;
+
     private Task MarkAppliedAsync(PendingFile file, string outcome, string user, CancellationToken cancellationToken) =>
         applied.MarkAppliedAsync(
             new AppliedBlob { Path = file.Info.Path, Source = FolderOf(file.Info.Path), Outcome = outcome, AppliedAt = clock.GetUtcNow(), AppliedBy = user },
@@ -292,6 +352,7 @@ public sealed partial class BlobRefreshService(
     {
         Report,
         OrdersApiPage,
+        AdsSpendReport,
     }
 
     private sealed record PendingFile(RawFileInfo Info, FileKind Kind, ImportSource? Source);
@@ -311,6 +372,9 @@ public sealed partial class BlobRefreshService(
         public static FileOutcome StagedButNotPromoted(string problem) => new(true, false, false, 0, problem);
 
         public static FileOutcome OrdersLoaded(int written) => new(true, false, false, written, null);
+
+        // Ad spend rows are not orders, so they count as a loaded file only (or an empty one).
+        public static FileOutcome AdSpendLoaded(int written) => written == 0 ? EmptyFile : new(true, false, false, 0, null);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Blob refresh loaded {Loaded} files ({Empty} empty, {Problems} problems) for {User}")]

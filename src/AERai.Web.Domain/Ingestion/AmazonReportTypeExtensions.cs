@@ -14,13 +14,17 @@ public static class AmazonReportTypeExtensions
             or AmazonReportType.AwdInventory or AmazonReportType.DeferredTransactions;
 
     /// <summary>
-    /// Whether the data comes from the Reports API (a document that is landed, staged, and promoted)
+    /// Whether the data comes from the SP-API Reports API (a document that is landed, staged, and promoted)
     /// rather than from a JSON API written straight to <c>core</c>.
     /// </summary>
     /// <param name="reportType">The report type.</param>
-    /// <returns><see langword="false"/> for <see cref="AmazonReportType.AwdInventory"/>, <see cref="AmazonReportType.OrdersApi"/>, and <see cref="AmazonReportType.DeferredTransactions"/>.</returns>
+    /// <returns>
+    /// <see langword="false"/> for <see cref="AmazonReportType.AwdInventory"/>, <see cref="AmazonReportType.OrdersApi"/>,
+    /// <see cref="AmazonReportType.DeferredTransactions"/>, and <see cref="AmazonReportType.AdsSpend"/>.
+    /// </returns>
     public static bool IsReport(this AmazonReportType reportType) =>
-        reportType is not (AmazonReportType.AwdInventory or AmazonReportType.OrdersApi or AmazonReportType.DeferredTransactions);
+        reportType is not (AmazonReportType.AwdInventory or AmazonReportType.OrdersApi or AmazonReportType.DeferredTransactions
+            or AmazonReportType.AdsSpend);
 
     /// <summary>
     /// The shortest time Amazon allows between two requests for the report in one marketplace. Amazon
