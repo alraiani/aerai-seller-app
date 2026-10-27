@@ -298,6 +298,29 @@ public sealed class InventoryServiceTests
     }
 
     [Fact]
+    public async Task GetWorksheetAsync_FollowsThePrintedSheetOrder()
+    {
+        // As on the paper count sheet: blue, green, pink, purple; shared styles A–Z, then the blue-only SBP001BL.
+        foreach (var (suffix, color) in new[] { ("PU", ProductColor.Purple), ("PI", ProductColor.Pink), ("GR", ProductColor.Green), ("BL", ProductColor.Blue) })
+        {
+            foreach (var style in new[] { "TOJ", "MOB", "FOB", "NUC", "HTS", "FOG", "MOG", "KST" })
+            {
+                Stock($"{style}00{suffix}", available: 1, p => { p.FamilyId = 1; p.Color = color; });
+            }
+        }
+
+        Stock("SBP001BL", available: 1, p => { p.FamilyId = 1; p.Color = ProductColor.Blue; });
+
+        var sheet = await CreateService().GetWorksheetAsync(Us, 1, CancellationToken.None);
+
+        Assert.Equal([ProductColor.Blue, ProductColor.Green, ProductColor.Pink, ProductColor.Purple], sheet.Groups.Select(g => g.Color));
+        Assert.Equal(
+            ["FOB00BL", "FOG00BL", "HTS00BL", "KST00BL", "MOB00BL", "MOG00BL", "NUC00BL", "TOJ00BL", "SBP001BL"],
+            sheet.Groups[0].Items.Select(i => i.Sku));
+        Assert.Equal(["FOB00PI", "FOG00PI", "HTS00PI", "KST00PI", "MOB00PI", "MOG00PI", "NUC00PI", "TOJ00PI"], sheet.Groups[2].Items.Select(i => i.Sku));
+    }
+
+    [Fact]
     public async Task GetWorksheetAsync_FamilyWithNoSkus_IsEmpty()
     {
         Stock("A", available: 1, p => p.FamilyId = 2);

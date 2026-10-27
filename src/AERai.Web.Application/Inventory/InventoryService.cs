@@ -119,14 +119,15 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
             .ToList();
         var soon = options.Value.AlertLeadDays;
 
-        // Palette order, like the printed sheet; SKUs without a color come last so they stand out.
+        // The printed sheet's order: colors in display order (SKUs without a color last, so they stand out), and
+        // inside each color the family's shared styles before its one-offs.
+        var shared = WorksheetSkuOrder.SharedStyles(items.Select(i => (i.Sku, i.Position.Color)));
         var groups = items
             .GroupBy(i => i.Position.Color)
-            .OrderBy(g => g.Key is null)
-            .ThenBy(g => g.Key)
+            .OrderBy(g => g.Key is { } color ? ProductColors.Position(color) : int.MaxValue)
             .Select(g =>
             {
-                var skus = g.OrderBy(i => i.Sku, StringComparer.Ordinal).ToList();
+                var skus = WorksheetSkuOrder.Order(g, i => i.Sku, shared).ToList();
                 return new WorksheetGroup(g.Key, skus, WorksheetTotals.Of(skus, soon));
             })
             .ToList();

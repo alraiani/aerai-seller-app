@@ -6,7 +6,7 @@ namespace AERai.Web.UI.Models;
 public static class ColorFormat
 {
     /// <summary>Every color, in palette order, for pickers.</summary>
-    public static IReadOnlyList<ProductColor> All { get; } = Enum.GetValues<ProductColor>();
+    public static IReadOnlyList<ProductColor> All { get; } = ProductColors.DisplayOrder;
 
     /// <summary>Class that sets the <c>--sku</c> color token (see site.css), or empty for no color.</summary>
     /// <param name="color">The color.</param>
