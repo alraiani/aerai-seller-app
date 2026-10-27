@@ -85,6 +85,14 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
             : new AmazonReportStatus(AmazonProcessingStatus.Fatal, null));
 
     /// <inheritdoc/>
+    public Task CancelReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
+    {
+        // A cancelled report is never downloaded, so its generated document is dropped.
+        _documents.TryRemove(DocumentId(reportId), out _);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(marketplace);

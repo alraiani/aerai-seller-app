@@ -25,6 +25,14 @@ internal sealed class SpApiReportsGateway(ReportsApiClient client) : IAmazonRepo
     }
 
     /// <inheritdoc/>
+    public Task CancelReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(marketplace);
+
+        return client.CancelReportAsync(marketplace.Region, reportId, cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)
     {
         var reports = await client.GetDoneReportsAsync(marketplace, SpApiReportTypes.ToCode(reportType), createdSince, cancellationToken).ConfigureAwait(false);

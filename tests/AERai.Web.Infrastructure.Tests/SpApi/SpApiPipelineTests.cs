@@ -94,6 +94,29 @@ public sealed class SpApiPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task CancelReport_SendsADeleteForTheReport()
+    {
+        _lwa.Reply(HttpStatusCode.OK, TokenJson);
+        _api.Reply(HttpStatusCode.OK);
+
+        await CreateClient().CancelReportAsync(AmazonRegion.NorthAmerica, "123", CancellationToken.None);
+
+        var request = Assert.Single(_api.Requests);
+        Assert.Equal((HttpMethod.Delete, "/reports/2021-06-30/reports/123"), (request.Method, request.RequestUri!.AbsolutePath));
+    }
+
+    [Fact]
+    public async Task CancelReport_ReportAlreadyStarted_SurfacesAmazonsError()
+    {
+        _lwa.Reply(HttpStatusCode.OK, TokenJson);
+        _api.Reply(HttpStatusCode.BadRequest, """{"errors":[{"code":"InvalidInput","message":"Report is IN_PROGRESS"}]}""");
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => CreateClient().CancelReportAsync(AmazonRegion.NorthAmerica, "123", CancellationToken.None));
+
+        Assert.Contains("IN_PROGRESS", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EuropeWithoutItsRefreshToken_FailsClearlyWithoutCallingAmazon()
     {
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(

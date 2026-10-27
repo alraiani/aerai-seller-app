@@ -82,6 +82,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordResetService, PasswordResetService>();
         services.AddScoped<ILoginCodeService, LoginCodeService>();
         services.AddScoped<IReportIngestionService, ReportIngestionService>();
+        services.AddSingleton<IRunStopSignal, RunStopSignal>();
         services.AddScoped<ISyncScheduleService, SyncScheduleService>();
 
         return services;

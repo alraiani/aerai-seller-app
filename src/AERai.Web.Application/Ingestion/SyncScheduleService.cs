@@ -217,6 +217,19 @@ public sealed partial class SyncScheduleService(
     }
 
     /// <inheritdoc/>
+    public int QueuedRunCount => queue.QueuedCount;
+
+    /// <inheritdoc/>
+    public int CancelQueued(string user)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(user);
+
+        var dropped = queue.CancelQueued();
+        LogQueueCancelled(dropped, user);
+        return dropped;
+    }
+
+    /// <inheritdoc/>
     public async Task<Result<SyncAllResult>> SyncAllAsync(string user, CancellationToken cancellationToken)
     {
         if (!connection.CanRun)
@@ -627,4 +640,7 @@ public sealed partial class SyncScheduleService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sync all queued {Queued} runs and skipped {Skipped} by {User}")]
     private partial void LogSyncAll(int queued, int skipped, string user);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Dropped {Count} queued sync runs for {User}")]
+    private partial void LogQueueCancelled(int count, string user);
 }

@@ -17,6 +17,7 @@ internal static class SpApiOperation
 
     public const string CreateReport = "reports.createReport";
     public const string GetReport = "reports.getReport";
+    public const string CancelReport = "reports.cancelReport";
     public const string GetReports = "reports.getReports";
     public const string GetReportDocument = "reports.getReportDocument";
     public const string SearchCatalogItems = "catalog.searchCatalogItems";
@@ -34,6 +35,7 @@ internal static class SpApiOperation
         {
             [CreateReport] = (0.0167, 15),
             [GetReport] = (2.0, 15),
+            [CancelReport] = (0.0222, 10),
             [GetReports] = (0.0222, 10),
             [GetReportDocument] = (0.0167, 15),
             [SearchCatalogItems] = (2.0, 2),

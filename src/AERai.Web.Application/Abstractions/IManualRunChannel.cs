@@ -20,6 +20,13 @@ public interface IManualRunChannel
     /// <returns>A task that completes when queued.</returns>
     ValueTask EnqueueAsync(ManualRunRequest request, CancellationToken cancellationToken);
 
+    /// <summary>How many requests are queued and not started yet.</summary>
+    int QueuedCount { get; }
+
+    /// <summary>Drops every queued request that hasn't started (a run already started is stopped separately).</summary>
+    /// <returns>How many were dropped.</returns>
+    int CancelQueued();
+
     /// <summary>Wakes the scheduler so it re-reads schedules (after a create, edit, enable, pause, ...).</summary>
     void Wake();
 

@@ -188,7 +188,7 @@ public static class ScheduleDisplay
         return run.Status == SyncRunStatus.Running && run.NextCheckAt is not null;
     }
 
-    /// <summary>Pill class for a run status (token-colored, never grey).</summary>
+    /// <summary>Pill class for a run status (token-colored; grey only for a run a user stopped).</summary>
     /// <param name="status">Run status.</param>
     /// <returns>CSS classes.</returns>
     public static string StatusPill(SyncRunStatus status) => status switch
@@ -196,6 +196,7 @@ public static class ScheduleDisplay
         SyncRunStatus.Succeeded => "pill pill-ok",
         SyncRunStatus.NoData => "pill pill-info",
         SyncRunStatus.Failed => "pill pill-bad",
+        SyncRunStatus.Cancelled => "pill pill-muted",
         _ => "pill pill-running",
     };
 
@@ -205,6 +206,7 @@ public static class ScheduleDisplay
     public static string StatusLabel(SyncRunStatus status) => status switch
     {
         SyncRunStatus.NoData => "No new data",
+        SyncRunStatus.Cancelled => "Stopped",
         _ => status.ToString(),
     };
 

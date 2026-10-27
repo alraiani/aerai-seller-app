@@ -26,6 +26,13 @@ public interface IAmazonAdsGateway
     /// <returns>The status.</returns>
     Task<AdsReportStatus> GetReportStatusAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken);
 
+    /// <summary>Asks Amazon to stop making a requested report (it is deleted and never downloaded).</summary>
+    /// <param name="marketplace">Marketplace the report was requested for.</param>
+    /// <param name="reportId">Amazon report id.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A task that completes once Amazon accepts it.</returns>
+    Task CancelSpendReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken);
+
     /// <summary>Downloads a completed report exactly as Amazon serves it (gzip-compressed JSON).</summary>
     /// <param name="marketplace">Marketplace the report was requested for.</param>
     /// <param name="reportId">Amazon report id.</param>

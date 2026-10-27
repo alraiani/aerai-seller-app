@@ -1,5 +1,6 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
+using AERai.Web.Application.Ingestion;
 using AERai.Web.Application.Marketplaces;
 using AERai.Web.Domain.Ingestion;
 using AERai.Web.UI.Models;
@@ -13,7 +14,8 @@ namespace AERai.Web.UI.Pages.Tools.Schedules;
 /// <param name="runs">Run history queries.</param>
 /// <param name="schedules">Schedule queries (for names).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
-public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository schedules, ICurrentMarketplace currentMarketplace) : ListPageModel
+/// <param name="ingestion">Stops runs that haven't finished.</param>
+public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository schedules, ICurrentMarketplace currentMarketplace, IReportIngestionService ingestion) : ListPageModel
 {
     /// <summary>Optional schedule filter from <c>?scheduleId=</c>.</summary>
     [BindProperty(SupportsGet = true)]
@@ -38,5 +40,17 @@ public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository s
         // Include deleted schedules so their history stays labeled.
         ScheduleNames = (await schedules.ListIncludingDeletedAsync(cancellationToken))
             .ToDictionary(s => s.Id, s => s.IsDeleted ? $"{s.Name} (deleted)" : s.Name);
+    }
+
+    /// <summary>Stops a run that hasn't finished (waiting on Amazon, or working right now).</summary>
+    /// <param name="runId">The run.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back to the history.</returns>
+    public async Task<IActionResult> OnPostStopAsync(long runId, CancellationToken cancellationToken)
+    {
+        var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        var result = await ingestion.StopAsync(runId, marketplace.MarketplaceId, User.Identity!.Name!, cancellationToken); // Non-null: Tools requires an authenticated Operator.
+        TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? result.Value : result.Error;
+        return RedirectToPage(new { scheduleId = ScheduleId });
     }
 }

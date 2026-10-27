@@ -12,7 +12,7 @@ namespace AERai.Web.Infrastructure.Ingestion;
 internal sealed class ManualRunChannel : IManualRunChannel, IDisposable
 {
     private readonly Channel<ManualRunRequest> _channel = Channel.CreateBounded<ManualRunRequest>(
-        new BoundedChannelOptions(100) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
+        new BoundedChannelOptions(100) { FullMode = BoundedChannelFullMode.Wait, SingleReader = false });
 
     // At most one pending wake: several wakes before the scheduler looks are one recompute.
     private readonly SemaphoreSlim _wake = new(0, 1);
@@ -20,6 +20,22 @@ internal sealed class ManualRunChannel : IManualRunChannel, IDisposable
     /// <inheritdoc/>
     public ValueTask EnqueueAsync(ManualRunRequest request, CancellationToken cancellationToken) =>
         _channel.Writer.WriteAsync(request, cancellationToken);
+
+    /// <inheritdoc/>
+    public int QueuedCount => _channel.Reader.Count;
+
+    /// <inheritdoc/>
+    public int CancelQueued()
+    {
+        // Read out by the web request rather than the scheduler, which is why the channel allows several readers.
+        var dropped = 0;
+        while (_channel.Reader.TryRead(out _))
+        {
+            dropped++;
+        }
+
+        return dropped;
+    }
 
     /// <inheritdoc/>
     public void Wake()

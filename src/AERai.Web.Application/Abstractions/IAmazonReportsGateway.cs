@@ -30,6 +30,16 @@ public interface IAmazonReportsGateway
     /// <returns>The status and, when done, the document id.</returns>
     Task<AmazonReportStatus> GetReportStatusAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Asks Amazon to stop generating a requested report. Amazon only cancels one still waiting in its queue; once it
+    /// has started, the call fails and the report is simply never downloaded.
+    /// </summary>
+    /// <param name="marketplace">Marketplace the report is for; its region selects the SP-API endpoint and credentials.</param>
+    /// <param name="reportId">Amazon report id.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A task that completes once Amazon accepts the cancellation.</returns>
+    Task CancelReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken);
+
     /// <summary>Lists one marketplace's completed reports of a type created since a point in time, oldest first.</summary>
     /// <param name="marketplace">Marketplace the report is for; its region selects the SP-API endpoint and credentials.</param>
     /// <param name="reportType">Report type.</param>

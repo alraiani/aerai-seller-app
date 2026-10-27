@@ -19,6 +19,7 @@ namespace AERai.Web.UI.Pages.Tools.Schedules;
 /// <param name="runs">Run history queries.</param>
 /// <param name="syncSettings">Global pause state.</param>
 /// <param name="scheduleService">Schedule use cases.</param>
+/// <param name="ingestion">Stops runs that haven't finished.</param>
 /// <param name="connection">Amazon connection state.</param>
 /// <param name="tester">Amazon connection test.</param>
 /// <param name="identity">User list for the owner filter.</param>
@@ -29,6 +30,7 @@ public sealed class IndexModel(
     ISyncRunRepository runs,
     ISyncSettingsRepository syncSettings,
     ISyncScheduleService scheduleService,
+    IReportIngestionService ingestion,
     IAmazonConnectionInfo connection,
     IAmazonConnectionTester tester,
     IIdentityService identity,
@@ -77,6 +79,9 @@ public sealed class IndexModel(
     public bool JustQueued { get; private set; }
 
     private const string QueuedKey = "SyncQueued";
+
+    /// <summary>Run now, Sync all, and backfill requests queued and not started yet, in every marketplace (one inbox).</summary>
+    public int QueuedRuns => scheduleService.QueuedRunCount;
 
     /// <summary>Summary over all active schedules.</summary>
     public ScheduleListSummary Summary { get; private set; } = new(0, 0, 0, 0, null, null);
@@ -432,10 +437,34 @@ public sealed class IndexModel(
         return BackToList(back);
     }
 
+    /// <summary>Stops a run that hasn't finished (waiting on Amazon, or working right now).</summary>
+    /// <param name="runId">The run.</param>
+    /// <param name="back">The list's query string.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back to the list.</returns>
+    public async Task<IActionResult> OnPostStopAsync(long runId, string? back, CancellationToken cancellationToken)
+    {
+        var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        var result = await ingestion.StopAsync(runId, marketplace.MarketplaceId, User.Identity!.Name!, cancellationToken); // Non-null: Tools requires an authenticated Operator.
+        TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? result.Value : result.Error;
+        return result.IsSuccess ? Queued(back) : BackToList(back);
+    }
+
+    /// <summary>Drops every queued run that hasn't started.</summary>
+    /// <param name="back">The list's query string.</param>
+    /// <returns>A redirect back to the list.</returns>
+    public IActionResult OnPostCancelQueued(string? back)
+    {
+        var dropped = scheduleService.CancelQueued(User.Identity!.Name!); // Non-null: Tools requires an authenticated Operator.
+        TempData[StatusMessage.Success] = dropped == 0
+            ? "Nothing was waiting to start."
+            : $"Cancelled {dropped:N0} queued run{(dropped == 1 ? "" : "s")}. Runs already started keep going; stop them one by one.";
+        return BackToList(back);
+    }
+
     private void Report(Application.Common.Result result, string success) =>
         TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? success : result.Error;
 
-    /// <summary>Redirects to the list with the filters the user was looking at.</summary>
     /// <summary>Back to the list after queueing work, flagged so it refreshes until the run shows up.</summary>
     private RedirectResult Queued(string? back)
     {
@@ -443,6 +472,7 @@ public sealed class IndexModel(
         return BackToList(back);
     }
 
+    /// <summary>Redirects to the list with the filters the user was looking at.</summary>
     private RedirectResult BackToList(string? back)
     {
         // Only a query string is accepted, so this can never redirect off-site.

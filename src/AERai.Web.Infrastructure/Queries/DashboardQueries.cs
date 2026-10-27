@@ -83,6 +83,6 @@ internal sealed class DashboardQueries(AppDbContext dbContext) : IDashboardQueri
     /// <inheritdoc/>
     public Task<DateTimeOffset?> GetOrdersCoverageStartAsync(string marketplaceId, CancellationToken cancellationToken) =>
         dbContext.SyncRuns
-            .Where(r => r.MarketplaceId == marketplaceId && (r.ReportType == AmazonReportType.Orders || r.ReportType == AmazonReportType.OrdersApi) && r.Status != SyncRunStatus.Failed && r.Status != SyncRunStatus.Running)
+            .Where(r => r.MarketplaceId == marketplaceId && (r.ReportType == AmazonReportType.Orders || r.ReportType == AmazonReportType.OrdersApi) && (r.Status == SyncRunStatus.Succeeded || r.Status == SyncRunStatus.NoData))
             .MinAsync(r => r.DataStart, cancellationToken);
 }
