@@ -15,9 +15,22 @@ internal sealed class FakeProductFamilyRepository : IProductFamilyRepository
 
     public Task<IReadOnlyList<FamilySummary>> ListAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<FamilySummary>>(Families
-            .Select(f => new FamilySummary(f.Key, f.Value, Skus.Values.Count(v => v == f.Key)))
+            .Select(f => new FamilySummary(f.Key, f.Value, Skus.Values.Count(v => v == f.Key), Rules.GetValueOrDefault(f.Key)))
             .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
             .ToList());
+
+    public Dictionary<int, RestockRules> Rules { get; } = [];
+
+    public Task<bool> SetRulesAsync(int id, RestockRules rules, CancellationToken cancellationToken)
+    {
+        if (!Families.ContainsKey(id))
+        {
+            return Task.FromResult(false);
+        }
+
+        Rules[id] = rules;
+        return Task.FromResult(true);
+    }
 
     public Task<int?> FindAsync(string name, CancellationToken cancellationToken) =>
         Task.FromResult(Families.Where(f => string.Equals(f.Value, name, StringComparison.OrdinalIgnoreCase)).Select(f => (int?)f.Key).FirstOrDefault());

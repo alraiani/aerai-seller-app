@@ -949,12 +949,30 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<int?>("OrderMinimum")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("OrderMultiple")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SendLargeFrom")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SendMultiple")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SendMultipleLarge")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("ProductFamily", "core");
+                    b.ToTable("ProductFamily", "core", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductFamily_RestockRules", "(SendMultiple IS NULL OR SendMultiple > 0) AND (SendMultipleLarge IS NULL OR SendMultipleLarge > 0) AND (SendLargeFrom IS NULL OR SendLargeFrom > 0) AND (OrderMinimum IS NULL OR OrderMinimum > 0) AND (OrderMultiple IS NULL OR OrderMultiple > 0)");
+                        });
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Core.RestockRecommendation", b =>

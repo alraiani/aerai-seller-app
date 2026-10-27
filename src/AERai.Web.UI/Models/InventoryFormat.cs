@@ -100,7 +100,25 @@ public static class InventoryFormat
         var stockout = item.Restock is { } plan
             ? $"Stock at Amazon runs out around {ShortDate(plan.ProjectedStockout)}; reorder from the supplier by {ShortDate(plan.ReorderBy)}. "
             : string.Empty;
-        return $"{stockout}Lead times{(t.IsCustom ? "" : " (defaults)")}: supplier {t.SupplierLeadTimeDays} d, prep {t.PrepTimeDays} d, transit {t.TransitDays} d, safety {t.SafetyStockDays} d; restock covers {t.TargetStockDays} days of sales.";
+        return $"{stockout}Lead times{(t.IsCustom ? "" : " (defaults)")}: supplier {t.SupplierLeadTimeDays} d, prep {t.PrepTimeDays} d, transit {t.TransitDays} d, safety {t.SafetyStockDays} d; restock covers {t.TargetStockDays} days of sales. "
+            + "Sales are a blend of the last 30 days (60%) and 90 days (40%), adjusted for the time of year from the family's past sales; the family's restock rules round the amounts.";
+    }
+
+    /// <summary>
+    /// The season note under a suggestion, e.g. "Season ×1.4: busier than usual", when the family's past sales
+    /// show the coming weeks differ from an average month; <see langword="null"/> when flat or not learned yet.
+    /// </summary>
+    /// <param name="plan">The plan.</param>
+    /// <returns>The note, or <see langword="null"/>.</returns>
+    public static string? Season(RestockPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (plan.SeasonFactor is not { } factor || Math.Abs(factor - 1m) < 0.05m)
+        {
+            return null;
+        }
+
+        return $"Season ×{factor.ToString("0.0#", CultureInfo.InvariantCulture)}: {(factor > 1m ? "busier" : "quieter")} than usual";
     }
 
     /// <summary>Width of the filled part of the cover bar: days of inventory against the target cover.</summary>

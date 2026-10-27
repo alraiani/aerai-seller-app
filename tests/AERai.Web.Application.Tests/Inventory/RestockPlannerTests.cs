@@ -153,4 +153,31 @@ public sealed class RestockPlannerTests
 
         Assert.Equal((before.ReorderBy, before.ReorderQuantity), (after.ReorderBy, after.ReorderQuantity));
     }
+
+    [Fact]
+    public void FamilyRules_RoundTheSendAndTheOrder()
+    {
+        // 2/day for 90 days = 180 wanted at Amazon; 37 there leaves 143 → 140 in 10s.
+        var plan = RestockPlanner.Plan(Today, DemandForecast.Flat(2m), 37, 500, Times, new RestockRules(5, 10, 50, 100, 10))!;
+
+        Assert.Equal((143, 140, 0), (plan.UnitsNeeded, plan.SendToAmazon, plan.ShortAtHome));
+        Assert.Equal(0, plan.ReorderQuantity % 10);
+        Assert.True(plan.ReorderQuantity >= 180);
+    }
+
+    [Fact]
+    public void Season_AheadOfABusyStretch_PlansMoreThanFlat()
+    {
+        int[] pattern = [10, 10, 20, 30, 30, 30, 30, 30, 30, 20, 10, 10];
+        var history = Enumerable.Range(0, 24).Select(m => Today.AddMonths(-24 + m)).Select(d => (d.Year, d.Month, pattern[d.Month - 1]));
+        var season = SeasonalityIndex.From(history, new DateOnly(2026, 3, 1));
+        var march = new DateOnly(2026, 3, 1);
+
+        var flat = RestockPlanner.Plan(march, DemandForecast.Flat(1m), 0, 1000, Times, RestockRules.None)!;
+        var seasonal = RestockPlanner.Plan(march, new DemandForecast(1m, season), 0, 1000, Times, RestockRules.None)!;
+
+        Assert.True(seasonal.SendToAmazon > flat.SendToAmazon, $"{seasonal.SendToAmazon} vs {flat.SendToAmazon}");
+        Assert.True(seasonal.SeasonFactor > 1m);
+        Assert.Null(flat.SeasonFactor);
+    }
 }

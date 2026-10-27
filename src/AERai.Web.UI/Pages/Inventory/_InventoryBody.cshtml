@@ -310,6 +310,10 @@
                             {
                                 <div class="next-step" title="@InventoryFormat.StepsTip(item)">
                                     <div><strong>@send.Action</strong> <span class="text-muted-token">@send.When</span></div>
+                                    @if (InventoryFormat.Season(plan) is { } season)
+                                    {
+                                        <div class="cell-sub">@season</div>
+                                    }
                                     @if (amazon is not null)
                                     {
                                         <div class="cell-sub">@amazon</div>

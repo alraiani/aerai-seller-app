@@ -23,6 +23,13 @@ public interface IProductFamilyService
     /// <returns>The saved (tidied) name, or why it was not renamed.</returns>
     Task<Result<string>> RenameAsync(int id, string? name, CancellationToken cancellationToken);
 
+    /// <summary>Sets how a family's suggested sends and supplier orders are rounded.</summary>
+    /// <param name="id">Family id.</param>
+    /// <param name="rules">The rules; blank fields leave that quantity unrounded.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Success, or why the rules can't be saved.</returns>
+    Task<Result> SetRulesAsync(int id, RestockRules rules, CancellationToken cancellationToken);
+
     /// <summary>Deletes a family; its SKUs stay, unassigned.</summary>
     /// <param name="id">Family id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

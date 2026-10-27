@@ -298,6 +298,42 @@ public sealed class InventoryServiceTests
     }
 
     [Fact]
+    public async Task GetItemsAsync_RoundsTheSendAndOrderByTheFamilysRules()
+    {
+        Stock("A", available: 30, p => { p.HomeStock = 500; p.FamilyId = 7; });
+        Sold("A", Eastern(9, 6, 12), 30); // 1 per day over 30 days.
+        _queries.LeadTimes["A"] = new LeadTimeSettings(null, null, 5, 0, 63);
+        _queries.FamilyRules[7] = new RestockRules(5, 10, 50, 100, 10);
+
+        var item = await SingleItemAsync();
+
+        // 63 days' worth less 30 at Amazon = 33 → 35 in 5s; the order is at least 100, in 10s.
+        Assert.Equal((33, 35), (item.Restock!.UnitsNeeded, item.Restock.SendToAmazon));
+        Assert.Equal(0, item.Restock.ReorderQuantity % 10);
+        Assert.True(item.Restock.ReorderQuantity >= 100);
+    }
+
+    [Fact]
+    public async Task GetItemsAsync_LearnsTheSeasonFromTheFamilysSales()
+    {
+        Stock("A", available: 30, p => { p.HomeStock = 500; p.FamilyId = 7; });
+        Stock("B", available: 30, p => p.FamilyId = 7);
+        Sold("A", Eastern(9, 6, 12), 30);
+        int[] pattern = [10, 10, 20, 30, 30, 30, 30, 30, 30, 20, 10, 10];
+        for (var m = 1; m <= 24; m++)
+        {
+            var month = new DateOnly(2026, 10, 1).AddMonths(-m);
+            _queries.Monthly.Add(new MonthlyUnitsSold(m % 2 == 0 ? "A" : "B", month.Year, month.Month, pattern[month.Month - 1]));
+        }
+
+        var item = (await CreateService().GetItemsAsync(Us, CancellationToken.None)).Single(i => i.Sku == "A");
+
+        // October into winter is quieter than an average month, and the family's pooled history says so.
+        Assert.NotNull(item.Restock!.SeasonFactor);
+        Assert.True(item.Restock.SeasonFactor < 1m, $"{item.Restock.SeasonFactor}");
+    }
+
+    [Fact]
     public async Task GetWorksheetAsync_FollowsThePrintedSheetOrder()
     {
         // As on the paper count sheet: blue, green, pink, purple; shared styles A–Z, then the blue-only SBP001BL.
