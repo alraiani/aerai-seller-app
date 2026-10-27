@@ -413,11 +413,17 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        // The page's entries in one query, by logged time; the user is matched in memory.
-        var times = page.Select(a => a.CreatedAt).Distinct().ToList();
-        var entries = times.Count == 0 ? [] : await ToEntries(filtered.Where(x => times.Contains(x.Movement.CreatedAt)).OrderByDescending(x => x.Movement.Id))
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        // One capped query per action (at most a page of them), so a count sheet of thousands of rows never loads in full.
+        var entries = new Dictionary<(DateTimeOffset, string), List<HomeStockLedgerEntry>>();
+        foreach (var action in page)
+        {
+            entries[(action.CreatedAt, action.CreatedBy)] = await ToEntries(filtered
+                    .Where(x => x.Movement.CreatedAt == action.CreatedAt && x.Movement.CreatedBy == action.CreatedBy)
+                    .OrderByDescending(x => x.Movement.Id)
+                    .Take(maxRows))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         var items = page.Select(a =>
         {
@@ -427,8 +433,7 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
             AddIf(types, a.Counted, HomeStockMovementType.CountCorrection);
             AddIf(types, a.Other, HomeStockMovementType.Other);
             AddIf(types, a.Opening, HomeStockMovementType.OpeningBalance);
-            var own = entries.Where(e => e.CreatedAt == a.CreatedAt && e.CreatedBy == a.CreatedBy).Take(maxRows).ToList();
-            return new HomeStockLedgerAction(a.CreatedAt, a.CreatedBy, types, a.Count, a.Skus, a.In, a.Out, a.Reversals, a.From, a.To, a.Reference, own);
+            return new HomeStockLedgerAction(a.CreatedAt, a.CreatedBy, types, a.Count, a.Skus, a.In, a.Out, a.Reversals, a.From, a.To, a.Reference, entries[(a.CreatedAt, a.CreatedBy)]);
         }).ToList();
 
         return new PagedResult<HomeStockLedgerAction>(items, total, request.SafePage, request.SafePageSize);
