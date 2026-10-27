@@ -9,7 +9,7 @@
     var canRun = Model.Connection.CanRun;
     var me = User.Identity!.Name!;
     var deletedView = Model.View == ScheduleView.Deleted;
-    var anyRunning = Model.Summary.Running > 0;
+    var anyRunning = Model.Summary.Running > 0 || Model.JustQueued;
 }
 
 @* ---------- Connection + page actions ---------- *@
@@ -179,7 +179,7 @@
 {
     <div class="auto-refresh mb-2" data-auto-refresh="10">
         <span class="status-light status-running" aria-hidden="true"></span>
-        <span>A run is in progress — this page refreshes every 10 s.</span>
+        <span>@(Model.Summary.Running > 0 ? "A run is in progress" : "A run is queued") — this page refreshes every 10 s.</span>
         <button type="button" class="btn btn-sm btn-link p-0" data-auto-refresh-stop>Stop</button>
     </div>
 }
@@ -287,8 +287,30 @@
                     }
                 </tr>
             </thead>
-            <tbody>
-            @foreach (var row in Model.Rows)
+            @* One section per kind of data (orders, inventory and restock, settlements and payments, advertising);
+               the chosen sort applies inside each. *@
+            @foreach (var group in Model.Rows.GroupBy(r => r.Schedule.ReportType.Category()).OrderBy(g => g.Key))
+            {
+                var label = ScheduleDisplay.CategoryLabel(group.Key);
+                var on = group.Count(r => r.Schedule.IsEnabled);
+                var failing = group.Count(r => r.LastRun?.Status == SyncRunStatus.Failed);
+            <tbody class="schedule-group" id="sync-@group.Key">
+                <tr class="group-row schedule-group-row">
+                    <td class="select-col">
+                        <input type="checkbox" class="form-check-input" data-select-group aria-label="Select every @label schedule" />
+                    </td>
+                    <td colspan="@(deletedView ? 4 : 6)">
+                        <span class="schedule-group-title"><partial name="_Icon" model="ScheduleDisplay.CategoryIcon(group.Key)" /> @label</span>
+                        <span class="cell-sub ms-2">
+                            @group.Count() schedule@(group.Count() == 1 ? "" : "s")@(deletedView ? "" : $" · {on} on")
+                        </span>
+                        @if (failing > 0)
+                        {
+                            <span class="pill pill-bad ms-2">@failing failing</span>
+                        }
+                    </td>
+                </tr>
+            @foreach (var row in group)
             {
                 var s = row.Schedule;
                 var last = row.LastRun;
@@ -348,7 +370,7 @@
                     <td>
                         @if (last is not null)
                         {
-                            <a asp-page="Runs" asp-route-scheduleId="@s.Id" class="@ScheduleDisplay.StatusPill(last.Status)" title="@(last.Message ?? "View run history")">@ScheduleDisplay.StatusLabel(last.Status)</a>
+                            <a asp-page="Runs" asp-route-scheduleId="@s.Id" class="@ScheduleDisplay.StatusPill(last.Status)" title="@(last.Message ?? "View run history")">@(ScheduleDisplay.IsWaiting(last) ? "Waiting on Amazon" : ScheduleDisplay.StatusLabel(last.Status))</a>
                             <div class="cell-sub" title="@ScheduleDisplay.Local(last.StartedAt, s.TimeZoneId)">@ScheduleDisplay.Relative(last.StartedAt, Model.Now)</div>
                         }
                         else
@@ -422,6 +444,7 @@
                 </tr>
             }
             </tbody>
+            }
         </table>
     </div>
     @if (Model.Rows.Count == 0)

@@ -43,4 +43,15 @@ public static class AmazonReportTypeExtensions
         reportType is AmazonReportType.FbaInventory or AmazonReportType.FbaReservedInventory
             ? TimeSpan.FromMinutes(30)
             : TimeSpan.Zero;
+
+    /// <summary>The kind of business data the report brings in.</summary>
+    /// <param name="reportType">The report type.</param>
+    /// <returns>Its category; restock recommendations count as inventory.</returns>
+    public static SyncCategory Category(this AmazonReportType reportType) => reportType switch
+    {
+        AmazonReportType.Orders or AmazonReportType.OrdersApi => SyncCategory.Orders,
+        AmazonReportType.Settlements or AmazonReportType.DeferredTransactions => SyncCategory.SettlementsAndPayments,
+        AmazonReportType.AdsSpend => SyncCategory.Advertising,
+        _ => SyncCategory.Inventory,
+    };
 }
