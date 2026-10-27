@@ -89,11 +89,14 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
         {
             var anchor = await dbContext.HomeStockMovements.AsNoTracking()
                 .Where(m => m.Id == entryId && m.MarketplaceId == marketplaceId)
-                .Select(m => new { m.CreatedAt, m.CreatedBy })
+                .Select(m => new { m.CreatedAt, m.CreatedBy, IsSend = m.Type == HomeStockMovementType.ShippedToAmazon })
                 .SingleOrDefaultAsync(cancellationToken)
                 .ConfigureAwait(false);
+
+            // Sends are an action of their own even when one save also recounted (see ListActionsAsync).
             return anchor is null ? null
-                : dbContext.HomeStockMovements.Where(m => m.MarketplaceId == marketplaceId && m.CreatedAt == anchor.CreatedAt && m.CreatedBy == anchor.CreatedBy);
+                : dbContext.HomeStockMovements.Where(m => m.MarketplaceId == marketplaceId && m.CreatedAt == anchor.CreatedAt && m.CreatedBy == anchor.CreatedBy
+                    && (m.Type == HomeStockMovementType.ShippedToAmazon) == anchor.IsSend);
         }, marketplaceId, createdAt, createdBy, cancellationToken);
 
     /// <inheritdoc/>
@@ -382,13 +385,15 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
 
         var filtered = Filtered(marketplaceId, filter, request.SafeSearch);
 
-        // Type is stored as text, so the kinds in an action are counted one by one rather than taken as a min/max.
+        // A save that recounts and sends (the Worksheet) lists as two actions, so undoing the shipment never undoes the
+        // counts. Type is stored as text, so the kinds in an action are counted one by one rather than taken as a min/max.
         var actions = filtered
-            .GroupBy(x => new { x.Movement.CreatedAt, x.Movement.CreatedBy })
+            .GroupBy(x => new { x.Movement.CreatedAt, x.Movement.CreatedBy, IsSend = x.Movement.Type == HomeStockMovementType.ShippedToAmazon })
             .Select(g => new
             {
                 g.Key.CreatedAt,
                 g.Key.CreatedBy,
+                g.Key.IsSend,
                 Count = g.Count(),
                 Skus = g.Select(x => x.Movement.Sku).Distinct().Count(),
                 In = g.Sum(x => x.Movement.Units > 0 ? x.Movement.Units : 0),
@@ -408,17 +413,19 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
         var page = await actions
             .OrderByDescending(a => a.CreatedAt)
             .ThenBy(a => a.CreatedBy)
+            .ThenBy(a => a.IsSend)
             .Skip(request.Skip)
             .Take(request.SafePageSize)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
         // One capped query per action (at most a page of them), so a count sheet of thousands of rows never loads in full.
-        var entries = new Dictionary<(DateTimeOffset, string), List<HomeStockLedgerEntry>>();
+        var entries = new Dictionary<(DateTimeOffset, string, bool), List<HomeStockLedgerEntry>>();
         foreach (var action in page)
         {
-            entries[(action.CreatedAt, action.CreatedBy)] = await ToEntries(filtered
-                    .Where(x => x.Movement.CreatedAt == action.CreatedAt && x.Movement.CreatedBy == action.CreatedBy)
+            entries[(action.CreatedAt, action.CreatedBy, action.IsSend)] = await ToEntries(filtered
+                    .Where(x => x.Movement.CreatedAt == action.CreatedAt && x.Movement.CreatedBy == action.CreatedBy
+                        && (x.Movement.Type == HomeStockMovementType.ShippedToAmazon) == action.IsSend)
                     .OrderByDescending(x => x.Movement.Id)
                     .Take(maxRows))
                 .ToListAsync(cancellationToken)
@@ -433,7 +440,7 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
             AddIf(types, a.Counted, HomeStockMovementType.CountCorrection);
             AddIf(types, a.Other, HomeStockMovementType.Other);
             AddIf(types, a.Opening, HomeStockMovementType.OpeningBalance);
-            return new HomeStockLedgerAction(a.CreatedAt, a.CreatedBy, types, a.Count, a.Skus, a.In, a.Out, a.Reversals, a.From, a.To, a.Reference, entries[(a.CreatedAt, a.CreatedBy)]);
+            return new HomeStockLedgerAction(a.CreatedAt, a.CreatedBy, types, a.Count, a.Skus, a.In, a.Out, a.Reversals, a.From, a.To, a.Reference, entries[(a.CreatedAt, a.CreatedBy, a.IsSend)]);
         }).ToList();
 
         return new PagedResult<HomeStockLedgerAction>(items, total, request.SafePage, request.SafePageSize);

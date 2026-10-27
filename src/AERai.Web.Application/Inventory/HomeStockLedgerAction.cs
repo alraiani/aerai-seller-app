@@ -8,8 +8,9 @@ namespace AERai.Web.Application.Inventory;
 /// </summary>
 /// <remarks>
 /// Every save stamps all its entries with one logged time, so <see cref="LoggedAt"/> and <see cref="LoggedBy"/>
-/// identify the action without a column of their own. An edit's corrected copy keeps the original's logged time,
-/// so it stays in the action it belongs to.
+/// identify the action without a column of their own. Sends to Amazon are kept apart from the rest of the same save
+/// (a Worksheet save can recount and send), so undoing a shipment never undoes the counts. An edit's corrected copy
+/// keeps the original's logged time, so it stays in the action it belongs to.
 /// </remarks>
 /// <param name="LoggedAt">When the action was saved.</param>
 /// <param name="LoggedBy">Who saved it.</param>

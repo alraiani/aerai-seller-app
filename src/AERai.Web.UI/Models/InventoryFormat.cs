@@ -135,24 +135,6 @@ public static class InventoryFormat
             : null;
     }
 
-    /// <summary>
-    /// A warning when the suggested supplier order would leave more stock than sells in a long time (long-term storage
-    /// fees); <see langword="null"/> otherwise.
-    /// </summary>
-    /// <param name="plan">The plan.</param>
-    /// <param name="warningDays">Cover past which the order is flagged.</param>
-    /// <returns>The warning, or <see langword="null"/>.</returns>
-    public static string? ReorderCoverWarning(RestockPlan plan, int warningDays)
-    {
-        ArgumentNullException.ThrowIfNull(plan);
-        if (plan.CoverAfterReorderDays is not { } days || days <= warningDays)
-        {
-            return null;
-        }
-
-        return days >= DemandForecast.MaxDays ? "Covers years of sales: risks storage fees" : $"Covers about {days / 30:N0} months of sales: risks storage fees";
-    }
-
     /// <summary>The aged-stock note for a SKU, e.g. "12 units over 180 days at Amazon · ~$6.00 surcharge"; <see langword="null"/> when none.</summary>
     /// <param name="position">The SKU's position.</param>
     /// <param name="money">Formats an amount in the marketplace's currency.</param>

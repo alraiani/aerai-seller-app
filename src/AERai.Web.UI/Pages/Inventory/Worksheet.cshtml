@@ -253,10 +253,6 @@
                                         {
                                             var reorder = InventoryFormat.Reorder(plan);
                                             <div><strong>@reorder.Action</strong> <span class="@InventoryFormat.DueClass(plan.DaysUntilReorder, Model.SoonDays)">@reorder.When</span></div>
-                                            @if (InventoryFormat.ReorderCoverWarning(plan, Model.ReorderWarningDays) is { } coverWarning)
-                                            {
-                                                <div class="cell-sub text-warn">@coverWarning</div>
-                                            }
                                         }
                                     </td>
                                 </tr>

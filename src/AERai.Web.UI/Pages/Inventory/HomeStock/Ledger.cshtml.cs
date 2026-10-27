@@ -330,10 +330,27 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
         }
 
         var (updated, unchanged, skipped) = result.Value;
-        var message = $"Reason set on {updated:N0} entr{(updated == 1 ? "y" : "ies")}"
+        var message = $"Changed {updated:N0} entr{(updated == 1 ? "y" : "ies")}"
             + (unchanged > 0 ? $"; {unchanged:N0} already had it" : string.Empty)
             + (skipped.Count > 0 ? $". {skipped.Count:N0} skipped: {string.Join(" ", skipped.Take(5))}{(skipped.Count > 5 ? " …" : string.Empty)}" : ".");
         TempData[skipped.Count > 0 && updated == 0 ? StatusMessage.Error : StatusMessage.Success] = message;
+        return RedirectToPage(ListRoute());
+    }
+
+    /// <summary>Undoes the ticked entries, all or nothing.</summary>
+    /// <param name="ids">The ticked entries.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back to the list.</returns>
+    public async Task<IActionResult> OnPostUndoSelectedAsync(long[]? ids, CancellationToken cancellationToken)
+    {
+        if (!CanEdit)
+        {
+            return Forbid();
+        }
+
+        await LoadMarketplaceAsync(cancellationToken);
+        var result = await ledger.ReverseManyAsync(Marketplace.MarketplaceId, ids ?? [], User.Identity!.Name!, cancellationToken); // Non-null: the page requires an authenticated user.
+        TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? result.Value : result.Error;
         return RedirectToPage(ListRoute());
     }
 

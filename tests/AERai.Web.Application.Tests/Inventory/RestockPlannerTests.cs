@@ -175,12 +175,12 @@ public sealed class RestockPlannerTests
     }
 
     [Fact]
-    public void BatchMinimumOnASlowSeller_ReportsTheLongCover()
+    public void BatchMinimumOnASlowSeller_StillOrdersTheMinimum()
     {
+        // Supplier stock is kept at home, so a long cover there draws no Amazon storage fees and isn't held back.
         var plan = RestockPlanner.Plan(Today, DemandForecast.Flat(0.1m), 5, 10, Times, new RestockRules(null, null, null, 100, 10))!;
 
         Assert.Equal(100, plan.ReorderQuantity);
-        Assert.True(plan.CoverAfterReorderDays > 365, $"{plan.CoverAfterReorderDays}");
     }
 
     [Fact]

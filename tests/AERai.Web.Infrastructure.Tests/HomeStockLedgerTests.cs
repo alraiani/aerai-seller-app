@@ -175,20 +175,31 @@ public sealed class HomeStockLedgerTests(SqlDatabaseFixture fixture) : IClassFix
         HomeStockLedgerWrite Undo(string sku, HomeStockMovementType type, int units) => Write(sku, type, units) with { CreatedBy = "undo-test" };
         var (_, first) = await ledger.RecordAsync(Undo("T-UNDO-A", HomeStockMovementType.ReceivedFromSupplier, 20), CancellationToken.None);
         await ledger.RecordAsync(Undo("T-UNDO-B", HomeStockMovementType.ReceivedFromSupplier, 10), CancellationToken.None);
-        await ledger.RecordAsync(Undo("T-UNDO-A", HomeStockMovementType.ShippedToAmazon, -4), CancellationToken.None);
+        var (_, send) = await ledger.RecordAsync(Undo("T-UNDO-A", HomeStockMovementType.ShippedToAmazon, -4), CancellationToken.None);
         var (_, later) = await ledger.RecordAsync(Undo("T-UNDO-B", HomeStockMovementType.ShippedToAmazon, -6) with { CreatedAt = Now.AddHours(1) }, CancellationToken.None);
 
-        // Undoing the first save would take B to -6, so nothing is written.
+        // The first save received and sent at one logged time; the send lists as an action of its own.
+        var listed = await ledger.ListActionsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-UNDO-A"), new PageRequest(), 10, CancellationToken.None);
+        Assert.Equal(
+            [[HomeStockMovementType.ReceivedFromSupplier], [HomeStockMovementType.ShippedToAmazon]],
+            listed.Items.OrderBy(a => a.Types[0]).Select(a => a.Types.ToList()));
+
+        // Undoing the received part while the sends stand would take A to -4 and B to -6, so nothing is written.
         var (blocked, _, skus) = await ledger.ReverseActionAsync(MarketplaceIds.UnitedStates, first!.Value, Now.AddHours(2), "undoer", CancellationToken.None);
         Assert.Equal(HomeStockLedgerOutcome.WouldGoNegative, blocked);
-        Assert.Equal(["T-UNDO-B"], skus);
+        Assert.Equal(["T-UNDO-A", "T-UNDO-B"], skus.Order());
         Assert.Equal((16, 16, 2), await StateAsync("T-UNDO-A"));
+
+        // Undoing the send reverses only the send, never the units received in the same save.
+        var (sendOutcome, sendReversed, _) = await ledger.ReverseActionAsync(MarketplaceIds.UnitedStates, send!.Value, Now.AddHours(2), "undoer", CancellationToken.None);
+        Assert.Equal((HomeStockLedgerOutcome.Recorded, 1), (sendOutcome, sendReversed));
+        Assert.Equal((20, 20, 3), await StateAsync("T-UNDO-A"));
 
         await ledger.ReverseActionAsync(MarketplaceIds.UnitedStates, later!.Value, Now.AddHours(2), "undoer", CancellationToken.None);
         var (outcome, reversed, _) = await ledger.ReverseActionAsync(MarketplaceIds.UnitedStates, first.Value, Now.AddHours(3), "undoer", CancellationToken.None);
 
-        // The first save held A +20, B +10 and A -4 (same logged time), so all three are reversed, A twice.
-        Assert.Equal((HomeStockLedgerOutcome.Recorded, 3), (outcome, reversed));
+        // The received part held A +20 and B +10 (same logged time), so both are reversed.
+        Assert.Equal((HomeStockLedgerOutcome.Recorded, 2), (outcome, reversed));
         Assert.Equal((0, 0, 4), await StateAsync("T-UNDO-A"));
         Assert.Equal((0, 0, 4), await StateAsync("T-UNDO-B"));
         var (again, _, _) = await ledger.ReverseActionAsync(MarketplaceIds.UnitedStates, first.Value, Now.AddHours(4), "undoer", CancellationToken.None);

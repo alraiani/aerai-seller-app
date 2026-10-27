@@ -8,7 +8,7 @@
     var count = grouped ? Model.Actions.TotalCount : Model.Entries.TotalCount;
     var noun = grouped ? (count == 1 ? "action" : "actions") : (count == 1 ? "entry" : "entries");
     var empty = grouped ? Model.Actions.Items.Count == 0 : Model.Entries.Items.Count == 0;
-    // Operators get a tick-box column first (bulk reason) and an actions column last.
+    // Operators get a tick-box column first (bulk movement change and undo) and an actions column last.
     var lead = Model.CanEdit ? 1 : 0;
     var columns = Model.CanEdit ? 10 : 8;
     var editable = grouped ? Model.Actions.Items.Any(g => g.Entries.Any(e => e.CanEdit)) : Model.Entries.Items.Any(e => e.CanEdit);
@@ -109,10 +109,10 @@
             @* Tick entries, or a whole movement with its group's box; the boxes belong to this form through form="…". *@
             <form method="post" asp-page="Ledger" asp-page-handler="Reason" asp-all-route-data="@Model.ListRouteValues()" id="ledger-bulk-form"
                   class="bulk-bar bulk-bar-row no-print" data-bulk-bar data-bulk-noun="row"
-                  data-confirm="Set the reason on the ticked rows? Each change is recorded as a correction; the originals stay in the history.">
-                <span class="bulk-count" data-bulk-count>Tick rows, or a whole action, to set their reason at once.</span>
-                <select name="reasonType" class="form-select form-select-sm bulk-input" aria-label="Movement to set on the ticked rows" data-bulk-button>
-                    <option value="">Keep each movement</option>
+                  data-confirm="Change the movement type (and note) of the ticked rows? Each change is recorded as a correction; the originals stay in the history.">
+                <span class="bulk-count" data-bulk-count>Tick rows, or a whole action, to change their movement type or undo them at once.</span>
+                <select name="reasonType" class="form-select form-select-sm bulk-input" aria-label="Movement type to set on the ticked rows" data-bulk-button>
+                    <option value="">Change movement to…</option>
                     @foreach (var (type, typeLabel) in LedgerModel.LoggableTypes)
                     {
                         <option value="@type">@typeLabel</option>
@@ -120,7 +120,11 @@
                 </select>
                 <input type="text" name="reasonNote" class="form-control form-control-sm bulk-input" maxlength="@HomeStockLedgerService.MaxNoteLength"
                        placeholder="Note (blank keeps each note)" aria-label="Note to set on the ticked rows" autocomplete="off" data-bulk-button />
-                <button type="submit" class="btn btn-sm btn-soft" data-bulk-button><partial name="_Icon" model='"check"' /> Set reason</button>
+                <button type="submit" class="btn btn-sm btn-soft" data-bulk-button><partial name="_Icon" model='"check"' /> Apply to ticked</button>
+                <button type="submit" class="btn btn-sm btn-soft" data-bulk-button asp-page-handler="UndoSelected" asp-all-route-data="@Model.ListRouteValues()"
+                        data-confirm="Undo the ticked rows? Every one is reversed, or none is if one can't be. The originals stay in the history.">
+                    <partial name="_Icon" model='"restore"' /> Undo ticked
+                </button>
             </form>
         }
         <div class="table-responsive">
@@ -217,8 +221,10 @@
                                     <div class="d-inline-flex gap-2 no-print">
                                         @if (Model.CanEdit && action.CanUndo)
                                         {
-                                            <form method="post" asp-page="Ledger" asp-page-handler="Undo" asp-route-id="@action.AnchorId" asp-all-route-data="@Model.ListRouteValues()"
+                                            <form method="post" asp-page="Ledger" asp-page-handler="Undo" asp-all-route-data="@Model.ListRouteValues()"
                                                   data-confirm="Undo this whole action (@label, @logged.ToString("MMM d, h:mm tt", en))? Every entry in it is reversed, or none is if one can't be. The originals stay in the history.">
+                                                @* The action travels as a field: asp-all-route-data replaces any asp-route-* set before it. *@
+                                                <input type="hidden" name="id" value="@action.AnchorId" />
                                                 <button type="submit" class="btn btn-sm btn-soft" data-bs-toggle="tooltip" data-bs-title="Reverse every entry of this action">
                                                     <partial name="_Icon" model='"restore"' /> Undo action
                                                 </button>

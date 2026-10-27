@@ -102,7 +102,8 @@ public interface IHomeStockLedgerRepository
     Task<PagedResult<HomeStockLedgerEntry>> ListAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, CancellationToken cancellationToken);
 
     /// <summary>
-    /// One page of a marketplace's actions (entries sharing when they were logged and by whom), newest first.
+    /// One page of a marketplace's actions (entries sharing when they were logged and by whom, with sends to Amazon
+    /// apart from the rest of the same save), newest first.
     /// </summary>
     /// <param name="marketplaceId">Marketplace.</param>
     /// <param name="filter">SKU, family, type, and date range (applied to the entries, so totals count matching ones).</param>
@@ -113,7 +114,8 @@ public interface IHomeStockLedgerRepository
     Task<PagedResult<HomeStockLedgerAction>> ListActionsAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, int maxRows, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Undoes the action an entry belongs to: reverses every entry logged with it that can still be reversed,
+    /// Undoes the action an entry belongs to (as <see cref="ListActionsAsync"/> groups them, so a send's action never
+    /// includes the recounts saved with it): reverses every entry logged with it that can still be reversed,
     /// all in one serializable transaction, every reversal logged at <paramref name="createdAt"/> (so the undo
     /// is one action too). Nothing is written unless all of them can be.
     /// </summary>

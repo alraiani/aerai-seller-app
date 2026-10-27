@@ -107,7 +107,6 @@ public static class RestockPlanner
             Units(forecast.Units(today.AddDays(leadTimes.OrderLeadDays), leadTimes.TargetStockDays)),
             Units(forecast.Units(today, leadTimes.OrderLeadDays + leadTimes.TargetStockDays)) - (atAmazon + atHome)));
 
-        var coverAfterReorder = forecast.DaysCovered(today, atAmazon + atHome + reorder);
         var nextAction = sendBy is { } s && s < reorderBy ? s : reorderBy;
         return new RestockPlan(
             stockout,
@@ -123,8 +122,7 @@ public static class RestockPlanner
             nextAction.DayNumber - today.DayNumber,
             forecast.Season.IsLearned ? Math.Round(forecast.Season.Average(today, leadTimes.TargetStockDays), 2) : null,
             heldForExcess,
-            cappedForAge,
-            coverAfterReorder);
+            cappedForAge);
     }
 
     private static int Units(decimal value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);

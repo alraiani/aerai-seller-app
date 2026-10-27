@@ -38,13 +38,6 @@ public sealed class InventoryOptions
     [Range(30, 365)]
     public int MaxAmazonCoverDays { get; set; } = 150;
 
-    /// <summary>
-    /// A supplier order that would leave more than this many days of sales in stock (Amazon + home + the order) is
-    /// flagged, since slow sellers ordered at a batch minimum can sit long enough to draw long-term storage fees.
-    /// </summary>
-    [Range(30, 1095)]
-    public int ReorderCoverWarningDays { get; set; } = 365;
-
     /// <summary>A restock action due within this many days counts as "soon" (highlighted, and alerted on).</summary>
     [Range(0, 90)]
     public int AlertLeadDays { get; set; } = 7;
