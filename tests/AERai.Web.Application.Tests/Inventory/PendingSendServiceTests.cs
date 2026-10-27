@@ -132,6 +132,37 @@ public sealed class PendingSendServiceTests
     }
 
     [Fact]
+    public async Task CancelShipmentAsync_ReversesEverySendAsOneAction()
+    {
+        _ledgerRepository.Skus.Add(Sku);
+        _ledgerRepository.Skus.Add("FOB00GR");
+        await _ledgerRepository.RecordAsync(new(Us, Sku, HomeStockMovementType.ReceivedFromSupplier, 50, Now, null, null, null, Now, User), CancellationToken.None);
+        await _ledgerRepository.RecordAsync(new(Us, "FOB00GR", HomeStockMovementType.ReceivedFromSupplier, 30, Now, null, null, null, Now, User), CancellationToken.None);
+        await _ledgerRepository.RecordAsync(new(Us, Sku, HomeStockMovementType.ShippedToAmazon, -24, Now, null, null, null, Now, User), CancellationToken.None);
+        await _ledgerRepository.RecordAsync(new(Us, "FOB00GR", HomeStockMovementType.ShippedToAmazon, -10, Now, null, null, null, Now, User), CancellationToken.None);
+        _repository.Sends.Add(Send(3, 24, Now));
+        _repository.Sends.Add(Send(4, 10, Now));
+
+        var result = await CreateService().CancelShipmentAsync(Us, [3, 4], User, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal((50, 30), (_ledgerRepository.Balance(Us, Sku), _ledgerRepository.Balance(Us, "FOB00GR")));
+        Assert.Equal([3L, 4L], _ledgerRepository.Entries.Skip(4).Select(e => e.ReversesId ?? 0));
+    }
+
+    [Fact]
+    public async Task CancelShipmentAsync_OneSendPartlyAtAmazon_CancelsNothing()
+    {
+        _repository.Sends.Add(Send(1, 24, Now));
+        _repository.Sends.Add(Send(2, 10, Now, reconciled: 4));
+
+        var result = await CreateService().CancelShipmentAsync(Us, [1, 2], User, CancellationToken.None);
+
+        Assert.Contains("already shows 4", result.Error, StringComparison.Ordinal);
+        Assert.Empty(_ledgerRepository.Entries);
+    }
+
+    [Fact]
     public async Task SetShipmentIdAsync_AddsItOnceAndQueuesASync()
     {
         _repository.Sends.Add(Send(1, 24, Now.AddDays(-1)));

@@ -18,7 +18,11 @@ internal sealed class ProductFamilyRepository(AppDbContext dbContext) : IProduct
     public async Task<IReadOnlyList<FamilySummary>> ListAsync(CancellationToken cancellationToken) =>
         await dbContext.ProductFamilies.AsNoTracking()
             .OrderBy(f => f.Name)
-            .Select(f => new FamilySummary(f.Id, f.Name, dbContext.Products.Count(p => p.FamilyId == f.Id)))
+            .Select(f => new FamilySummary(
+                f.Id,
+                f.Name,
+                dbContext.Products.Count(p => p.FamilyId == f.Id),
+                new RestockRules(f.SendMultiple, f.SendMultipleLarge, f.SendLargeFrom, f.OrderMinimum, f.OrderMultiple)))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -41,6 +45,22 @@ internal sealed class ProductFamilyRepository(AppDbContext dbContext) : IProduct
             dbContext.Entry(family).State = EntityState.Detached;
             return null;
         }
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> SetRulesAsync(int id, RestockRules rules, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        return await dbContext.ProductFamilies.Where(f => f.Id == id)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(f => f.SendMultiple, rules.SendMultiple)
+                    .SetProperty(f => f.SendMultipleLarge, rules.SendMultipleLarge)
+                    .SetProperty(f => f.SendLargeFrom, rules.SendLargeFrom)
+                    .SetProperty(f => f.OrderMinimum, rules.OrderMinimum)
+                    .SetProperty(f => f.OrderMultiple, rules.OrderMultiple),
+                cancellationToken)
+            .ConfigureAwait(false) > 0;
     }
 
     /// <inheritdoc/>

@@ -52,6 +52,20 @@ public sealed class FamiliesModel(IProductFamilyService families) : PageModel
         return BackToList(openDialog: true);
     }
 
+    /// <summary>Sets how a family's suggested sends and supplier orders are rounded.</summary>
+    /// <param name="id">Family id.</param>
+    /// <param name="rules">The rules as typed; blank leaves that quantity unrounded.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back to the list.</returns>
+    public async Task<IActionResult> OnPostRulesAsync(int id, RulesInput rules, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        var result = await families.SetRulesAsync(
+            id, new RestockRules(rules.SendMultiple, rules.SendMultipleLarge, rules.SendLargeFrom, rules.OrderMinimum, rules.OrderMultiple), cancellationToken);
+        Report(result.IsSuccess, result.IsSuccess ? "Restock rules saved. Suggested sends and orders now follow them." : result.Error);
+        return BackToList(openDialog: true);
+    }
+
     /// <summary>Deletes a family; its SKUs become unassigned.</summary>
     /// <param name="id">Family id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
@@ -85,6 +99,25 @@ public sealed class FamiliesModel(IProductFamilyService families) : PageModel
             : clear ? $"Removed {result.Value} {noun} from {(result.Value == 1 ? "its" : "their")} family."
             : $"Put {result.Value} {noun} in \"{FamilyNames.Normalize(family)}\".");
         return BackToList(openDialog: false);
+    }
+
+    /// <summary>The restock rules form fields.</summary>
+    public sealed class RulesInput
+    {
+        /// <summary>Send multiple (e.g. 5).</summary>
+        public int? SendMultiple { get; set; }
+
+        /// <summary>Larger send multiple (e.g. 10).</summary>
+        public int? SendMultipleLarge { get; set; }
+
+        /// <summary>Send size where the larger multiple starts (e.g. 50).</summary>
+        public int? SendLargeFrom { get; set; }
+
+        /// <summary>Smallest supplier order (e.g. 100).</summary>
+        public int? OrderMinimum { get; set; }
+
+        /// <summary>Supplier order multiple (e.g. 10).</summary>
+        public int? OrderMultiple { get; set; }
     }
 
     private void Report(bool success, string message) =>

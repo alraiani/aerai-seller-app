@@ -126,41 +126,84 @@ public sealed class HomeStockLedgerTests(SqlDatabaseFixture fixture) : IClassFix
     }
 
     [SqlFact]
-    public async Task ListGroups_TotalsEachKindAndListsItsNewestEntries()
+    public async Task ListActions_GroupsEachSaveNewestFirstWithTotalsAndItsNewestEntries()
     {
         await AddProductAsync("T-GRP-A");
         await AddProductAsync("T-GRP-B");
         await using var scope = fixture.Services.CreateAsyncScope();
         var ledger = scope.ServiceProvider.GetRequiredService<IHomeStockLedgerRepository>();
-        foreach (var (sku, type, units) in new[]
+        foreach (var (sku, type, units, hour) in new[]
         {
-            ("T-GRP-A", HomeStockMovementType.ReceivedFromSupplier, 20),
-            ("T-GRP-B", HomeStockMovementType.ReceivedFromSupplier, 10),
-            ("T-GRP-A", HomeStockMovementType.ShippedToAmazon, -5),
-            ("T-GRP-B", HomeStockMovementType.ShippedToAmazon, -3),
-            ("T-GRP-A", HomeStockMovementType.ShippedToAmazon, -2),
-            ("T-GRP-A", HomeStockMovementType.Other, 4),
-            ("T-GRP-A", HomeStockMovementType.Other, -1),
+            ("T-GRP-A", HomeStockMovementType.ReceivedFromSupplier, 20, 0),
+            ("T-GRP-B", HomeStockMovementType.ReceivedFromSupplier, 10, 0),
+            ("T-GRP-A", HomeStockMovementType.ShippedToAmazon, -5, 1),
+            ("T-GRP-B", HomeStockMovementType.ShippedToAmazon, -3, 1),
+            ("T-GRP-A", HomeStockMovementType.ShippedToAmazon, -2, 1),
+            ("T-GRP-A", HomeStockMovementType.Other, 4, 2),
+            ("T-GRP-A", HomeStockMovementType.CountCorrection, 16, 2),
         })
         {
-            await ledger.RecordAsync(Write(sku, type, units), CancellationToken.None);
+            await ledger.RecordAsync(Write(sku, type, units) with { CreatedAt = Now.AddHours(hour) }, CancellationToken.None);
         }
 
         // Other test methods share the database, so the search keeps to this test's SKUs.
-        var groups = (await ledger.ListGroupsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(), "T-GRP-", 2, CancellationToken.None))
-            .ToDictionary(g => g.Type);
+        var page = await ledger.ListActionsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(), new PageRequest(1, 2, "T-GRP-"), 2, CancellationToken.None);
 
-        Assert.Equal(
-            [HomeStockMovementType.ReceivedFromSupplier, HomeStockMovementType.ShippedToAmazon, HomeStockMovementType.Other],
-            groups.Keys.Order());
-        var shipped = groups[HomeStockMovementType.ShippedToAmazon];
+        Assert.Equal(3, page.TotalCount);
+        Assert.Equal([Now.AddHours(2), Now.AddHours(1)], page.Items.Select(a => a.LoggedAt));
+        var mixed = page.Items[0];
+        Assert.Equal([HomeStockMovementType.CountCorrection, HomeStockMovementType.Other], mixed.Types);
+        Assert.Equal((4, -1, 3), (mixed.UnitsIn, mixed.UnitsOut, mixed.NetUnits)); // +4 other, then a recount from 17 to 16.
+        var shipped = page.Items[1];
         Assert.Equal((3, 2, 0, -10), (shipped.EntryCount, shipped.SkuCount, shipped.UnitsIn, shipped.UnitsOut));
         Assert.Equal([("T-GRP-A", -2), ("T-GRP-B", -3)], shipped.Entries.Select(e => (e.Sku, e.Units)));
         Assert.True(shipped.IsCapped);
-        Assert.Equal((4, -1, 3), (groups[HomeStockMovementType.Other].UnitsIn, groups[HomeStockMovementType.Other].UnitsOut, groups[HomeStockMovementType.Other].NetUnits));
 
-        var onlyB = await ledger.ListGroupsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-GRP-B", Type: HomeStockMovementType.ShippedToAmazon), null, 10, CancellationToken.None);
-        Assert.Equal([(HomeStockMovementType.ShippedToAmazon, 1)], onlyB.Select(g => (g.Type, g.EntryCount)));
+        var onlyB = await ledger.ListActionsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-GRP-B", Type: HomeStockMovementType.ShippedToAmazon), new PageRequest(), 10, CancellationToken.None);
+        Assert.Equal([(Now.AddHours(1), 1)], onlyB.Items.Select(a => (a.LoggedAt, a.EntryCount)));
+    }
+
+    [SqlFact]
+    public async Task ReverseAction_UndoesTheWholeSaveOrNothing()
+    {
+        await AddProductAsync("T-UNDO-A");
+        await AddProductAsync("T-UNDO-B");
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var ledger = scope.ServiceProvider.GetRequiredService<IHomeStockLedgerRepository>();
+
+        // Its own user, since the class's other tests log at the same time and would join its actions.
+        HomeStockLedgerWrite Undo(string sku, HomeStockMovementType type, int units) => Write(sku, type, units) with { CreatedBy = "undo-test" };
+        var (_, first) = await ledger.RecordAsync(Undo("T-UNDO-A", HomeStockMovementType.ReceivedFromSupplier, 20), CancellationToken.None);
+        await ledger.RecordAsync(Undo("T-UNDO-B", HomeStockMovementType.ReceivedFromSupplier, 10), CancellationToken.None);
+        var (_, send) = await ledger.RecordAsync(Undo("T-UNDO-A", HomeStockMovementType.ShippedToAmazon, -4), CancellationToken.None);
+        var (_, later) = await ledger.RecordAsync(Undo("T-UNDO-B", HomeStockMovementType.ShippedToAmazon, -6) with { CreatedAt = Now.AddHours(1) }, CancellationToken.None);
+
+        // The first save received and sent at one logged time; the send lists as an action of its own.
+        var listed = await ledger.ListActionsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-UNDO-A"), new PageRequest(), 10, CancellationToken.None);
+        Assert.Equal(
+            [[HomeStockMovementType.ReceivedFromSupplier], [HomeStockMovementType.ShippedToAmazon]],
+            listed.Items.OrderBy(a => a.Types[0]).Select(a => a.Types.ToList()));
+
+        // Undoing the received part while the sends stand would take A to -4 and B to -6, so nothing is written.
+        var (blocked, _, skus) = await ledger.ReverseActionAsync(MarketplaceIds.UnitedStates, first!.Value, Now.AddHours(2), "undoer", CancellationToken.None);
+        Assert.Equal(HomeStockLedgerOutcome.WouldGoNegative, blocked);
+        Assert.Equal(["T-UNDO-A", "T-UNDO-B"], skus.Order());
+        Assert.Equal((16, 16, 2), await StateAsync("T-UNDO-A"));
+
+        // Undoing the send reverses only the send, never the units received in the same save.
+        var (sendOutcome, sendReversed, _) = await ledger.ReverseActionAsync(MarketplaceIds.UnitedStates, send!.Value, Now.AddHours(2), "undoer", CancellationToken.None);
+        Assert.Equal((HomeStockLedgerOutcome.Recorded, 1), (sendOutcome, sendReversed));
+        Assert.Equal((20, 20, 3), await StateAsync("T-UNDO-A"));
+
+        await ledger.ReverseActionAsync(MarketplaceIds.UnitedStates, later!.Value, Now.AddHours(2), "undoer", CancellationToken.None);
+        var (outcome, reversed, _) = await ledger.ReverseActionAsync(MarketplaceIds.UnitedStates, first.Value, Now.AddHours(3), "undoer", CancellationToken.None);
+
+        // The received part held A +20 and B +10 (same logged time), so both are reversed.
+        Assert.Equal((HomeStockLedgerOutcome.Recorded, 2), (outcome, reversed));
+        Assert.Equal((0, 0, 4), await StateAsync("T-UNDO-A"));
+        Assert.Equal((0, 0, 4), await StateAsync("T-UNDO-B"));
+        var (again, _, _) = await ledger.ReverseActionAsync(MarketplaceIds.UnitedStates, first.Value, Now.AddHours(4), "undoer", CancellationToken.None);
+        Assert.Equal(HomeStockLedgerOutcome.CannotReverse, again);
     }
 
     private static readonly IReadOnlyDictionary<string, AmazonBaseline> NoBaselines = new Dictionary<string, AmazonBaseline>();
@@ -191,8 +234,9 @@ public sealed class HomeStockLedgerTests(SqlDatabaseFixture fixture) : IClassFix
         Assert.Equal([id.Value, copyId.Value], (await ledger.GetEntriesAsync(MarketplaceIds.UnitedStates, [id.Value, copyId.Value], CancellationToken.None)).Select(e => e.Id).Order());
         Assert.Empty(await ledger.GetEntriesAsync(MarketplaceIds.Canada, [id.Value], CancellationToken.None));
 
-        var groups = await ledger.ListGroupsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-EDIT-1"), null, 10, CancellationToken.None);
-        Assert.Equal([(HomeStockMovementType.Other, 1, 12, 0)], groups.Select(g => (g.Type, g.EntryCount, g.UnitsIn, g.UnitsOut)));
+        // The copy keeps the original's logged time, so it stays in the original's action; the edit's reversals are hidden.
+        var actions = await ledger.ListActionsAsync(MarketplaceIds.UnitedStates, new HomeStockLedgerFilter(Sku: "T-EDIT-1"), new PageRequest(), 10, CancellationToken.None);
+        Assert.Equal([(Now, 1, 12, 0)], actions.Items.Select(a => (a.LoggedAt, a.EntryCount, a.UnitsIn, a.UnitsOut)));
     }
 
     [SqlFact]

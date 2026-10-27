@@ -27,8 +27,10 @@ internal sealed class SyncRunRepository(AppDbContext dbContext) : ISyncRunReposi
     {
         ArgumentNullException.ThrowIfNull(run);
 
+        // Only a run still in progress is completed, so a check finishing late never overwrites a run a user stopped
+        // (or one failed as interrupted) in the meantime.
         return dbContext.SyncRuns
-            .Where(r => r.Id == run.Id)
+            .Where(r => r.Id == run.Id && r.Status == SyncRunStatus.Running)
             .ExecuteUpdateAsync(set => set
                 .SetProperty(r => r.Status, run.Status)
                 .SetProperty(r => r.CompletedAt, run.CompletedAt)

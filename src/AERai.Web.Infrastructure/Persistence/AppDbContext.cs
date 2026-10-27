@@ -34,6 +34,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Raw restock-recommendation report rows.</summary>
     public DbSet<StgFbaRestockRow> StgFbaRestockRows => Set<StgFbaRestockRow>();
 
+    /// <summary>Raw inventory-planning rows.</summary>
+    public DbSet<StgFbaPlanningRow> StgFbaPlanningRows => Set<StgFbaPlanningRow>();
+
     /// <summary>Raw settlement lines.</summary>
     public DbSet<StgSettlementLine> StgSettlementLines => Set<StgSettlementLine>();
 
@@ -60,6 +63,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
 
     /// <summary>Amazon's latest restock recommendation per marketplace and SKU.</summary>
     public DbSet<RestockRecommendation> RestockRecommendations => Set<RestockRecommendation>();
+
+    /// <summary>Amazon's latest stock age and excess per SKU.</summary>
+    public DbSet<InventoryHealth> InventoryHealth => Set<InventoryHealth>();
 
     /// <summary>Low/out-of-stock alerts.</summary>
     public DbSet<StockAlert> StockAlerts => Set<StockAlert>();

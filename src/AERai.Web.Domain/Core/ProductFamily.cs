@@ -11,4 +11,19 @@ public sealed class ProductFamily
 
     /// <summary>Display name; unique, case-insensitively.</summary>
     public required string Name { get; set; }
+
+    /// <summary>Sends to Amazon are a multiple of this many units (e.g. 5); null = not rounded.</summary>
+    public int? SendMultiple { get; set; }
+
+    /// <summary>From <see cref="SendLargeFrom"/> units up, sends are a multiple of this instead (e.g. 10).</summary>
+    public int? SendMultipleLarge { get; set; }
+
+    /// <summary>The send size where <see cref="SendMultipleLarge"/> takes over (e.g. 50).</summary>
+    public int? SendLargeFrom { get; set; }
+
+    /// <summary>Supplier orders are at least this many units (e.g. 100); null = no minimum.</summary>
+    public int? OrderMinimum { get; set; }
+
+    /// <summary>Supplier orders are a multiple of this many units (e.g. 10); null = not rounded.</summary>
+    public int? OrderMultiple { get; set; }
 }

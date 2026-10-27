@@ -1,5 +1,6 @@
 using System.Globalization;
 using AERai.Web.Application.Inventory;
+using AERai.Web.Domain.Reporting;
 
 namespace AERai.Web.UI.Models;
 
@@ -100,7 +101,65 @@ public static class InventoryFormat
         var stockout = item.Restock is { } plan
             ? $"Stock at Amazon runs out around {ShortDate(plan.ProjectedStockout)}; reorder from the supplier by {ShortDate(plan.ReorderBy)}. "
             : string.Empty;
-        return $"{stockout}Lead times{(t.IsCustom ? "" : " (defaults)")}: supplier {t.SupplierLeadTimeDays} d, prep {t.PrepTimeDays} d, transit {t.TransitDays} d, safety {t.SafetyStockDays} d; restock covers {t.TargetStockDays} days of sales.";
+        return $"{stockout}Lead times{(t.IsCustom ? "" : " (defaults)")}: supplier {t.SupplierLeadTimeDays} d, prep {t.PrepTimeDays} d, transit {t.TransitDays} d, safety {t.SafetyStockDays} d; restock covers {t.TargetStockDays} days of sales. "
+            + "Sales are a blend of the last 30 days (60%) and 90 days (40%), adjusted for the time of year from the family's past sales; the family's restock rules round the amounts.";
+    }
+
+    /// <summary>
+    /// The season note under a suggestion, e.g. "Season ×1.4: busier than usual", when the family's past sales
+    /// show the coming weeks differ from an average month; <see langword="null"/> when flat or not learned yet.
+    /// </summary>
+    /// <param name="plan">The plan.</param>
+    /// <returns>The note, or <see langword="null"/>.</returns>
+    public static string? Season(RestockPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (plan.SeasonFactor is not { } factor || Math.Abs(factor - 1m) < 0.05m)
+        {
+            return null;
+        }
+
+        return $"Season ×{factor.ToString("0.0#", CultureInfo.InvariantCulture)}: {(factor > 1m ? "busier" : "quieter")} than usual";
+    }
+
+    /// <summary>
+    /// Why a send is smaller than the plan wanted, when aging limits held it back; <see langword="null"/> otherwise.
+    /// </summary>
+    /// <param name="plan">The plan.</param>
+    /// <returns>The note, or <see langword="null"/>.</returns>
+    public static string? SendHold(RestockPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        return plan.HeldForExcess ? "Held: Amazon says it has more than will sell in time"
+            : plan.CappedForAge ? "Capped so stock at Amazon won't age into storage surcharges"
+            : null;
+    }
+
+    /// <summary>The aged-stock note for a SKU, e.g. "12 units over 180 days at Amazon · ~$6.00 surcharge"; <see langword="null"/> when none.</summary>
+    /// <param name="position">The SKU's position.</param>
+    /// <param name="money">Formats an amount in the marketplace's currency.</param>
+    /// <returns>The note, or <see langword="null"/>.</returns>
+    public static string? Aged(InventoryPosition position, Func<decimal, string> money)
+    {
+        ArgumentNullException.ThrowIfNull(position);
+        ArgumentNullException.ThrowIfNull(money);
+        var parts = new List<string>();
+        if (position.AgedUnits is > 0 and { } aged)
+        {
+            parts.Add($"{aged:N0} unit{(aged == 1 ? "" : "s")} over 180 days at Amazon");
+        }
+
+        if (position.EstimatedExcess is > 0 and { } excess)
+        {
+            parts.Add($"{excess:N0} excess per Amazon");
+        }
+
+        if (parts.Count > 0 && position.AgedSurchargeNextMonth is > 0 and { } surcharge)
+        {
+            parts.Add($"~{money(surcharge)} surcharge");
+        }
+
+        return parts.Count == 0 ? null : string.Join(" · ", parts);
     }
 
     /// <summary>Width of the filled part of the cover bar: days of inventory against the target cover.</summary>

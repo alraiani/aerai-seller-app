@@ -21,6 +21,10 @@ internal sealed class UnavailableAdsGateway : IAmazonAdsGateway
         throw new InvalidOperationException(Message);
 
     /// <inheritdoc/>
+    public Task CancelSpendReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken) =>
+        throw new InvalidOperationException(Message);
+
+    /// <inheritdoc/>
     public Task<Stream> OpenReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken) =>
         throw new InvalidOperationException(Message);
 }

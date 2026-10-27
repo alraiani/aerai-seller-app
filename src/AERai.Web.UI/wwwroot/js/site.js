@@ -622,9 +622,11 @@
     });
 
     // ---------- Confirm before destructive submits ----------
-    // A form with data-confirm="message" asks first; without JavaScript it simply submits.
+    // A form with data-confirm="message" asks first; without JavaScript it simply submits. A submit button with its
+    // own data-confirm (a second action in the same form, e.g. Undo ticked) asks its own question instead.
     document.addEventListener("submit", function (event) {
-        var message = event.target.getAttribute && event.target.getAttribute("data-confirm");
+        var submitter = event.submitter;
+        var message = (submitter && submitter.getAttribute("data-confirm")) || (event.target.getAttribute && event.target.getAttribute("data-confirm"));
         if (message && !window.confirm(message)) { event.preventDefault(); }
     });
 

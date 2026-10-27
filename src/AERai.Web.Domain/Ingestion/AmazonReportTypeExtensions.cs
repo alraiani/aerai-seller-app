@@ -8,10 +8,13 @@ public static class AmazonReportTypeExtensions
     /// for a past date (so it has no history to backfill).
     /// </summary>
     /// <param name="reportType">The report type.</param>
-    /// <returns><see langword="true"/> for inventory snapshots (FBA and AWD), restock recommendations, and deferred transactions.</returns>
+    /// <returns>
+    /// <see langword="true"/> for inventory snapshots (FBA, AWD, and inventory planning), restock recommendations, and
+    /// deferred transactions.
+    /// </returns>
     public static bool IsSnapshot(this AmazonReportType reportType) =>
         reportType is AmazonReportType.FbaInventory or AmazonReportType.FbaReservedInventory or AmazonReportType.RestockRecommendations
-            or AmazonReportType.AwdInventory or AmazonReportType.DeferredTransactions;
+            or AmazonReportType.AwdInventory or AmazonReportType.DeferredTransactions or AmazonReportType.FbaInventoryPlanning;
 
     /// <summary>
     /// Whether the data comes from the SP-API Reports API (a document that is landed, staged, and promoted)
@@ -43,4 +46,15 @@ public static class AmazonReportTypeExtensions
         reportType is AmazonReportType.FbaInventory or AmazonReportType.FbaReservedInventory
             ? TimeSpan.FromMinutes(30)
             : TimeSpan.Zero;
+
+    /// <summary>The kind of business data the report brings in.</summary>
+    /// <param name="reportType">The report type.</param>
+    /// <returns>Its category; restock recommendations count as inventory.</returns>
+    public static SyncCategory Category(this AmazonReportType reportType) => reportType switch
+    {
+        AmazonReportType.Orders or AmazonReportType.OrdersApi => SyncCategory.Orders,
+        AmazonReportType.Settlements or AmazonReportType.DeferredTransactions => SyncCategory.SettlementsAndPayments,
+        AmazonReportType.AdsSpend => SyncCategory.Advertising,
+        _ => SyncCategory.Inventory,
+    };
 }

@@ -1,5 +1,6 @@
 @page
 @model AERai.Web.UI.Pages.Tools.Schedules.RunsModel
+@using AERai.Web.Domain.Ingestion
 @{
     ViewData["Title"] = "Sync run history";
 }
@@ -43,7 +44,16 @@
                     <td>@r.Trigger<div class="cell-sub">@r.TriggeredBy</div></td>
                     <td>@r.StartedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
                     <td>@(r.CompletedAt is { } done ? $"{(done - r.StartedAt).TotalSeconds:0}s" : "running…")</td>
-                    <td><span class="@ScheduleDisplay.StatusPill(r.Status)">@ScheduleDisplay.StatusLabel(r.Status)</span></td>
+                    <td>
+                        <span class="@ScheduleDisplay.StatusPill(r.Status)">@(ScheduleDisplay.IsWaiting(r) ? "Waiting on Amazon" : ScheduleDisplay.StatusLabel(r.Status))</span>
+                        @if (r.Status == SyncRunStatus.Running)
+                        {
+                            <form method="post" asp-page-handler="Stop" asp-route-runId="@r.Id" asp-route-scheduleId="@Model.ScheduleId" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-link p-0 ms-1 text-bad" data-confirm="Stop run #@r.Id? A report Amazon hasn't started is cancelled there too; anything already saved is kept."
+                                        title="Stop this run"><partial name="_Icon" model='"stop"' /> Stop</button>
+                            </form>
+                        }
+                    </td>
                     <td>
                         @foreach (var batchId in (r.ImportBatchIds ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries))
                         {

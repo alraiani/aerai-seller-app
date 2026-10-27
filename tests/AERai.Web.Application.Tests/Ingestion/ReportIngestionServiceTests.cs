@@ -1,3 +1,4 @@
+using AERai.Web.Application.Common;
 using AERai.Web.Application.Imports;
 using AERai.Web.Application.Ingestion;
 using AERai.Web.Application.Tests.Fakes;
@@ -38,6 +39,7 @@ public sealed class ReportIngestionServiceTests
     private readonly FakeSyncRunRepository _runs = new();
     private readonly FakeMarketplaceQueries _marketplaces = new();
     private readonly FakeTimeProvider _clock = new(Now);
+    private readonly RunStopSignal _stops = new();
 
     private ReportIngestionService CreateService(IngestionOptions? ingestion = null)
     {
@@ -49,7 +51,7 @@ public sealed class ReportIngestionServiceTests
         // Zero poll interval by default: every check is due immediately, so RunToEndAsync needs no clock moves.
         var options = Options.Create(ingestion ?? new IngestionOptions { ReportPollInterval = TimeSpan.Zero, ReportMaxWait = TimeSpan.FromMinutes(5) });
 
-        return new ReportIngestionService(_gateway, _awd, _awdInventory, _ordersApi, _apiOrders, _finances, _deferred, _ads, _adSpend, _rawFiles, staging, _promotion, _schedules, _runs, _marketplaces, options, _clock,
+        return new ReportIngestionService(_gateway, _awd, _awdInventory, _ordersApi, _apiOrders, _finances, _deferred, _ads, _adSpend, _rawFiles, staging, _promotion, _schedules, _runs, _marketplaces, _stops, options, _clock,
             NullLogger<ReportIngestionService>.Instance);
     }
 
@@ -807,6 +809,104 @@ public sealed class ReportIngestionServiceTests
         Assert.Contains("Not requested", third.Message, StringComparison.Ordinal);
         Assert.Single(_gateway.Requests);
         Assert.Null(_schedules.Schedules[1].LastSuccessfulDataEnd);
+    }
+
+    [Fact]
+    public async Task StopAsync_RunWaitingOnAmazon_CancelsTheReportAndEndsTheRun()
+    {
+        AddSchedule(AmazonReportType.Orders);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
+        var service = CreateService(Polling);
+        var waiting = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+        var reportId = _runs.Stored[waiting.RunId].PendingReportId!;
+
+        var result = await service.StopAsync(waiting.RunId, MarketplaceIds.UnitedStates, "boss", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var run = _runs.Stored[waiting.RunId];
+        Assert.Equal((SyncRunStatus.Cancelled, null), (run.Status, run.NextCheckAt));
+        Assert.StartsWith("Stopped by boss while waiting for Amazon.", run.Message, StringComparison.Ordinal);
+        Assert.Equal([reportId], _gateway.CancelledReports);
+        Assert.Null(_schedules.Schedules[1].LastSuccessfulDataEnd);
+
+        // A stopped run is never checked again.
+        var again = await service.ContinueAsync(waiting.RunId, CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Cancelled, again.Status);
+    }
+
+    [Fact]
+    public async Task StopAsync_AmazonAlreadyStartedTheReport_StillEndsTheRun()
+    {
+        AddSchedule(AmazonReportType.Orders);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
+        _gateway.ThrowOnCancel = new HttpRequestException("report is IN_PROGRESS");
+        var service = CreateService(Polling);
+        var waiting = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        var result = await service.StopAsync(waiting.RunId, MarketplaceIds.UnitedStates, "boss", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(SyncRunStatus.Cancelled, _runs.Stored[waiting.RunId].Status);
+        Assert.Contains("already started", _runs.Stored[waiting.RunId].Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StopAsync_FinishedOrOtherMarketplace_IsRefused()
+    {
+        AddSchedule(AmazonReportType.Orders);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
+        var service = CreateService(Polling);
+        var waiting = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        var elsewhere = await service.StopAsync(waiting.RunId, MarketplaceIds.Canada, "boss", CancellationToken.None);
+        await service.StopAsync(waiting.RunId, MarketplaceIds.UnitedStates, "boss", CancellationToken.None);
+        var twice = await service.StopAsync(waiting.RunId, MarketplaceIds.UnitedStates, "boss", CancellationToken.None);
+
+        Assert.Equal((true, true), (elsewhere.IsFailure, twice.IsFailure));
+        Assert.Single(_gateway.CancelledReports);
+    }
+
+    [Fact]
+    public async Task StopAsync_DuringACheck_StopsTheCheckInsteadOfRacingIt()
+    {
+        AddSchedule(AmazonReportType.Orders);
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.InProgress, null));
+        _gateway.Statuses.Enqueue(new AmazonReportStatus(AmazonProcessingStatus.Done, "D1"));
+        _gateway.Documents["D1"] = OrdersTsv;
+        var service = CreateService(Polling);
+        var waiting = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        // The scheduler has claimed the check (NextCheckAt moved to its lease) when the user stops the run.
+        var run = _runs.Stored[waiting.RunId];
+        await _runs.TryClaimCheckAsync(run.Id, run.NextCheckAt!.Value, Now.AddMinutes(15), CancellationToken.None);
+        Result<string>? stop = null;
+        _gateway.DuringStatus = () => stop ??= service.StopAsync(waiting.RunId, MarketplaceIds.UnitedStates, "boss", CancellationToken.None).GetAwaiter().GetResult();
+        var summary = await service.ContinueAsync(waiting.RunId, CancellationToken.None);
+
+        Assert.True(stop!.IsSuccess, stop.Error);
+        Assert.Equal(SyncRunStatus.Cancelled, summary.Status);
+        Assert.Equal(SyncRunStatus.Cancelled, _runs.Stored[waiting.RunId].Status);
+        Assert.Empty(_staged.Saved);
+    }
+
+    [Fact]
+    public async Task StopAsync_RunWorkingRightNow_StopsItWhereItIs()
+    {
+        AddSchedule(AmazonReportType.Orders);
+        var service = CreateService(Polling);
+        Result<string>? stop = null;
+
+        // The user stops the run while its createReport call is in flight.
+        _gateway.DuringRequest = () => stop = service.StopAsync(_runs.Stored.Keys.Max(), MarketplaceIds.UnitedStates, "boss", CancellationToken.None).GetAwaiter().GetResult();
+        var summary = await service.RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.True(stop!.IsSuccess, stop.Error);
+        Assert.Equal(SyncRunStatus.Cancelled, summary.Status);
+        Assert.Equal("Stopped by boss.", summary.Message);
+        Assert.Empty(_gateway.Requests);
+
+        // Once it has ended, nothing is left to stop.
+        Assert.False(_stops.RequestStop(summary.RunId, "boss"));
     }
 
     [Fact]

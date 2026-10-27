@@ -114,6 +114,8 @@ public static partial class DatabaseInitializer
                 // Just after the main inventory snapshot, so both land on the same snapshot date.
                 DefaultSchedule(m, "FBA reserved inventory — daily 6:15 AM", AmazonReportType.FbaReservedInventory, ScheduleFrequency.Daily, null, new TimeOnly(6, 15), 1, now),
                 DefaultSchedule(m, "Restock recommendations — daily 6:30 AM", AmazonReportType.RestockRecommendations, ScheduleFrequency.Daily, null, new TimeOnly(6, 30), 1, now),
+                // Stock age and Amazon's estimated excess, which hold back sends that would age into storage fees.
+                DefaultSchedule(m, "Inventory age & excess — daily 6:40 AM", AmazonReportType.FbaInventoryPlanning, ScheduleFrequency.Daily, null, new TimeOnly(6, 40), 1, now),
                 DefaultSchedule(m, "Settlements — daily 7:00 AM", AmazonReportType.Settlements, ScheduleFrequency.Daily, null, new TimeOnly(7, 0), 30, now),
                 // What Amazon still holds back; once a day keeps the Settlements tile current. The listing always
                 // reaches back as far as Amazon allows, so the lookback is not used.

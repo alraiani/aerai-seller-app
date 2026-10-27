@@ -18,15 +18,21 @@ public sealed class HomeStockTemplateService(IInventoryService inventory, IHomeS
 
         var items = await inventory.GetItemsAsync(marketplace, cancellationToken).ConfigureAwait(false);
 
-        // Laid out like the worksheet (family, then color in palette order, then SKU) so a count
-        // taken shelf by shelf follows the same order; SKUs without a family or color come last.
+        // Laid out like the worksheet (family, then color in display order, then the family's shared styles before
+        // its one-offs) so a count taken shelf by shelf follows the same order; SKUs without a family or color come last.
         var rows = items
             .Where(i => familyId is null || i.Position.FamilyId == familyId)
-            .OrderBy(i => i.Position.Family is null)
-            .ThenBy(i => i.Position.Family, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(i => i.Position.Color is null)
-            .ThenBy(i => i.Position.Color)
-            .ThenBy(i => i.Sku, StringComparer.Ordinal)
+            .GroupBy(i => i.Position.Family)
+            .OrderBy(f => f.Key is null)
+            .ThenBy(f => f.Key, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(f =>
+            {
+                var shared = WorksheetSkuOrder.SharedStyles(f.Select(i => (i.Sku, i.Position.Color)));
+                return f
+                    .GroupBy(i => i.Position.Color)
+                    .OrderBy(c => c.Key is { } color ? ProductColors.Position(color) : int.MaxValue)
+                    .SelectMany(c => WorksheetSkuOrder.Order(c, i => i.Sku, shared));
+            })
             .Select(i => new HomeStockTemplateRow(
                 i.Sku,
                 i.Position.HomeStock,

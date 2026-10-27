@@ -15,7 +15,35 @@ public sealed class ProductFamilyServiceTests
         _repository.Skus["STRAP"] = null;
     }
 
-    private ProductFamilyService CreateService() => new(_repository, NullLogger<ProductFamilyService>.Instance);
+    private readonly FakeStockAlertRefreshSignal _alerts = new();
+
+    private ProductFamilyService CreateService() => new(_repository, _alerts, NullLogger<ProductFamilyService>.Instance);
+
+    [Fact]
+    public async Task SetRulesAsync_SavesValidRulesAndRefreshesAlerts()
+    {
+        var id = (await _repository.CreateAsync("Handkerchiefs", CancellationToken.None))!.Value;
+        var rules = new RestockRules(5, 10, 50, 100, 10);
+
+        var result = await CreateService().SetRulesAsync(id, rules, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(rules, _repository.Rules[id]);
+        Assert.Equal(1, _alerts.Requests);
+    }
+
+    [Theory]
+    [InlineData(0, null, null)]
+    [InlineData(5, 10, null)]
+    public async Task SetRulesAsync_BadRules_Fail(int? send, int? large, int? from)
+    {
+        var id = (await _repository.CreateAsync("Mats", CancellationToken.None))!.Value;
+
+        var result = await CreateService().SetRulesAsync(id, new RestockRules(send, large, from, null, null), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(_repository.Rules);
+    }
 
     [Fact]
     public async Task CreateAsync_TidiesTheNameAndRejectsDuplicatesIgnoringCase()

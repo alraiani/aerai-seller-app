@@ -140,6 +140,19 @@ public sealed class SyncScheduleServiceTests
     }
 
     [Fact]
+    public async Task CancelQueued_DropsWhatHasNotStarted()
+    {
+        var id = (await CreateService().CreateAsync(Input(), "ops", CancellationToken.None)).Value;
+        await CreateService().RunNowAsync(id, "ops", CancellationToken.None);
+        await CreateService().RunNowAsync(id, "ops", CancellationToken.None);
+        var service = CreateService();
+
+        Assert.Equal(2, service.QueuedRunCount);
+        Assert.Equal(2, service.CancelQueued("ops"));
+        Assert.Equal((0, 0), (service.QueuedRunCount, service.CancelQueued("ops")));
+    }
+
+    [Fact]
     public async Task RunNowAsync_ReportRequestedInsideItsCooldown_QueuesAndSaysUntilWhenItWaits()
     {
         var id = await AddScheduleAsync("FBA reserved", AmazonReportType.FbaReservedInventory);

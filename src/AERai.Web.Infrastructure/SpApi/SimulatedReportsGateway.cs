@@ -71,6 +71,7 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
             AmazonReportType.FbaInventory => () => InventoryReport(marketplace, reportId),
             AmazonReportType.FbaReservedInventory => () => ReservedInventoryReport(reportId),
             AmazonReportType.RestockRecommendations => () => RestockReport(marketplace, reportId),
+            AmazonReportType.FbaInventoryPlanning => () => PlanningReport(marketplace, reportId),
             _ => throw new InvalidOperationException($"{reportType} reports cannot be requested; they are listed."),
         };
 
@@ -82,6 +83,14 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
         Task.FromResult(_documents.ContainsKey(DocumentId(reportId))
             ? new AmazonReportStatus(AmazonProcessingStatus.Done, DocumentId(reportId))
             : new AmazonReportStatus(AmazonProcessingStatus.Fatal, null));
+
+    /// <inheritdoc/>
+    public Task CancelReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
+    {
+        // A cancelled report is never downloaded, so its generated document is dropped.
+        _documents.TryRemove(DocumentId(reportId), out _);
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc/>
     public Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)
@@ -213,6 +222,34 @@ internal sealed class SimulatedReportsGateway(TimeProvider clock) : IAmazonRepor
             var action = quantity > 0 ? "Create shipping plan" : "No action required";
             builder.Append(CultureInfo.InvariantCulture,
                 $"{country}\t{title}\tX00{asin[4..]}\t{sku}\t{asin}\tNew\t{quantity}\t{shipDate}\t{action}\n");
+        }
+#pragma warning restore CA5394
+
+        return builder.ToString();
+    }
+
+    private string PlanningReport(Marketplace marketplace, string reportId)
+    {
+        var random = Seeded(reportId);
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var currency = marketplace.Currency;
+        var builder = new StringBuilder(
+            "snapshot-date\tsku\tfnsku\tasin\tproduct-name\tcondition\tavailable\tinv-age-0-to-90-days\tinv-age-91-to-180-days\tinv-age-181-to-270-days"
+            + "\tinv-age-271-to-365-days\tinv-age-365-plus-days\tcurrency\testimated-excess-quantity\tdays-of-supply\testimated-storage-cost-next-month"
+            + "\testimated-ais-181-210-days\testimated-ais-211-240-days\tmarketplace\n");
+
+#pragma warning disable CA5394 // Simulated data; randomness is not security-sensitive.
+        foreach (var (sku, asin, title, _) in Catalog)
+        {
+            // Mostly young stock; now and then a slow SKU with units past 180 days and some excess.
+            var young = random.Next(20, 300);
+            var middle = random.Next(0, 60);
+            var aged = random.Next(0, 4) == 0 ? random.Next(5, 40) : 0;
+            var excess = aged > 0 ? random.Next(0, aged + 1) : 0;
+            var storage = Math.Round((young + middle + aged) * 0.05m, 2);
+            var surcharge = Math.Round(aged * 0.5m, 2);
+            builder.Append(CultureInfo.InvariantCulture,
+                $"{today:yyyy-MM-dd}\t{sku}\tX00{asin[4..]}\t{asin}\t{title}\tNew\t{young + middle + aged}\t{young}\t{middle}\t{aged}\t0\t0\t{currency}\t{excess}\t{random.Next(20, 200)}\t{storage}\t{surcharge}\t0\t{marketplace.Code}\n");
         }
 #pragma warning restore CA5394
 

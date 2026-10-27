@@ -198,6 +198,10 @@
                                         @if (plan is not null && InventoryFormat.Send(plan) is { } send)
                                         {
                                             <div><strong>@send.Action</strong> <span class="@InventoryFormat.DueClass(plan.DaysUntilSend, Model.SoonDays)">@send.When</span></div>
+                                            @if (InventoryFormat.Season(plan) is { } season)
+                                            {
+                                                <div class="cell-sub">@season</div>
+                                            }
                                             @if (plan.ShortAtHome > 0)
                                             {
                                                 <div class="cell-sub text-warn">@plan.ShortAtHome.ToString("N0", en) short at home</div>
@@ -210,6 +214,14 @@
                                         else
                                         {
                                             <span class="cell-sub">—</span>
+                                        }
+                                        @if (plan is not null && InventoryFormat.SendHold(plan) is { } hold)
+                                        {
+                                            <div class="cell-sub text-warn">@hold</div>
+                                        }
+                                        @if (InventoryFormat.Aged(p, Model.Money) is { } aged)
+                                        {
+                                            <div class="cell-sub text-warn">@aged</div>
                                         }
                                         @if (amazon is not null)
                                         {

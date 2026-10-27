@@ -32,4 +32,10 @@ public enum ImportSource
     /// per SKU with Amazon's recommended replenishment quantity and ship date.
     /// </summary>
     FbaRestockRecommendations = 6,
+
+    /// <summary>
+    /// Amazon's FBA inventory planning report (<c>GET_FBA_INVENTORY_PLANNING_DATA</c>): one row per SKU with its
+    /// stock by age, Amazon's estimated excess units, and the storage fees and aged-inventory surcharge coming.
+    /// </summary>
+    FbaInventoryPlanning = 7,
 }

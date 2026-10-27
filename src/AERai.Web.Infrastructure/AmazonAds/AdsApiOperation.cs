@@ -17,4 +17,5 @@ internal static class AdsApiOperation
     public const string ListProfiles = "ads.listProfiles";
     public const string CreateReport = "ads.createReport";
     public const string GetReport = "ads.getReport";
+    public const string DeleteReport = "ads.deleteReport";
 }

@@ -64,6 +64,14 @@ public interface ISyncScheduleService
     /// </returns>
     Task<Result<SyncAllResult>> SyncAllAsync(string user, CancellationToken cancellationToken);
 
+    /// <summary>How many Run now, Sync all, and backfill requests are queued and not started yet.</summary>
+    int QueuedRunCount { get; }
+
+    /// <summary>Drops every queued request that hasn't started; runs already started are stopped one by one.</summary>
+    /// <param name="user">Who cancelled them, for the log.</param>
+    /// <returns>How many were dropped.</returns>
+    int CancelQueued(string user);
+
     /// <summary>
     /// Lists the schedules "backfill all" would run: switched on, in an active marketplace, and pulling
     /// data that has history (inventory snapshots do not).

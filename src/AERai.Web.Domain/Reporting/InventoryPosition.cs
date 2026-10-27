@@ -42,6 +42,24 @@ public sealed class InventoryPosition
     public DateOnly? AmazonRecommendedShipDate { get; set; }
 
     /// <summary>
+    /// UTC date of the inventory planning report the age and excess columns come from, or <see langword="null"/>
+    /// when the SKU isn't in the latest one.
+    /// </summary>
+    public DateOnly? HealthSnapshotDate { get; set; }
+
+    /// <summary>Units at Amazon over 180 days old (the aged-inventory surcharge applies from 181 days); null when unknown.</summary>
+    public int? AgedUnits { get; set; }
+
+    /// <summary>Units Amazon estimates are more than will sell in time; null when unknown.</summary>
+    public int? EstimatedExcess { get; set; }
+
+    /// <summary>Aged-inventory surcharge Amazon estimates for the next charge, in the marketplace's currency.</summary>
+    public decimal? AgedSurchargeNextMonth { get; set; }
+
+    /// <summary>Monthly storage fee Amazon estimates for next month, in the marketplace's currency.</summary>
+    public decimal? StorageCostNextMonth { get; set; }
+
+    /// <summary>
     /// Date of the most recent FBA snapshot for the SKU, or <see langword="null"/> when the SKU is
     /// only held at home or in AWD.
     /// </summary>

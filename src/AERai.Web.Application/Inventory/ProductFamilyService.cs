@@ -6,8 +6,9 @@ namespace AERai.Web.Application.Inventory;
 
 /// <summary>Default <see cref="IProductFamilyService"/>.</summary>
 /// <param name="repository">Family persistence.</param>
+/// <param name="alerts">Asks for a stock-alert refresh after a family's restock rules change (they move send and reorder plans).</param>
 /// <param name="logger">Logger.</param>
-public sealed partial class ProductFamilyService(IProductFamilyRepository repository, ILogger<ProductFamilyService> logger) : IProductFamilyService
+public sealed partial class ProductFamilyService(IProductFamilyRepository repository, IStockAlertRefreshSignal alerts, ILogger<ProductFamilyService> logger) : IProductFamilyService
 {
     /// <summary>Most SKUs changed in one bulk assignment (a page of the Inventory list is far fewer).</summary>
     public const int MaxSkusPerAssignment = 500;
@@ -48,6 +49,24 @@ public sealed partial class ProductFamilyService(IProductFamilyRepository reposi
             FamilyWriteOutcome.Duplicate => Result.Failure<string>($"A family called \"{tidy}\" already exists."),
             _ => Result.Failure<string>("That family no longer exists."),
         };
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result> SetRulesAsync(int id, RestockRules rules, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        if (rules.Validate() is { } error)
+        {
+            return Result.Failure(error);
+        }
+
+        if (!await repository.SetRulesAsync(id, rules, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure("That family no longer exists.");
+        }
+
+        alerts.Request();
+        return Result.Success();
     }
 
     /// <inheritdoc/>

@@ -28,6 +28,11 @@ internal sealed class FakeSyncRunRepository : ISyncRunRepository
 
     public Task CompleteAsync(SyncRun run, CancellationToken cancellationToken)
     {
+        if (Stored.GetValueOrDefault(run.Id) is { Status: not SyncRunStatus.Running })
+        {
+            return Task.CompletedTask;
+        }
+
         Completed.Add(run);
         var stored = Copy(run);
         stored.PendingReportId = null;

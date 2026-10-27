@@ -34,15 +34,18 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
     /// <summary>The page of entries (the All entries view).</summary>
     public PagedResult<HomeStockLedgerEntry> Entries { get; private set; } = default!;
 
-    /// <summary>One group per kind of movement (the By movement view).</summary>
-    public IReadOnlyList<HomeStockLedgerGroup> Groups { get; private set; } = [];
+    /// <summary>One group per action, newest first (the By action view).</summary>
+    public PagedResult<HomeStockLedgerAction> Actions { get; private set; } = default!;
 
-    /// <summary>Grouped by movement (the default) or every entry in order, from <c>?view=</c>.</summary>
+    /// <summary>Actions listed per page in the By action view.</summary>
+    public const int ActionsPerPage = 20;
+
+    /// <summary>Grouped by action (the default) or every entry in order, from <c>?view=</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "view")]
     public HomeStockLedgerView View { get; set; }
 
     /// <summary>The <c>view</c> value for links and redirects; absent for the default view.</summary>
-    public string? ViewParam => View == HomeStockLedgerView.ByMovement ? null : View.ToString();
+    public string? ViewParam => View == HomeStockLedgerView.ByAction ? null : View.ToString();
 
     /// <summary>Exactly this SKU, from <c>?sku=</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "sku")]
@@ -204,21 +207,25 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
     }
 
     /// <summary>
-    /// A link to every entry of one kind of movement in the All entries view, keeping the other filters
-    /// (for a group that lists only its newest entries).
+    /// A link to the All entries view with the same filters (for an action that lists only its newest entries).
     /// </summary>
-    /// <param name="type">The kind of movement.</param>
     /// <returns>The link.</returns>
-    public string AllEntriesLink(HomeStockMovementType type) => Url.Page("Ledger", new
+    public string AllEntriesLink()
     {
-        q = Search,
-        sku = Sku,
-        family = FamilyId,
-        type,
-        from = From?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-        to = To?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-        view = nameof(HomeStockLedgerView.Entries),
-    })!; // Non-null: this page always resolves.
+        var route = ListRoute();
+        route["view"] = nameof(HomeStockLedgerView.Entries);
+        route.Remove("p");
+        return Url.Page("Ledger", route)!; // Non-null: this page always resolves.
+    }
+
+    /// <summary>What an action did, e.g. "Shipped to Amazon", "Received from supplier + Count correction", or "Undo".</summary>
+    /// <param name="action">The action.</param>
+    /// <returns>The label.</returns>
+    public static string ActionLabel(HomeStockLedgerAction action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        return action.IsUndo ? "Undo" : string.Join(" + ", action.Types.Select(Label));
+    }
 
     /// <summary>Lists entries.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
@@ -323,10 +330,27 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
         }
 
         var (updated, unchanged, skipped) = result.Value;
-        var message = $"Reason set on {updated:N0} entr{(updated == 1 ? "y" : "ies")}"
+        var message = $"Changed {updated:N0} entr{(updated == 1 ? "y" : "ies")}"
             + (unchanged > 0 ? $"; {unchanged:N0} already had it" : string.Empty)
             + (skipped.Count > 0 ? $". {skipped.Count:N0} skipped: {string.Join(" ", skipped.Take(5))}{(skipped.Count > 5 ? " …" : string.Empty)}" : ".");
         TempData[skipped.Count > 0 && updated == 0 ? StatusMessage.Error : StatusMessage.Success] = message;
+        return RedirectToPage(ListRoute());
+    }
+
+    /// <summary>Undoes the ticked entries, all or nothing.</summary>
+    /// <param name="ids">The ticked entries.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back to the list.</returns>
+    public async Task<IActionResult> OnPostUndoSelectedAsync(long[]? ids, CancellationToken cancellationToken)
+    {
+        if (!CanEdit)
+        {
+            return Forbid();
+        }
+
+        await LoadMarketplaceAsync(cancellationToken);
+        var result = await ledger.ReverseManyAsync(Marketplace.MarketplaceId, ids ?? [], User.Identity!.Name!, cancellationToken); // Non-null: the page requires an authenticated user.
+        TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? result.Value : result.Error;
         return RedirectToPage(ListRoute());
     }
 
@@ -345,6 +369,23 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
         var result = await ledger.ReverseAsync(Marketplace.MarketplaceId, id, User.Identity!.Name!, cancellationToken);
         TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? $"Entry #{id} reversed." : result.Error;
         return RedirectToPage(new { sku = Sku, family = FamilyId, view = ViewParam, p = PageNumber });
+    }
+
+    /// <summary>Undoes a whole action (every entry one save wrote), all or nothing.</summary>
+    /// <param name="id">Any entry of the action.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back to the ledger.</returns>
+    public async Task<IActionResult> OnPostUndoAsync(long id, CancellationToken cancellationToken)
+    {
+        if (!CanEdit)
+        {
+            return Forbid();
+        }
+
+        await LoadMarketplaceAsync(cancellationToken);
+        var result = await ledger.UndoActionAsync(Marketplace.MarketplaceId, id, User.Identity!.Name!, cancellationToken); // Non-null: the page requires an authenticated user.
+        TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? result.Value : result.Error;
+        return RedirectToPage(ListRoute());
     }
 
     private async Task LoadMarketplaceAsync(CancellationToken cancellationToken)
@@ -369,7 +410,7 @@ public sealed class LedgerModel(IHomeStockLedgerService ledger, IInventoryItemSe
         }
         else
         {
-            Groups = await ledger.GetGroupsAsync(Marketplace.MarketplaceId, filter, Search, cancellationToken);
+            Actions = await ledger.GetActionsAsync(Marketplace.MarketplaceId, filter, new PageRequest(PageNumber, ActionsPerPage, Search), cancellationToken);
         }
     }
 

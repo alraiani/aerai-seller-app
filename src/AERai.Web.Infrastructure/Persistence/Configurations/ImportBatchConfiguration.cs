@@ -34,6 +34,7 @@ internal sealed class ImportBatchConfiguration : IEntityTypeConfiguration<Import
         builder.HasMany(b => b.InventoryRows).WithOne().HasForeignKey(r => r.ImportBatchId).OnDelete(DeleteBehavior.Cascade);
         builder.HasMany(b => b.FbaReservedRows).WithOne().HasForeignKey(r => r.ImportBatchId).OnDelete(DeleteBehavior.Cascade);
         builder.HasMany(b => b.FbaRestockRows).WithOne().HasForeignKey(r => r.ImportBatchId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasMany(b => b.FbaPlanningRows).WithOne().HasForeignKey(r => r.ImportBatchId).OnDelete(DeleteBehavior.Cascade);
         builder.HasMany(b => b.FbaInventoryRows).WithOne().HasForeignKey(r => r.ImportBatchId).OnDelete(DeleteBehavior.Cascade);
         builder.HasMany(b => b.SettlementLines).WithOne().HasForeignKey(r => r.ImportBatchId).OnDelete(DeleteBehavior.Cascade);
     }

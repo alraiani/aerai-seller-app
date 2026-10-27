@@ -172,6 +172,7 @@ public static class DashboardFormat
         AmazonReportType.FbaInventory => "FBA inventory",
         AmazonReportType.FbaReservedInventory => "FBA reserved inventory",
         AmazonReportType.RestockRecommendations => "Restock recommendations",
+        AmazonReportType.FbaInventoryPlanning => "Inventory age & excess",
         AmazonReportType.AwdInventory => "AWD inventory",
         AmazonReportType.OrdersApi => "Orders (live API)",
         AmazonReportType.DeferredTransactions => "Deferred payments",

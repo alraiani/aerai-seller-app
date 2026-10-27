@@ -34,6 +34,7 @@ public static class ScheduleDisplay
         (AmazonReportType.FbaInventory, "A snapshot of FBA stock by state. Once or twice a day is plenty."),
         (AmazonReportType.FbaReservedInventory, "Why stock is reserved (customer orders, FC transfers, FC processing). Run just after FBA inventory."),
         (AmazonReportType.RestockRecommendations, "How many units Amazon recommends sending in, and by when. Once a day is plenty."),
+        (AmazonReportType.FbaInventoryPlanning, "How old the stock at Amazon is, what Amazon thinks won't sell in time, and the storage fees coming. Once a day is plenty."),
         (AmazonReportType.AwdInventory, "A snapshot of stock in Amazon Warehousing & Distribution (AWD, US only). Once a day is plenty."),
         (AmazonReportType.Settlements, "Amazon publishes these every ~14 days; a daily check picks up new ones once."),
         (AmazonReportType.DeferredTransactions, "Sales Amazon is holding back (paid out about 7 days after delivery), shown on Settlements. Once a day is plenty."),
@@ -145,17 +146,49 @@ public static class ScheduleDisplay
     /// <summary>Colored tag class for a report type.</summary>
     /// <param name="type">Report type.</param>
     /// <returns>CSS classes.</returns>
-    public static string ReportTag(AmazonReportType type) => type switch
+    public static string ReportTag(AmazonReportType type) => type.Category() switch
     {
-        AmazonReportType.Orders or AmazonReportType.OrdersApi => "tag tag-orders",
-        AmazonReportType.FbaInventory or AmazonReportType.FbaReservedInventory or AmazonReportType.RestockRecommendations
-            or AmazonReportType.AwdInventory => "tag tag-inventory",
-        AmazonReportType.Settlements or AmazonReportType.DeferredTransactions => "tag tag-settlements",
-        AmazonReportType.AdsSpend => "tag tag-ads",
+        SyncCategory.Orders => "tag tag-orders",
+        SyncCategory.Inventory => "tag tag-inventory",
+        SyncCategory.SettlementsAndPayments => "tag tag-settlements",
+        SyncCategory.Advertising => "tag tag-ads",
         _ => "tag",
     };
 
-    /// <summary>Pill class for a run status (token-colored, never grey).</summary>
+    /// <summary>Heading for a group of schedules.</summary>
+    /// <param name="category">The category.</param>
+    /// <returns>e.g. "Inventory &amp; restock".</returns>
+    public static string CategoryLabel(SyncCategory category) => category switch
+    {
+        SyncCategory.Orders => "Orders",
+        SyncCategory.Inventory => "Inventory & restock",
+        SyncCategory.SettlementsAndPayments => "Settlements & payments",
+        SyncCategory.Advertising => "Advertising",
+        _ => category.ToString(),
+    };
+
+    /// <summary>Icon name for a group of schedules.</summary>
+    /// <param name="category">The category.</param>
+    /// <returns>An <c>_Icon</c> name.</returns>
+    public static string CategoryIcon(SyncCategory category) => category switch
+    {
+        SyncCategory.Orders => "cart",
+        SyncCategory.Inventory => "box",
+        SyncCategory.SettlementsAndPayments => "wallet",
+        SyncCategory.Advertising => "megaphone",
+        _ => "list",
+    };
+
+    /// <summary>Whether a run is waiting on Amazon (a report being built, or Amazon's request limit).</summary>
+    /// <param name="run">The run.</param>
+    /// <returns><see langword="true"/> while it is running and has a check scheduled.</returns>
+    public static bool IsWaiting(SyncRun run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        return run.Status == SyncRunStatus.Running && run.NextCheckAt is not null;
+    }
+
+    /// <summary>Pill class for a run status (token-colored; grey only for a run a user stopped).</summary>
     /// <param name="status">Run status.</param>
     /// <returns>CSS classes.</returns>
     public static string StatusPill(SyncRunStatus status) => status switch
@@ -163,6 +196,7 @@ public static class ScheduleDisplay
         SyncRunStatus.Succeeded => "pill pill-ok",
         SyncRunStatus.NoData => "pill pill-info",
         SyncRunStatus.Failed => "pill pill-bad",
+        SyncRunStatus.Cancelled => "pill pill-muted",
         _ => "pill pill-running",
     };
 
@@ -172,6 +206,7 @@ public static class ScheduleDisplay
     public static string StatusLabel(SyncRunStatus status) => status switch
     {
         SyncRunStatus.NoData => "No new data",
+        SyncRunStatus.Cancelled => "Stopped",
         _ => status.ToString(),
     };
 

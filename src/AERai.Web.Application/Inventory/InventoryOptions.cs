@@ -31,6 +31,13 @@ public sealed class InventoryOptions
     [Range(1, 730)]
     public int TargetStockDays { get; set; } = 90;
 
+    /// <summary>
+    /// Most days of expected sales a send may leave at Amazon. Amazon adds an aged-inventory surcharge from 181 days
+    /// in stock, so sends stop short of that with room for units already there.
+    /// </summary>
+    [Range(30, 365)]
+    public int MaxAmazonCoverDays { get; set; } = 150;
+
     /// <summary>A restock action due within this many days counts as "soon" (highlighted, and alerted on).</summary>
     [Range(0, 90)]
     public int AlertLeadDays { get; set; } = 7;

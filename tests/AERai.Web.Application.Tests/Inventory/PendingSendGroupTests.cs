@@ -10,7 +10,7 @@ public sealed class PendingSendGroupTests
         new(new PendingSend(id, sku, null, null, null, loggedAt, loggedAt, user, units, reconciled, null, reference, IsOpen: true), 3, overdue);
 
     [Fact]
-    public void GroupBySend_GroupsSendsLoggedInOneSaveAndKeepsListingOrder()
+    public void GroupBySend_GroupsSendsLoggedInOneSaveNewestFirst()
     {
         var groups = PendingSendGroup.GroupBySend(
         [
@@ -20,8 +20,8 @@ public sealed class PendingSendGroupTests
             Item(4, "D", Saved, user: "other@example.com"),
         ]);
 
-        Assert.Equal([[1L, 3L], [2L], [4L]], groups.Select(g => g.Items.Select(i => i.Send.Id).ToArray()));
-        Assert.Equal((Saved, "ops@example.com"), (groups[0].LoggedAt, groups[0].LoggedBy));
+        Assert.Equal([[2L], [1L, 3L], [4L]], groups.Select(g => g.Items.Select(i => i.Send.Id).ToArray()));
+        Assert.Equal((Saved, "ops@example.com"), (groups[1].LoggedAt, groups[1].LoggedBy));
     }
 
     [Fact]

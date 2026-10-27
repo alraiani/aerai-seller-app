@@ -53,7 +53,7 @@ public sealed partial class BlobRefreshService(
     /// <summary>Folders holding reports that are dated by the day they arrive; never loaded here.</summary>
     private static readonly HashSet<string> SnapshotFolders = new(StringComparer.Ordinal)
     {
-        "fbainventory", "fbareservedinventory", "fbarestockrecommendations", "awdinventory", "deferred",
+        "fbainventory", "fbareservedinventory", "fbarestockrecommendations", "fbainventoryplanning", "awdinventory", "deferred",
     };
 
     /// <summary>Raw folders holding report files, and the import each is staged as.</summary>

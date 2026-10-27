@@ -27,4 +27,14 @@ internal sealed class FakeInventoryQueries : IInventoryQueries
 
     public Task<IReadOnlyDictionary<string, LeadTimeSettings>> GetLeadTimesAsync(string marketplaceId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyDictionary<string, LeadTimeSettings>>(LeadTimes);
+
+    public List<MonthlyUnitsSold> Monthly { get; } = [];
+
+    public Dictionary<int, RestockRules> FamilyRules { get; } = [];
+
+    public Task<IReadOnlyList<MonthlyUnitsSold>> GetMonthlyUnitsSoldAsync(string marketplaceId, DateTimeOffset since, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<MonthlyUnitsSold>>(Monthly);
+
+    public Task<IReadOnlyDictionary<int, RestockRules>> GetFamilyRulesAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<int, RestockRules>>(FamilyRules);
 }
