@@ -4,13 +4,14 @@
 @model AERai.Web.UI.Pages.Inventory.HomeStock.LedgerModel
 @{
     var en = CultureInfo.GetCultureInfo("en-US");
-    var grouped = Model.View == HomeStockLedgerView.ByMovement;
-    var count = grouped ? Model.Groups.Sum(g => g.EntryCount) : Model.Entries.TotalCount;
-    var empty = grouped ? Model.Groups.Count == 0 : Model.Entries.Items.Count == 0;
+    var grouped = Model.View == HomeStockLedgerView.ByAction;
+    var count = grouped ? Model.Actions.TotalCount : Model.Entries.TotalCount;
+    var noun = grouped ? (count == 1 ? "action" : "actions") : (count == 1 ? "entry" : "entries");
+    var empty = grouped ? Model.Actions.Items.Count == 0 : Model.Entries.Items.Count == 0;
     // Operators get a tick-box column first (bulk reason) and an actions column last.
     var lead = Model.CanEdit ? 1 : 0;
     var columns = Model.CanEdit ? 10 : 8;
-    var editable = grouped ? Model.Groups.Any(g => g.Entries.Any(e => e.CanEdit)) : Model.Entries.Items.Any(e => e.CanEdit);
+    var editable = grouped ? Model.Actions.Items.Any(g => g.Entries.Any(e => e.CanEdit)) : Model.Entries.Items.Any(e => e.CanEdit);
 
     // View links keep every filter, so switching views never loses them.
     string ViewLink(HomeStockLedgerView view) => Url.Page("Ledger", new
@@ -21,7 +22,7 @@
         type = Model.Type,
         from = Model.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         to = Model.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-        view = view == HomeStockLedgerView.ByMovement ? null : view.ToString(),
+        view = view == HomeStockLedgerView.ByAction ? null : view.ToString(),
     })!;
 }
 
@@ -69,18 +70,18 @@
 <div class="card">
     <div class="card-toolbar">
         <span class="card-toolbar-title list-count">
-            <span class="text-nowrap">@count.ToString("N0", en) entr@(count == 1 ? "y" : "ies")</span>
+            <span class="text-nowrap">@count.ToString("N0", en) @noun</span>
             <span class="text-muted-token fw-normal">
                 @(Model.Sku is { } onlySku ? $"for {onlySku} " : "")in @Model.Marketplace.Name · times in @Model.Marketplace.TimeZoneId
             </span>
-            <partial name="_Tip" model='"Every unit that came into or went out of home stock. Each SKU’s entries add up to its home stock; Balance is the SKU’s count right after the entry. Edits on the Worksheet, Edit page, bulk page, and uploads appear as count corrections. Mistakes are reversed, never deleted."' />
+            <partial name="_Tip" model='"Every unit that came into or went out of home stock. By action groups the entries each save wrote (a count sheet, a send, a worksheet save) under when it was saved and by whom; Undo action reverses all of them at once. Each SKU’s entries add up to its home stock; Balance is the SKU’s count right after the entry. Mistakes are reversed, never deleted."' />
         </span>
         <div class="card-toolbar-group no-print">
             <nav class="segmented segmented-sm" aria-label="How to list entries">
-                <a href="@ViewLink(HomeStockLedgerView.ByMovement)" class="@(grouped ? "active" : "")">By movement</a>
+                <a href="@ViewLink(HomeStockLedgerView.ByAction)" class="@(grouped ? "active" : "")">By action</a>
                 <a href="@ViewLink(HomeStockLedgerView.Entries)" class="@(grouped ? "" : "active")">All entries</a>
             </nav>
-            @if (grouped && Model.Groups.Count > 1)
+            @if (grouped && Model.Actions.Items.Count > 1)
             {
                 <div class="expand-controls d-flex gap-2">
                     <button type="button" class="btn btn-sm btn-soft" data-expand-all="true">Expand all</button>
@@ -109,7 +110,7 @@
             <form method="post" asp-page="Ledger" asp-page-handler="Reason" asp-all-route-data="@Model.ListRouteValues()" id="ledger-bulk-form"
                   class="bulk-bar bulk-bar-row no-print" data-bulk-bar data-bulk-noun="row"
                   data-confirm="Set the reason on the ticked rows? Each change is recorded as a correction; the originals stay in the history.">
-                <span class="bulk-count" data-bulk-count>Tick rows, or a whole movement, to set their reason at once.</span>
+                <span class="bulk-count" data-bulk-count>Tick rows, or a whole action, to set their reason at once.</span>
                 <select name="reasonType" class="form-select form-select-sm bulk-input" aria-label="Movement to set on the ticked rows" data-bulk-button>
                     <option value="">Keep each movement</option>
                     @foreach (var (type, typeLabel) in LedgerModel.LoggableTypes)
@@ -149,53 +150,90 @@
                 </thead>
                 @if (grouped)
                 {
-                    @* One group per kind of movement; a lone group (one type, or one SKU with one kind) opens at once,
-                       and so does the group of the entry being edited. *@
-                    foreach (var group in Model.Groups)
+                    @* One group per action (one save), newest first; a lone action opens at once, and so does the one
+                       holding the entry being edited. *@
+                    foreach (var action in Model.Actions.Items)
                     {
-                        var open = Model.Groups.Count == 1 || group.Entries.Any(e => e.Id == Model.EditId);
-                        var groupId = $"movement-{group.Type}";
-                        var label = LedgerModel.Label(group.Type);
+                        var open = Model.Actions.Items.Count == 1 || action.Entries.Any(e => e.Id == Model.EditId);
+                        var groupId = $"action-{action.AnchorId}";
+                        var label = LedgerModel.ActionLabel(action);
+                        var logged = Model.Local(action.LoggedAt);
+                        var occurred = Model.Local(action.OccurredFrom);
+                        var dated = occurred.Date != logged.Date;
                         <tbody class="order-group @(open ? "is-expanded" : "")" id="@groupId">
                             <tr class="group-row">
                                 @if (Model.CanEdit)
                                 {
                                     <td class="select-col">
-                                        @if (group.Entries.Any(e => e.CanEdit))
+                                        @if (action.Entries.Any(e => e.CanEdit))
                                         {
-                                            <input type="checkbox" class="form-check-input" data-select-group aria-label="Select every @label row" />
+                                            <input type="checkbox" class="form-check-input" data-select-group aria-label="Select every row of this action" />
                                         }
                                     </td>
                                 }
                                 <td class="toggle-col">
                                     <button type="button" class="btn btn-sm btn-icon group-toggle" data-expand-row aria-expanded="@(open ? "true" : "false")" aria-controls="@groupId"
-                                            aria-label="Show the @label entries">
+                                            aria-label="Show the entries of @label on @logged.ToString("MMM d, h:mm tt", en)">
                                         <partial name="_Icon" model='"chevron-down"' />
                                     </button>
                                 </td>
                                 <td colspan="3">
-                                    <span class="@LedgerModel.Pill(group.Type)">@label</span>
-                                    <span class="cell-sub ms-2">
-                                        @group.EntryCount.ToString("N0", en) entr@(group.EntryCount == 1 ? "y" : "ies") · @group.SkuCount.ToString("N0", en) SKU@(group.SkuCount == 1 ? "" : "s") · latest @Model.Local(group.LatestAt).ToString("MMM d, yyyy", en)
-                                    </span>
+                                    @if (action.IsUndo)
+                                    {
+                                        <span class="pill pill-muted">Undo</span>
+                                    }
+                                    else
+                                    {
+                                        foreach (var type in action.Types)
+                                        {
+                                            <span class="@LedgerModel.Pill(type)">@LedgerModel.Label(type)</span>
+                                        }
+                                    }
+                                    @if (action.IsUndone)
+                                    {
+                                        <span class="pill pill-muted">Undone</span>
+                                    }
+                                    <span class="fw-semibold ms-2 text-nowrap">@logged.ToString("ddd, MMM d, yyyy · h:mm tt", en)</span>
+                                    <div class="cell-sub">
+                                        by @action.LoggedBy · @action.EntryCount.ToString("N0", en) entr@(action.EntryCount == 1 ? "y" : "ies") · @action.SkuCount.ToString("N0", en) SKU@(action.SkuCount == 1 ? "" : "s")
+                                        @if (action.Reference is { } reference)
+                                        {
+                                            <text> · ref @reference</text>
+                                        }
+                                        @if (dated)
+                                        {
+                                            <text> · dated @occurred.ToString("MMM d, yyyy", en)</text>
+                                        }
+                                    </div>
                                 </td>
                                 <td class="text-end">
-                                    <span class="ledger-units fw-semibold @(group.NetUnits > 0 ? "in" : "out")">@group.NetUnits.ToString("+#,0;−#,0;0", en)</span>
-                                    @if (group.UnitsIn > 0 && group.UnitsOut < 0)
+                                    <span class="ledger-units fw-semibold @(action.NetUnits > 0 ? "in" : "out")">@action.NetUnits.ToString("+#,0;−#,0;0", en)</span>
+                                    @if (action.UnitsIn > 0 && action.UnitsOut < 0)
                                     {
-                                        <div class="cell-sub">@group.UnitsIn.ToString("+#,0", en) / @group.UnitsOut.ToString("−#,0;−#,0", en)</div>
+                                        <div class="cell-sub">@action.UnitsIn.ToString("+#,0", en) / @action.UnitsOut.ToString("−#,0;−#,0", en)</div>
                                     }
                                 </td>
                                 <td colspan="@(columns - 5 - lead)" class="text-end">
-                                    <button type="button" class="btn btn-sm btn-soft no-print" data-print-group="@groupId"
-                                            data-bs-toggle="tooltip" data-bs-title="Print only the @label entries"><partial name="_Icon" model='"printer"' /> Print</button>
+                                    <div class="d-inline-flex gap-2 no-print">
+                                        @if (Model.CanEdit && action.CanUndo)
+                                        {
+                                            <form method="post" asp-page="Ledger" asp-page-handler="Undo" asp-route-id="@action.AnchorId" asp-all-route-data="@Model.ListRouteValues()"
+                                                  data-confirm="Undo this whole action (@label, @logged.ToString("MMM d, h:mm tt", en))? Every entry in it is reversed, or none is if one can't be. The originals stay in the history.">
+                                                <button type="submit" class="btn btn-sm btn-soft" data-bs-toggle="tooltip" data-bs-title="Reverse every entry of this action">
+                                                    <partial name="_Icon" model='"restore"' /> Undo action
+                                                </button>
+                                            </form>
+                                        }
+                                        <button type="button" class="btn btn-sm btn-soft" data-print-group="@groupId"
+                                                data-bs-toggle="tooltip" data-bs-title="Print only this action"><partial name="_Icon" model='"printer"' /> Print</button>
+                                    </div>
                                 </td>
                             </tr>
-                            @foreach (var e in group.Entries)
+                            @foreach (var e in action.Entries)
                             {
                                 <partial name="_LedgerEntryRow" model="(Model, e, true)" />
                             }
-                            @if (group.IsCapped)
+                            @if (action.IsCapped)
                             {
                                 <tr class="group-child">
                                     @if (Model.CanEdit)
@@ -204,8 +242,8 @@
                                     }
                                     <td class="toggle-col"></td>
                                     <td colspan="@(columns - 1 - lead)" class="cell-sub">
-                                        Showing the newest @group.Entries.Count.ToString("N0", en) of @group.EntryCount.ToString("N0", en).
-                                        <a href="@Model.AllEntriesLink(group.Type)">See every @label entry</a>
+                                        Showing the newest @action.Entries.Count.ToString("N0", en) of @action.EntryCount.ToString("N0", en).
+                                        <a href="@Model.AllEntriesLink()">See every entry</a>
                                     </td>
                                 </tr>
                             }
@@ -225,7 +263,11 @@
         </div>
     }
 </div>
-@if (!grouped)
+@if (grouped)
+{
+    <partial name="_Pager" model="Model.Actions.ToPager(Model.Search, Model.PagerFilters)" />
+}
+else
 {
     <partial name="_Pager" model="Model.Entries.ToPager(Model.Search, Model.PagerFilters)" />
 }

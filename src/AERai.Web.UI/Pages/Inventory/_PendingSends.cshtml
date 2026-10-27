@@ -93,7 +93,7 @@
                         </button>
                     </td>
                     <td>
-                        <div class="fw-semibold text-nowrap">@Model.Local(group.SentAt).ToString("MMM d, h:mm tt", en)</div>
+                        <div class="fw-semibold text-nowrap">@Model.Local(group.SentAt).ToString("ddd, MMM d, yyyy · h:mm tt", en)</div>
                         @if (group.Overdue)
                         {
                             <div class="cell-sub text-warn pending-note">Amazon hasn’t shown all of it after @group.AgeDays days — check the shipment</div>
@@ -139,7 +139,22 @@
                     </td>
                     @if (Model.CanEdit)
                     {
-                        <td></td>
+                        <td class="text-end">
+                            @if (group.Items.All(i => i.Send.ReconciledUnits == 0))
+                            {
+                                @* The whole shipment never went out: every send is reversed at once, or none is. *@
+                                <form method="post" asp-page="/Inventory/HomeStock/Pending" asp-page-handler="CancelShipment" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Query?.Search" asp-route-view="@viewParam"
+                                      data-confirm="Cancel this whole shipment (@skus SKU@(skus == 1 ? "" : "s"), @group.UnitsSent.ToString("N0", en) units)? Every send in it is reversed and the units go back into home stock.">
+                                    @foreach (var item in group.Items)
+                                    {
+                                        <input type="hidden" name="ids" value="@item.Send.Id" />
+                                    }
+                                    <button type="submit" class="btn btn-sm btn-soft text-nowrap" data-bs-toggle="tooltip" data-bs-title="It never went out: put every unit back in home stock">
+                                        <partial name="_Icon" model='"restore"' /> Cancel shipment
+                                    </button>
+                                </form>
+                            }
+                        </td>
                     }
                 </tr>
                 @foreach (var item in group.Items)

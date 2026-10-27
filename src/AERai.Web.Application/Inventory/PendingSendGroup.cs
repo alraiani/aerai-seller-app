@@ -31,8 +31,8 @@ public sealed record PendingSendGroup(DateTimeOffset LoggedAt, string LoggedBy, 
     public IReadOnlyList<PendingSendItem> NeedsShipmentId => [.. Items.Where(i => i.Send.Reference is null)];
 
     /// <summary>
-    /// Groups open sends by the send they were logged in, in the order the first of each appears (so a list
-    /// sorted oldest first stays oldest first).
+    /// Groups open sends by the send they were logged in, the newest send first (what was just shipped is what
+    /// people look for); inside a group the sends keep their listing order.
     /// </summary>
     /// <param name="items">The open sends.</param>
     /// <returns>One group per send.</returns>
@@ -41,6 +41,8 @@ public sealed record PendingSendGroup(DateTimeOffset LoggedAt, string LoggedBy, 
         ArgumentNullException.ThrowIfNull(items);
         return [.. items
             .GroupBy(i => (i.Send.CreatedAt, i.Send.CreatedBy))
-            .Select(g => new PendingSendGroup(g.Key.CreatedAt, g.Key.CreatedBy, [.. g]))];
+            .Select(g => new PendingSendGroup(g.Key.CreatedAt, g.Key.CreatedBy, [.. g]))
+            .OrderByDescending(g => g.LoggedAt)
+            .ThenBy(g => g.LoggedBy, StringComparer.Ordinal)];
     }
 }

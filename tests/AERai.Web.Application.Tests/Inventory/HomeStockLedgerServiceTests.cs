@@ -263,44 +263,86 @@ public sealed class HomeStockLedgerServiceTests
         Assert.Single(_refresh.Requests);
     }
 
-    private static HomeStockLedgerGroup Group(HomeStockMovementType type, int count) =>
-        new(type, count, 1, 0, 0, new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero), []);
+    [Fact]
+    public async Task GetActionsAsync_AsksForAPageOfActionsCappedAtMaxGroupRows()
+    {
+        await CreateService().GetActionsAsync(Us, new HomeStockLedgerFilter(), new PageRequest(2, 20, "FOB"), CancellationToken.None);
+
+        Assert.Equal((new PageRequest(2, 20, "FOB"), HomeStockLedgerService.MaxGroupRows), _repository.LastActionsCall);
+    }
+
+    private HomeStockLedgerEntry Entry(long id, HomeStockMovementType type, int units, long? reverses = null, long? reversedBy = null) =>
+        new(id, "FOB00BL", null, null, _clock.GetUtcNow(), type, units, 5, null, null, reverses, reversedBy, _clock.GetUtcNow(), User);
 
     [Fact]
-    public async Task GetGroupsAsync_OrdersByActionAndDropsEmptyKinds()
+    public void HomeStockLedgerAction_NetsUnitsAndKnowsWhenEntriesAreCappedOrUndone()
     {
-        _repository.Groups.AddRange(
-        [
-            Group(HomeStockMovementType.OpeningBalance, 3),
-            Group(HomeStockMovementType.CountCorrection, 2),
-            Group(HomeStockMovementType.Other, 0),
-            Group(HomeStockMovementType.ReceivedFromSupplier, 4),
-            Group(HomeStockMovementType.ShippedToAmazon, 5),
-        ]);
+        var now = _clock.GetUtcNow();
+        var open = new HomeStockLedgerAction(now, User, [HomeStockMovementType.CountCorrection], 2, 1, 12, -5, 0, now, now, null,
+            [Entry(1, HomeStockMovementType.CountCorrection, 12)]);
+        var undone = open with { Entries = [Entry(1, HomeStockMovementType.CountCorrection, 12, reversedBy: 3)] };
+        var undo = open with { EntryCount = 1, ReversalCount = 1, Entries = [Entry(3, HomeStockMovementType.CountCorrection, -12, reverses: 1)] };
 
-        var groups = await CreateService().GetGroupsAsync(Us, new HomeStockLedgerFilter(), "  FOB  ", CancellationToken.None);
-
-        Assert.Equal(
-            [HomeStockMovementType.ShippedToAmazon, HomeStockMovementType.ReceivedFromSupplier, HomeStockMovementType.CountCorrection, HomeStockMovementType.OpeningBalance],
-            groups.Select(g => g.Type));
-        Assert.Equal(("FOB", HomeStockLedgerService.MaxGroupRows), _repository.LastGroupsCall);
+        Assert.Equal((7, true, true, false, false), (open.NetUnits, open.IsCapped, open.CanUndo, open.IsUndone, open.IsUndo));
+        Assert.Equal((false, true), (undone.CanUndo, undone.IsUndone));
+        Assert.Equal((true, false, false), (undo.IsUndo, undo.CanUndo, undo.IsUndone));
     }
 
     [Fact]
-    public async Task GetGroupsAsync_BlankSearch_SearchesNothing()
+    public async Task UndoActionAsync_ReversesEveryEntryTheSaveWroteAsOneAction()
     {
-        await CreateService().GetGroupsAsync(Us, new HomeStockLedgerFilter(), " ", CancellationToken.None);
+        _repository.Skus.Add("FOB00GR");
+        await CreateService().ApplyCountsAsync(
+            Us, [new HomeStockCountChange("FOB00BL", 0, 40), new HomeStockCountChange("FOB00GR", 0, 10)], Options(), User, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        await RecordAsync(HomeStockMovementType.ReceivedFromSupplier, 7);
+        _clock.Advance(TimeSpan.FromMinutes(5));
 
-        Assert.Null(_repository.LastGroupsCall?.Search);
+        var result = await CreateService().UndoActionAsync(Us, 2, "boss@example.com", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Contains("2 entries reversed", result.Value, StringComparison.Ordinal);
+        Assert.Equal((7, 0), (_repository.Balance(Us, "FOB00BL"), _repository.Balance(Us, "FOB00GR")));
+        var reversals = _repository.Entries.Skip(3).ToList();
+        Assert.Equal([1L, 2L], reversals.Select(e => e.ReversesId ?? 0));
+        Assert.Single(reversals.Select(e => e.CreatedAt).Distinct()); // The undo is one action too.
     }
 
     [Fact]
-    public void HomeStockLedgerGroup_NetsUnitsAndKnowsWhenEntriesAreCapped()
+    public async Task UndoActionAsync_OneSkuWouldGoNegative_UndoesNothing()
     {
-        var entry = new HomeStockLedgerEntry(1, "FOB00BL", null, null, _clock.GetUtcNow(), HomeStockMovementType.CountCorrection, 5, 5, null, null, null, null, _clock.GetUtcNow(), User);
-        var group = new HomeStockLedgerGroup(HomeStockMovementType.CountCorrection, 2, 1, 12, -5, _clock.GetUtcNow(), [entry]);
+        _repository.Skus.Add("FOB00GR");
+        await CreateService().ApplyCountsAsync(
+            Us, [new HomeStockCountChange("FOB00BL", 0, 40), new HomeStockCountChange("FOB00GR", 0, 10)], Options(), User, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        await CreateService().RecordAsync(Us, new HomeStockMovementInput("FOB00GR", HomeStockMovementType.ShippedToAmazon, 8, null, null, null), User, CancellationToken.None);
 
-        Assert.Equal((7, true), (group.NetUnits, group.IsCapped));
+        var result = await CreateService().UndoActionAsync(Us, 1, User, CancellationToken.None);
+
+        Assert.Contains("FOB00GR", result.Error, StringComparison.Ordinal);
+        Assert.Equal(3, _repository.Entries.Count);
+        Assert.Equal(40, _repository.Balance(Us, "FOB00BL"));
+    }
+
+    [Fact]
+    public async Task UndoActionAsync_AlreadyUndone_Fails()
+    {
+        await RecordAsync(HomeStockMovementType.ReceivedFromSupplier, 30);
+        var service = CreateService();
+
+        await service.UndoActionAsync(Us, 1, User, CancellationToken.None);
+        var again = await service.UndoActionAsync(Us, 1, User, CancellationToken.None);
+
+        Assert.Contains("can be undone", again.Error, StringComparison.Ordinal);
+        Assert.Equal(0, _repository.Balance(Us, "FOB00BL"));
+    }
+
+    [Fact]
+    public async Task ReverseManyAsync_NothingChosen_Fails()
+    {
+        var result = await CreateService().ReverseManyAsync(Us, [], User, CancellationToken.None);
+
+        Assert.Equal("Choose the entries to reverse.", result.Error);
     }
 
     private Task<Result<string>> CorrectAsync(HomeStockMovementType type, int units, string? note = null) =>

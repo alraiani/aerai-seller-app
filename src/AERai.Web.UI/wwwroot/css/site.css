@@ -461,6 +461,7 @@ html:not(.js) .nav-rail-toggle { display: none; }
 .pill-bad { color: var(--negative); background: var(--negative-soft); }
 .pill-warn { color: var(--warning); background: var(--warning-soft); }
 .pill-running { color: var(--violet); background: var(--violet-soft); }
+.pill-muted { color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); }
 .pill-running::before { animation: pulse 1.4s ease-in-out infinite; }
 a.pill:hover { filter: brightness(0.95); }
 
