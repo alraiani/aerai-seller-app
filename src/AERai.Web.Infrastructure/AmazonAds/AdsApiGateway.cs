@@ -38,6 +38,16 @@ internal sealed class AdsApiGateway(AdsApiClient client, AdsProfileCache profile
         return await client.DownloadAsync(url, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
+    public async Task CancelSpendReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(marketplace);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reportId);
+
+        var profileId = await ProfileIdAsync(marketplace, cancellationToken).ConfigureAwait(false);
+        await client.DeleteReportAsync(marketplace.Region, profileId, reportId, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<ReportResponse> GetReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(marketplace);

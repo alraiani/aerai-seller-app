@@ -151,6 +151,38 @@ public sealed partial class PendingSendService(
     }
 
     /// <inheritdoc/>
+    public async Task<Result<string>> CancelShipmentAsync(string marketplaceId, IReadOnlyCollection<long> ids, string user, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentException.ThrowIfNullOrWhiteSpace(user);
+
+        var unique = ids.Distinct().ToList();
+        if (unique.Count == 0)
+        {
+            return Result.Failure<string>("Choose the shipment to cancel.");
+        }
+
+        // Checked first so the message names the problem; the ledger checks again inside its transaction.
+        foreach (var id in unique)
+        {
+            if (await repository.GetAsync(marketplaceId, id, cancellationToken).ConfigureAwait(false) is not { IsOpen: true } send)
+            {
+                return Result.Failure<string>("Part of that shipment is no longer pending, so nothing was cancelled. Cancel its sends one at a time.");
+            }
+
+            if (send.ReconciledUnits > 0)
+            {
+                return Result.Failure<string>($"Amazon already shows {send.ReconciledUnits:N0} units of {send.Sku}, so the shipment can't be cancelled.");
+            }
+        }
+
+        var result = await ledger.ReverseManyAsync(marketplaceId, unique, user, cancellationToken).ConfigureAwait(false);
+        return result.IsFailure ? result
+            : Result.Success($"Shipment cancelled: {unique.Count:N0} send{(unique.Count == 1 ? "" : "s")} reversed, so the units are back in home stock (see the ledger).");
+    }
+
+    /// <inheritdoc/>
     public async Task<Result> SetShipmentIdAsync(string marketplaceId, long id, string? shipmentId, string user, CancellationToken cancellationToken)
     {
         var result = await SetShipmentIdsAsync(marketplaceId, [id], shipmentId, user, cancellationToken).ConfigureAwait(false);

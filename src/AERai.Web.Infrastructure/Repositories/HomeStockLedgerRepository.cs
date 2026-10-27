@@ -64,6 +64,12 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
                 return (HomeStockLedgerOutcome.CannotReverse, null);
             }
 
+            // Units Amazon already shows did go out, so the send can't be taken back.
+            if (original.ReconciledUnits > 0)
+            {
+                return (HomeStockLedgerOutcome.AlreadyAtAmazon, null);
+            }
+
             var row = await BalanceRowAsync(marketplaceId, original.Sku, cancellationToken).ConfigureAwait(false);
             if ((row?.Quantity ?? 0) - original.Units < 0)
             {
@@ -75,6 +81,121 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return (HomeStockLedgerOutcome.Recorded, (long?)reversal.Id);
         });
+
+    /// <inheritdoc/>
+    public Task<(HomeStockLedgerOutcome Outcome, int Reversed, IReadOnlyList<string> BlockingSkus)> ReverseActionAsync(
+        string marketplaceId, long entryId, DateTimeOffset createdAt, string createdBy, CancellationToken cancellationToken) =>
+        ReverseAllAsync(async () =>
+        {
+            var anchor = await dbContext.HomeStockMovements.AsNoTracking()
+                .Where(m => m.Id == entryId && m.MarketplaceId == marketplaceId)
+                .Select(m => new { m.CreatedAt, m.CreatedBy, IsSend = m.Type == HomeStockMovementType.ShippedToAmazon })
+                .SingleOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            // Sends are an action of their own even when one save also recounted (see ListActionsAsync).
+            return anchor is null ? null
+                : dbContext.HomeStockMovements.Where(m => m.MarketplaceId == marketplaceId && m.CreatedAt == anchor.CreatedAt && m.CreatedBy == anchor.CreatedBy
+                    && (m.Type == HomeStockMovementType.ShippedToAmazon) == anchor.IsSend);
+        }, marketplaceId, createdAt, createdBy, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<(HomeStockLedgerOutcome Outcome, int Reversed, IReadOnlyList<string> BlockingSkus)> ReverseEntriesAsync(
+        string marketplaceId, IReadOnlyCollection<long> ids, DateTimeOffset createdAt, string createdBy, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        return ReverseAllAsync(
+            () => Task.FromResult<IQueryable<HomeStockMovement>?>(dbContext.HomeStockMovements.Where(m => m.MarketplaceId == marketplaceId && ids.Contains(m.Id))),
+            marketplaceId, createdAt, createdBy, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reverses every entry in a scope that can still be reversed, in one serializable transaction that commits only
+    /// when all of them could be, every reversal logged at <paramref name="createdAt"/>.
+    /// </summary>
+    private async Task<(HomeStockLedgerOutcome Outcome, int Reversed, IReadOnlyList<string> BlockingSkus)> ReverseAllAsync(
+        Func<Task<IQueryable<HomeStockMovement>?>> scope, string marketplaceId, DateTimeOffset createdAt, string createdBy, CancellationToken cancellationToken)
+    {
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            dbContext.ChangeTracker.Clear();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
+            var candidates = await scope().ConfigureAwait(false);
+            var result = candidates is null
+                ? (HomeStockLedgerOutcome.NotFound, 0, (IReadOnlyList<string>)[])
+                : await ReverseScopeAsync(candidates, marketplaceId, createdAt, createdBy, cancellationToken).ConfigureAwait(false);
+
+            // Nothing is written unless every entry could be reversed, so a refused undo leaves the action whole.
+            if (result.Item1 == HomeStockLedgerOutcome.Recorded)
+            {
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return result;
+        }).ConfigureAwait(false);
+    }
+
+    private async Task<(HomeStockLedgerOutcome Outcome, int Reversed, IReadOnlyList<string> BlockingSkus)> ReverseScopeAsync(
+        IQueryable<HomeStockMovement> candidates, string marketplaceId, DateTimeOffset createdAt, string createdBy, CancellationToken cancellationToken)
+    {
+        // The entries that can still be reversed: not reversals, not reversed (an edited original is reversed, so
+        // only its corrected copy counts), not opening balances.
+        var entries = await candidates.AsNoTracking()
+            .Where(m => m.ReversesId == null
+                && m.Type != HomeStockMovementType.OpeningBalance
+                && !dbContext.HomeStockMovements.Any(r => r.ReversesId == m.Id))
+            .OrderBy(m => m.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (entries.Count == 0)
+        {
+            return (HomeStockLedgerOutcome.CannotReverse, 0, []);
+        }
+
+        var atAmazon = entries.Where(m => m.ReconciledUnits > 0).Select(m => m.Sku).Distinct(StringComparer.Ordinal).ToList();
+        if (atAmazon.Count > 0)
+        {
+            return (HomeStockLedgerOutcome.AlreadyAtAmazon, 0, atAmazon);
+        }
+
+        var skus = entries.Select(m => m.Sku).Distinct(StringComparer.Ordinal).ToList();
+        var balances = new Dictionary<string, HomeStock>(StringComparer.Ordinal);
+
+        // Chunked so a large count sheet stays well under SQL Server's 2,100-parameter limit.
+        foreach (var chunk in skus.Chunk(1000))
+        {
+            foreach (var row in await dbContext.HomeStocks.AsNoTracking().Where(h => h.MarketplaceId == marketplaceId && chunk.Contains(h.Sku)).ToListAsync(cancellationToken).ConfigureAwait(false))
+            {
+                balances[row.Sku] = row;
+            }
+        }
+
+        // Checked per SKU on the net change, since one action can move a SKU more than once.
+        var negative = entries
+            .GroupBy(m => m.Sku, StringComparer.Ordinal)
+            .Where(g => (balances.GetValueOrDefault(g.Key)?.Quantity ?? 0) - g.Sum(m => m.Units) < 0)
+            .Select(g => g.Key)
+            .ToList();
+        if (negative.Count > 0)
+        {
+            return (HomeStockLedgerOutcome.WouldGoNegative, 0, negative);
+        }
+
+        // One SKU can appear more than once and a balance of zero removes its row, so each reversal reads the
+        // balance it applies to. Units taken out are put back before units added are taken out, so a SKU's
+        // balance never dips below zero part way (only the net was checked).
+        foreach (var original in entries.OrderBy(m => m.Units).ThenBy(m => m.Id))
+        {
+            var row = await BalanceRowAsync(marketplaceId, original.Sku, cancellationToken).ConfigureAwait(false);
+            HomeStockBalance.Apply(dbContext, row, new HomeStockLedgerWrite(
+                marketplaceId, original.Sku, original.Type, -original.Units, createdAt, original.Reference, $"Reverses entry #{original.Id}", original.Id, createdAt, createdBy));
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return (HomeStockLedgerOutcome.Recorded, entries.Count, []);
+    }
 
     /// <inheritdoc/>
     public Task<(HomeStockLedgerOutcome Outcome, long? Id)> CorrectAsync(
@@ -256,37 +377,81 @@ internal sealed class HomeStockLedgerRepository(AppDbContext dbContext) : IHomeS
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<HomeStockLedgerGroup>> ListGroupsAsync(string marketplaceId, HomeStockLedgerFilter filter, string? search, int maxRows, CancellationToken cancellationToken)
+    public async Task<PagedResult<HomeStockLedgerAction>> ListActionsAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, int maxRows, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(request);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRows);
 
-        var filtered = Filtered(marketplaceId, filter, search);
-        var totals = await filtered
-            .GroupBy(x => x.Movement.Type)
+        var filtered = Filtered(marketplaceId, filter, request.SafeSearch);
+
+        // A save that recounts and sends (the Worksheet) lists as two actions, so undoing the shipment never undoes the
+        // counts. Type is stored as text, so the kinds in an action are counted one by one rather than taken as a min/max.
+        var actions = filtered
+            .GroupBy(x => new { x.Movement.CreatedAt, x.Movement.CreatedBy, IsSend = x.Movement.Type == HomeStockMovementType.ShippedToAmazon })
             .Select(g => new
             {
-                Type = g.Key,
+                g.Key.CreatedAt,
+                g.Key.CreatedBy,
+                g.Key.IsSend,
                 Count = g.Count(),
                 Skus = g.Select(x => x.Movement.Sku).Distinct().Count(),
                 In = g.Sum(x => x.Movement.Units > 0 ? x.Movement.Units : 0),
                 Out = g.Sum(x => x.Movement.Units < 0 ? x.Movement.Units : 0),
-                Latest = g.Max(x => x.Movement.OccurredAt),
-            })
+                Reversals = g.Count(x => x.Movement.ReversesId != null),
+                Shipped = g.Count(x => x.Movement.Type == HomeStockMovementType.ShippedToAmazon),
+                Received = g.Count(x => x.Movement.Type == HomeStockMovementType.ReceivedFromSupplier),
+                Counted = g.Count(x => x.Movement.Type == HomeStockMovementType.CountCorrection),
+                Other = g.Count(x => x.Movement.Type == HomeStockMovementType.Other),
+                Opening = g.Count(x => x.Movement.Type == HomeStockMovementType.OpeningBalance),
+                From = g.Min(x => x.Movement.OccurredAt),
+                To = g.Max(x => x.Movement.OccurredAt),
+                Reference = g.Max(x => x.Movement.Reference),
+            });
+
+        var total = await actions.CountAsync(cancellationToken).ConfigureAwait(false);
+        var page = await actions
+            .OrderByDescending(a => a.CreatedAt)
+            .ThenBy(a => a.CreatedBy)
+            .ThenBy(a => a.IsSend)
+            .Skip(request.Skip)
+            .Take(request.SafePageSize)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        // A handful of kinds, so one query each for its newest entries.
-        var groups = new List<HomeStockLedgerGroup>(totals.Count);
-        foreach (var total in totals)
+        // One capped query per action (at most a page of them), so a count sheet of thousands of rows never loads in full.
+        var entries = new Dictionary<(DateTimeOffset, string, bool), List<HomeStockLedgerEntry>>();
+        foreach (var action in page)
         {
-            var entries = await ToEntries(filtered.Where(x => x.Movement.Type == total.Type).OrderByDescending(x => x.Movement.Id).Take(maxRows))
+            entries[(action.CreatedAt, action.CreatedBy, action.IsSend)] = await ToEntries(filtered
+                    .Where(x => x.Movement.CreatedAt == action.CreatedAt && x.Movement.CreatedBy == action.CreatedBy
+                        && (x.Movement.Type == HomeStockMovementType.ShippedToAmazon) == action.IsSend)
+                    .OrderByDescending(x => x.Movement.Id)
+                    .Take(maxRows))
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
-            groups.Add(new HomeStockLedgerGroup(total.Type, total.Count, total.Skus, total.In, total.Out, total.Latest, entries));
         }
 
-        return groups;
+        var items = page.Select(a =>
+        {
+            var types = new List<HomeStockMovementType>(2);
+            AddIf(types, a.Shipped, HomeStockMovementType.ShippedToAmazon);
+            AddIf(types, a.Received, HomeStockMovementType.ReceivedFromSupplier);
+            AddIf(types, a.Counted, HomeStockMovementType.CountCorrection);
+            AddIf(types, a.Other, HomeStockMovementType.Other);
+            AddIf(types, a.Opening, HomeStockMovementType.OpeningBalance);
+            return new HomeStockLedgerAction(a.CreatedAt, a.CreatedBy, types, a.Count, a.Skus, a.In, a.Out, a.Reversals, a.From, a.To, a.Reference, entries[(a.CreatedAt, a.CreatedBy, a.IsSend)]);
+        }).ToList();
+
+        return new PagedResult<HomeStockLedgerAction>(items, total, request.SafePage, request.SafePageSize);
+
+        static void AddIf(List<HomeStockMovementType> types, int count, HomeStockMovementType type)
+        {
+            if (count > 0)
+            {
+                types.Add(type);
+            }
+        }
     }
 
     /// <inheritdoc/>

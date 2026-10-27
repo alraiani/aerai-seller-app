@@ -112,7 +112,9 @@
             @if (values is not null)
             {
                 @* The inputs in the other cells belong to this form through form="…": a form can't span table cells. *@
-                <form method="post" id="@formId" asp-page="Ledger" asp-page-handler="Edit" asp-all-route-data="@ledger.ListRouteValues()" asp-route-id="@e.Id" class="d-inline-flex gap-1">
+                <form method="post" id="@formId" asp-page="Ledger" asp-page-handler="Edit" asp-all-route-data="@ledger.ListRouteValues()" class="d-inline-flex gap-1">
+                    @* The entry travels as a field: asp-all-route-data replaces any asp-route-* set before it. *@
+                    <input type="hidden" name="id" value="@e.Id" />
                     <button type="submit" class="btn btn-sm btn-primary btn-icon" aria-label="Save the edit" title="Save"><partial name="_Icon" model='"check"' /></button>
                     <a href="@ledger.CancelEditLink()" class="btn btn-sm btn-soft btn-icon" aria-label="Cancel editing" title="Cancel"><partial name="_Icon" model='"x"' /></a>
                 </form>

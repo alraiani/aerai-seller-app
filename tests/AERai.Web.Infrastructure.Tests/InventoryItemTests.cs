@@ -1,4 +1,5 @@
 using AERai.Web.Application.Abstractions;
+using AERai.Web.Application.Ingestion;
 using AERai.Web.Application.Inventory;
 using AERai.Web.Domain.Core;
 using AERai.Web.Infrastructure.Persistence;
@@ -101,5 +102,28 @@ public sealed class InventoryItemTests(SqlDatabaseFixture fixture) : IClassFixtu
         await repository.SaveItemAsync("T-LEAD-1", MarketplaceIds.Canada, null, 0, LeadTimeSettings.None, DateTimeOffset.UtcNow, "tests", CancellationToken.None);
 
         Assert.False((await queries.GetLeadTimesAsync(MarketplaceIds.Canada, CancellationToken.None)).ContainsKey("T-LEAD-1"));
+    }
+
+    [SqlFact]
+    public async Task FamilyRulesAndMonthlySales_ReadBackForPlanning()
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var families = scope.ServiceProvider.GetRequiredService<IProductFamilyRepository>();
+        var queries = scope.ServiceProvider.GetRequiredService<IInventoryQueries>();
+        var orders = scope.ServiceProvider.GetRequiredService<IAmazonOrderRepository>();
+        var id = (await families.CreateAsync("T-Rules", CancellationToken.None))!.Value;
+        var rules = new RestockRules(5, 10, 50, 100, 10);
+
+        await families.SetRulesAsync(id, rules, CancellationToken.None);
+        var may = new DateTimeOffset(2025, 5, 10, 12, 0, 0, TimeSpan.Zero);
+        await orders.UpsertAsync(MarketplaceIds.UnitedStates, [
+            new AmazonOrder("T-SEASON-1", may, may, "Shipped", "USD", [new AmazonOrderLine("T-SEASON", null, null, 3, 30m)]),
+            new AmazonOrder("T-SEASON-2", may.AddDays(5), may.AddDays(5), "Shipped", "USD", [new AmazonOrderLine("T-SEASON", null, null, 2, 20m)]),
+            new AmazonOrder("T-SEASON-3", may.AddMonths(1), may.AddMonths(1), "Cancelled", "USD", [new AmazonOrderLine("T-SEASON", null, null, 9, 0m)]),
+        ], may, CancellationToken.None);
+
+        Assert.Equal(rules, (await queries.GetFamilyRulesAsync(CancellationToken.None))[id]);
+        var monthly = (await queries.GetMonthlyUnitsSoldAsync(MarketplaceIds.UnitedStates, may.AddDays(-1), CancellationToken.None)).Where(m => m.Sku == "T-SEASON");
+        Assert.Equal([new MonthlyUnitsSold("T-SEASON", 2025, 5, 5)], monthly); // Cancelled orders don't count.
     }
 }

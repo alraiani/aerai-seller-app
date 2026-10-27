@@ -19,6 +19,7 @@ namespace AERai.Web.UI.Pages.Tools.Schedules;
 /// <param name="runs">Run history queries.</param>
 /// <param name="syncSettings">Global pause state.</param>
 /// <param name="scheduleService">Schedule use cases.</param>
+/// <param name="ingestion">Stops runs that haven't finished.</param>
 /// <param name="connection">Amazon connection state.</param>
 /// <param name="tester">Amazon connection test.</param>
 /// <param name="identity">User list for the owner filter.</param>
@@ -29,6 +30,7 @@ public sealed class IndexModel(
     ISyncRunRepository runs,
     ISyncSettingsRepository syncSettings,
     ISyncScheduleService scheduleService,
+    IReportIngestionService ingestion,
     IAmazonConnectionInfo connection,
     IAmazonConnectionTester tester,
     IIdentityService identity,
@@ -70,6 +72,17 @@ public sealed class IndexModel(
     /// <summary>The filtered, sorted rows.</summary>
     public IReadOnlyList<ScheduleListRow> Rows { get; private set; } = [];
 
+    /// <summary>
+    /// Whether a run was just queued from this page, so it refreshes on its own before the run has started
+    /// (from TempData; read once).
+    /// </summary>
+    public bool JustQueued { get; private set; }
+
+    private const string QueuedKey = "SyncQueued";
+
+    /// <summary>Run now, Sync all, and backfill requests queued and not started yet, in every marketplace (one inbox).</summary>
+    public int QueuedRuns => scheduleService.QueuedRunCount;
+
     /// <summary>Summary over all active schedules.</summary>
     public ScheduleListSummary Summary { get; private set; } = new(0, 0, 0, 0, null, null);
 
@@ -104,6 +117,8 @@ public sealed class IndexModel(
     /// <returns>A task that completes when loaded.</returns>
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        JustQueued = TempData[QueuedKey] is true;
+
         // Like every other page, the list and its summary cover the selected marketplace only.
         var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
         IReadOnlyList<SyncSchedule> all = [.. (await schedules.ListIncludingDeletedAsync(cancellationToken)).Where(s => s.MarketplaceId == marketplace.MarketplaceId)];
@@ -172,7 +187,7 @@ public sealed class IndexModel(
     /// <param name="id">Schedule id.</param>
     /// <param name="back">The list's query string.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A redirect to the run history, or back to the list with an error.</returns>
+    /// <returns>A redirect back to the list, which follows the run, or shows the error.</returns>
     public async Task<IActionResult> OnPostRunNowAsync(int id, string? back, CancellationToken cancellationToken)
     {
         var result = await scheduleService.RunNowAsync(id, User.Identity!.Name!, cancellationToken);
@@ -188,13 +203,13 @@ public sealed class IndexModel(
             TempData[StatusMessage.Warning] = wait.Message;
         }
 
-        return RedirectToPage("Runs", new { scheduleId = id });
+        return Queued(back);
     }
 
     /// <summary>Queues a normal run of every switched-on schedule.</summary>
     /// <param name="back">The list's query string.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A redirect to the run history, or back to the list with an error.</returns>
+    /// <returns>A redirect back to the list, which follows the run, or shows the error.</returns>
     public async Task<IActionResult> OnPostSyncAllAsync(string? back, CancellationToken cancellationToken)
     {
         var result = await scheduleService.SyncAllAsync(User.Identity!.Name!, cancellationToken);
@@ -206,7 +221,7 @@ public sealed class IndexModel(
 
         var queued = result.Value.Queued.Count;
         TempData[StatusMessage.Success] =
-            $"Sync all queued {queued} run{(queued == 1 ? "" : "s")}. You can leave this page; follow progress in the run history.";
+            $"Sync all queued {queued} run{(queued == 1 ? "" : "s")}. This page refreshes on its own while they run, and you can leave it; the run history has the details.";
         var warnings = new List<string>();
         if (result.Value.Skipped.Count > 0)
         {
@@ -224,7 +239,7 @@ public sealed class IndexModel(
             TempData[StatusMessage.Warning] = string.Join(" ", warnings);
         }
 
-        return RedirectToPage("Runs");
+        return Queued(back);
     }
 
     /// <summary>Queues a backfill of the same date range for every switched-on schedule that has history.</summary>
@@ -232,7 +247,7 @@ public sealed class IndexModel(
     /// <param name="to">Range end date (UTC day, inclusive).</param>
     /// <param name="back">The list's query string.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A redirect to the run history, or back to the list with an error.</returns>
+    /// <returns>A redirect back to the list, which follows the run, or shows the error.</returns>
     public async Task<IActionResult> OnPostBackfillAllAsync(DateOnly? from, DateOnly? to, string? back, CancellationToken cancellationToken)
     {
         if (from is not { } start || to is not { } end)
@@ -261,7 +276,7 @@ public sealed class IndexModel(
         var queued = result.Value;
         TempData[StatusMessage.Success] =
             $"Backfill {queued.Window} queued: {queued.TotalRuns} run{(queued.TotalRuns == 1 ? "" : "s")} across {queued.Schedules.Count} schedule{(queued.Schedules.Count == 1 ? "" : "s")}. " +
-            "You can leave this page; follow progress in the run history. The Orders API run goes last and can take a while.";
+            "This page refreshes on its own while they run, and you can leave it; the run history has the details. The Orders API run goes last and can take a while.";
         var warnings = new List<string>();
         foreach (var schedule in queued.Schedules.Where(s => s.Note is not null))
         {
@@ -279,7 +294,7 @@ public sealed class IndexModel(
             TempData[StatusMessage.Warning] = string.Join(" ", warnings);
         }
 
-        return RedirectToPage("Runs");
+        return Queued(back);
     }
 
     /// <summary>Queues a backfill for the last N days or a date range.</summary>
@@ -289,7 +304,7 @@ public sealed class IndexModel(
     /// <param name="to">Range end date (UTC day, inclusive), optional.</param>
     /// <param name="back">The list's query string.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A redirect to the run history, or back to the list with an error.</returns>
+    /// <returns>A redirect back to the list, which follows the run, or shows the error.</returns>
     public async Task<IActionResult> OnPostBackfillAsync(int id, int? days, DateOnly? from, DateOnly? to, string? back, CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
@@ -333,7 +348,7 @@ public sealed class IndexModel(
                 "It will call Amazon again for data you already have; nothing is duplicated, and rows are refreshed in place.";
         }
 
-        return RedirectToPage("Runs", new { scheduleId = id });
+        return Queued(back);
     }
 
     /// <summary>Soft-deletes a schedule.</summary>
@@ -422,8 +437,40 @@ public sealed class IndexModel(
         return BackToList(back);
     }
 
+    /// <summary>Stops a run that hasn't finished (waiting on Amazon, or working right now).</summary>
+    /// <param name="runId">The run.</param>
+    /// <param name="back">The list's query string.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back to the list.</returns>
+    public async Task<IActionResult> OnPostStopAsync(long runId, string? back, CancellationToken cancellationToken)
+    {
+        var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        var result = await ingestion.StopAsync(runId, marketplace.MarketplaceId, User.Identity!.Name!, cancellationToken); // Non-null: Tools requires an authenticated Operator.
+        TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? result.Value : result.Error;
+        return result.IsSuccess ? Queued(back) : BackToList(back);
+    }
+
+    /// <summary>Drops every queued run that hasn't started.</summary>
+    /// <param name="back">The list's query string.</param>
+    /// <returns>A redirect back to the list.</returns>
+    public IActionResult OnPostCancelQueued(string? back)
+    {
+        var dropped = scheduleService.CancelQueued(User.Identity!.Name!); // Non-null: Tools requires an authenticated Operator.
+        TempData[StatusMessage.Success] = dropped == 0
+            ? "Nothing was waiting to start."
+            : $"Cancelled {dropped:N0} queued run{(dropped == 1 ? "" : "s")}. Runs already started keep going; stop them one by one.";
+        return BackToList(back);
+    }
+
     private void Report(Application.Common.Result result, string success) =>
         TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? success : result.Error;
+
+    /// <summary>Back to the list after queueing work, flagged so it refreshes until the run shows up.</summary>
+    private RedirectResult Queued(string? back)
+    {
+        TempData[QueuedKey] = true;
+        return BackToList(back);
+    }
 
     /// <summary>Redirects to the list with the filters the user was looking at.</summary>
     private RedirectResult BackToList(string? back)

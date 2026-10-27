@@ -25,9 +25,22 @@ internal sealed class FakeAmazonReportsGateway : IAmazonReportsGateway
 
     public Exception? ThrowOnRequest { get; set; }
 
+    /// <summary>Report ids passed to CancelReportAsync.</summary>
+    public List<string> CancelledReports { get; } = [];
+
+    public Exception? ThrowOnCancel { get; set; }
+
+    /// <summary>Runs inside RequestReportAsync before it answers (e.g. a user stopping the run mid-call).</summary>
+    public Action? DuringRequest { get; set; }
+
+    /// <summary>Runs inside GetReportStatusAsync before it answers (e.g. a user stopping the run mid-check).</summary>
+    public Action? DuringStatus { get; set; }
+
     public Task<string> RequestReportAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset? dataStart, DateTimeOffset? dataEnd, CancellationToken cancellationToken)
     {
         MarketplacesSeen.Add(marketplace.MarketplaceId);
+        DuringRequest?.Invoke();
+        cancellationToken.ThrowIfCancellationRequested();
         if (ThrowOnRequest is not null)
         {
             throw ThrowOnRequest;
@@ -39,8 +52,15 @@ internal sealed class FakeAmazonReportsGateway : IAmazonReportsGateway
 
     public Task<AmazonReportStatus> GetReportStatusAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
     {
+        DuringStatus?.Invoke();
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(Statuses.Count > 1 ? Statuses.Dequeue() : Statuses.Peek());
+    }
+
+    public Task CancelReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
+    {
+        CancelledReports.Add(reportId);
+        return ThrowOnCancel is { } ex ? Task.FromException(ex) : Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken)

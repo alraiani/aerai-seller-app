@@ -22,6 +22,10 @@ internal sealed class UnavailableReportsGateway : IAmazonReportsGateway
         throw new InvalidOperationException(Message);
 
     /// <inheritdoc/>
+    public Task CancelReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken) =>
+        throw new InvalidOperationException(Message);
+
+    /// <inheritdoc/>
     public Task<IReadOnlyList<AvailableAmazonReport>> ListCompletedReportsAsync(Marketplace marketplace, AmazonReportType reportType, DateTimeOffset createdSince, CancellationToken cancellationToken) =>
         throw new InvalidOperationException(Message);
 

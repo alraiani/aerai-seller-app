@@ -114,6 +114,23 @@ public sealed class PendingModel(IPendingSendService pending, IInventoryItemServ
     public Task<IActionResult> OnPostCancelAsync(long id, CancellationToken cancellationToken) =>
         ActAsync((m, user) => pending.CancelAsync(m, id, user, cancellationToken), "Send cancelled; its units are back in home stock (see the ledger).", cancellationToken);
 
+    /// <summary>Cancels a whole shipment that never went out (every send in it is reversed, or none is).</summary>
+    /// <param name="ids">The shipment's sends.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back to the list.</returns>
+    public async Task<IActionResult> OnPostCancelShipmentAsync(long[]? ids, CancellationToken cancellationToken)
+    {
+        if (!CanEdit)
+        {
+            return Forbid();
+        }
+
+        Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        var result = await pending.CancelShipmentAsync(Marketplace.MarketplaceId, ids ?? [], User.Identity!.Name!, cancellationToken); // Non-null: the page requires an authenticated user.
+        TempData[result.IsSuccess ? StatusMessage.Success : StatusMessage.Error] = result.IsSuccess ? result.Value : result.Error;
+        return BackToList();
+    }
+
     private async Task<IActionResult> ActAsync(Func<string, string, Task<Application.Common.Result>> action, string success, CancellationToken cancellationToken)
     {
         if (!CanEdit)

@@ -38,6 +38,17 @@ public interface IPendingSendService
     Task<Result> CancelAsync(string marketplaceId, long id, string user, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Cancels a whole shipment that never went out: reverses every one of its sends in one go, all or nothing, so
+    /// the units return to home stock. Refused when any send is no longer pending or Amazon already shows part of it.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="ids">The sends' ledger entry ids.</param>
+    /// <param name="user">Email of the user cancelling them.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A message saying what was cancelled, or why nothing was.</returns>
+    Task<Result<string>> CancelShipmentAsync(string marketplaceId, IReadOnlyCollection<long> ids, string user, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Adds the FBA shipment id to an open send logged without one, so it is matched by its shipment, and
     /// queues an inventory sync.
     /// </summary>

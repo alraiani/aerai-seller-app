@@ -41,4 +41,25 @@ internal sealed class InventoryQueries(AppDbContext dbContext) : IInventoryQueri
                 StringComparer.Ordinal,
                 cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<MonthlyUnitsSold>> GetMonthlyUnitsSoldAsync(string marketplaceId, DateTimeOffset since, CancellationToken cancellationToken) =>
+        await dbContext.SalesLines
+            .AsNoTracking()
+            .Where(l => l.MarketplaceId == marketplaceId && l.PurchaseDate >= since)
+            .GroupBy(l => new { l.Sku, l.PurchaseDate.Year, l.PurchaseDate.Month })
+            .Select(g => new MonthlyUnitsSold(g.Key.Sku, g.Key.Year, g.Key.Month, g.Sum(l => l.Quantity)))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyDictionary<int, RestockRules>> GetFamilyRulesAsync(CancellationToken cancellationToken) =>
+        await dbContext.ProductFamilies
+            .AsNoTracking()
+            .Where(f => f.SendMultiple != null || f.SendMultipleLarge != null || f.OrderMinimum != null || f.OrderMultiple != null)
+            .ToDictionaryAsync(
+                f => f.Id,
+                f => new RestockRules(f.SendMultiple, f.SendMultipleLarge, f.SendLargeFrom, f.OrderMinimum, f.OrderMultiple),
+                cancellationToken)
+            .ConfigureAwait(false);
 }

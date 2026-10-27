@@ -53,6 +53,26 @@ internal sealed class ReportsApiClient(HttpClient http, IHttpClientFactory httpC
         return SendAndDisposeAsync<ReportResponse>(request, SpApiOperation.GetReport, cancellationToken);
     }
 
+    /// <summary>
+    /// Calls <c>cancelReport</c>. Amazon only cancels a report still <c>IN_QUEUE</c>; one it has started fails with an
+    /// error, which the caller treats as "too late to cancel".
+    /// </summary>
+    /// <param name="region">Region the report was requested in.</param>
+    /// <param name="reportId">Report id.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A task that completes once Amazon accepts the cancellation.</returns>
+    public async Task CancelReportAsync(AmazonRegion region, string reportId, CancellationToken cancellationToken)
+    {
+        using var request = Request(HttpMethod.Delete, region, $"{BasePath}/reports/{Uri.EscapeDataString(reportId)}");
+        request.Options.Set(SpApiOperation.OptionKey, SpApiOperation.CancelReport);
+        using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            var detail = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            throw new HttpRequestException($"SP-API {SpApiOperation.CancelReport} failed with HTTP {(int)response.StatusCode}: {Truncate(detail, 500)}", null, response.StatusCode);
+        }
+    }
+
     /// <summary>Calls <c>getReports</c> for one marketplace's DONE reports of one type, following <c>nextToken</c> pages.</summary>
     /// <param name="marketplace">Marketplace whose reports to list.</param>
     /// <param name="reportType">SP-API report type code.</param>

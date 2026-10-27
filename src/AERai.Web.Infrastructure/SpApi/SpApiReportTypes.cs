@@ -14,6 +14,7 @@ internal static class SpApiReportTypes
         AmazonReportType.FbaInventory => "GET_FBA_MYI_ALL_INVENTORY_DATA",
         AmazonReportType.FbaReservedInventory => "GET_RESERVED_INVENTORY_DATA",
         AmazonReportType.RestockRecommendations => "GET_RESTOCK_INVENTORY_RECOMMENDATIONS_REPORT",
+        AmazonReportType.FbaInventoryPlanning => "GET_FBA_INVENTORY_PLANNING_DATA",
         // The _V2 flat file is the "long" layout (one row per amount with amount-type/amount-description/
         // amount) that stg.SettlementLine mirrors. The similarly named GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE
         // is a "wide" layout (price-amount, item-related-fee-amount, ...) and fails staging. Amazon

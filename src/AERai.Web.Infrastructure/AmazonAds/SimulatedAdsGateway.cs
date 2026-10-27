@@ -38,6 +38,13 @@ internal sealed class SimulatedAdsGateway : IAmazonAdsGateway
     }
 
     /// <inheritdoc/>
+    public Task CancelSpendReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
+    {
+        _reports.TryRemove(reportId, out _);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public Task<AdsReportStatus> GetReportStatusAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
     {
         // An unknown id is a report requested before a restart; the simulator has lost it, as S3 would after expiry.

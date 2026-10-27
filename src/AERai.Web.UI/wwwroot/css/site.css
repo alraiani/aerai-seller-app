@@ -461,6 +461,7 @@ html:not(.js) .nav-rail-toggle { display: none; }
 .pill-bad { color: var(--negative); background: var(--negative-soft); }
 .pill-warn { color: var(--warning); background: var(--warning-soft); }
 .pill-running { color: var(--violet); background: var(--violet-soft); }
+.pill-muted { color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); }
 .pill-running::before { animation: pulse 1.4s ease-in-out infinite; }
 a.pill:hover { filter: brightness(0.95); }
 
@@ -684,6 +685,9 @@ th .tip { text-transform: none; }
 .select-col { width: 2.25rem; padding-right: 0 !important; }
 .select-col .form-check-input { margin: 0; cursor: pointer; }
 .schedule-table tbody tr.row-selected, .data-table tbody tr.row-selected { background: var(--brand-soft); }
+.schedule-table .schedule-group-row > td { background: var(--surface-2); padding-top: 0.55rem; padding-bottom: 0.55rem; }
+.schedule-table tbody.schedule-group + tbody.schedule-group .schedule-group-row > td { border-top: 2px solid var(--border); }
+.schedule-group-title { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; }
 /* The On switch and the row's buttons share the last column. */
 .on-cell { display: flex; align-items: center; gap: 0.75rem; }
 
@@ -766,6 +770,13 @@ th .tip { text-transform: none; }
 .family-row:first-child { border-top: 0; }
 .family-row form { margin: 0; }
 .family-rename { display: flex; flex: 1 1 auto; gap: 0.35rem; min-width: 0; }
+.family-row { flex-wrap: wrap; }
+.family-rules { order: 10; flex: 1 0 100%; }
+.family-rules > summary { list-style: none; display: inline-flex; align-items: center; gap: 0.35rem; }
+.family-rules > summary::-webkit-details-marker { display: none; }
+.family-rules-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 0.75rem; margin-top: 0.5rem; padding: 0.6rem; border-radius: 0.5rem; background: var(--surface-2); }
+.family-rules-form label { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--muted); }
+.family-rules-form input { width: 5.5rem; }
 .family-count { flex: 0 0 auto; min-width: 4.5rem; text-align: right; font-size: 0.8rem; color: var(--muted); text-decoration: none; }
 .family-count:hover { color: var(--brand); text-decoration: underline; }
 .home-stock-col { width: 9rem; }

@@ -2,8 +2,8 @@ namespace AERai.Web.Domain.Core;
 
 /// <summary>
 /// The color of a product variant, picked from a fixed palette so each one can be shown in a
-/// theme-aware color (light and dark) on the inventory worksheet. Declaration order is the order
-/// color groups appear in.
+/// theme-aware color (light and dark) on the inventory worksheet. The numbers are stored; the order colors
+/// are listed in is <see cref="ProductColors.DisplayOrder"/>.
 /// </summary>
 public enum ProductColor
 {

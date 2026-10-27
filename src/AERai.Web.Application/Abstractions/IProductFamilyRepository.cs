@@ -29,6 +29,13 @@ public interface IProductFamilyRepository
     /// <returns>What happened.</returns>
     Task<FamilyWriteOutcome> RenameAsync(int id, string name, CancellationToken cancellationToken);
 
+    /// <summary>Sets a family's restock rounding rules.</summary>
+    /// <param name="id">Family id.</param>
+    /// <param name="rules">The rules (validated).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Whether the family exists.</returns>
+    Task<bool> SetRulesAsync(int id, RestockRules rules, CancellationToken cancellationToken);
+
     /// <summary>Deletes a family; its SKUs become unassigned.</summary>
     /// <param name="id">Family id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

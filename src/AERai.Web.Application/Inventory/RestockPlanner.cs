@@ -14,10 +14,13 @@ namespace AERai.Web.Application.Inventory;
 /// Units already sent from home that Amazon's numbers don't show yet ("pending to Amazon") count as
 /// Amazon stock, and come off Amazon's recommendation too (it was made before the send), so a send
 /// isn't suggested again while Amazon and our sync catch up.
+/// Demand comes from a <see cref="DemandForecast"/>, so cover is counted in the sales expected on those days
+/// (busier ahead of wedding season), and the family's <see cref="RestockRules"/> round the send and the order
+/// to how they are really packed.
 /// </remarks>
 public static class RestockPlanner
 {
-    /// <summary>Plans a restock.</summary>
+    /// <summary>Plans a restock at a flat sales rate, with no rounding rules.</summary>
     /// <param name="today">Today in the marketplace's local calendar.</param>
     /// <param name="dailyVelocity">Units sold per day, or <see langword="null"/> when unknown.</param>
     /// <param name="sellThroughStock">Units at (or on the way to) Amazon that will sell without action.</param>
@@ -26,11 +29,37 @@ public static class RestockPlanner
     /// <param name="amazon">Amazon's recommendation, if its restock report covers the SKU.</param>
     /// <param name="pendingToAmazon">Units sent from home that Amazon's numbers don't show yet.</param>
     /// <returns>The plan, or <see langword="null"/> when the sales rate is unknown or zero.</returns>
-    public static RestockPlan? Plan(DateOnly today, decimal? dailyVelocity, int sellThroughStock, int homeStock, LeadTimes leadTimes, AmazonRecommendation? amazon = null, int pendingToAmazon = 0)
+    public static RestockPlan? Plan(DateOnly today, decimal? dailyVelocity, int sellThroughStock, int homeStock, LeadTimes leadTimes, AmazonRecommendation? amazon = null, int pendingToAmazon = 0) =>
+        dailyVelocity is { } perDay && perDay > 0
+            ? Plan(today, DemandForecast.Flat(perDay), sellThroughStock, homeStock, leadTimes, RestockRules.None, amazon, pendingToAmazon)
+            : null;
+
+    /// <summary>Plans a restock from a demand forecast (seasonal or flat) and the family's rounding rules.</summary>
+    /// <param name="today">Today in the marketplace's local calendar.</param>
+    /// <param name="demand">Expected sales per day ahead, or <see langword="null"/> when unknown.</param>
+    /// <param name="sellThroughStock">Units at (or on the way to) Amazon that will sell without action.</param>
+    /// <param name="homeStock">Units on hand outside Amazon.</param>
+    /// <param name="leadTimes">The SKU's effective lead times.</param>
+    /// <param name="rules">How sends and supplier orders are rounded.</param>
+    /// <param name="amazon">Amazon's recommendation, if its restock report covers the SKU.</param>
+    /// <param name="pendingToAmazon">Units sent from home that Amazon's numbers don't show yet.</param>
+    /// <param name="limits">Aging limits; <see cref="StockLimits.None"/> to send whatever the plan wants.</param>
+    /// <returns>The plan, or <see langword="null"/> when the sales rate is unknown or zero.</returns>
+    public static RestockPlan? Plan(
+        DateOnly today,
+        DemandForecast? demand,
+        int sellThroughStock,
+        int homeStock,
+        LeadTimes leadTimes,
+        RestockRules rules,
+        AmazonRecommendation? amazon = null,
+        int pendingToAmazon = 0,
+        StockLimits? limits = null)
     {
         ArgumentNullException.ThrowIfNull(leadTimes);
+        ArgumentNullException.ThrowIfNull(rules);
 
-        if (dailyVelocity is not { } perDay || perDay <= 0)
+        if (demand is not { BaseRate: > 0 } forecast)
         {
             return null;
         }
@@ -39,12 +68,21 @@ public static class RestockPlanner
         var atAmazon = Math.Max(0, sellThroughStock) + pending;
         var atHome = Math.Max(0, homeStock);
 
-        var stockout = today.AddDays(DaysOfStock(atAmazon, perDay));
-        var needed = Math.Max(0, Units(perDay * leadTimes.TargetStockDays) - atAmazon);
+        // Cover is measured in expected sales, so ahead of wedding season the same days need more units.
+        var stockout = today.AddDays(forecast.DaysCovered(today, atAmazon));
+        var needed = Math.Max(0, Units(forecast.Units(today, leadTimes.TargetStockDays)) - atAmazon);
 
         var amazonUnits = Math.Max(0, (amazon?.Quantity ?? 0) - pending);
-        var wanted = Math.Max(needed, amazonUnits);
-        var send = Math.Min(wanted, atHome);
+        var limit = limits ?? StockLimits.None;
+
+        // Amazon's own excess estimate wins: sending more of a SKU it already can't sell in time only buys fees.
+        var heldForExcess = limit.ExcessAtAmazon > 0 && Math.Max(needed, amazonUnits) > 0;
+        var room = limit.MaxAmazonCoverDays > 0
+            ? Math.Max(0, (int)Math.Floor(forecast.Units(today, limit.MaxAmazonCoverDays)) - atAmazon)
+            : int.MaxValue;
+        var target = heldForExcess ? 0 : Math.Max(needed, amazonUnits);
+        var cappedForAge = target > room;
+        var (send, wanted) = rules.RoundSend(Math.Min(target, room), Math.Min(atHome, room));
         DateOnly? sendBy = null;
         if (send > 0)
         {
@@ -60,14 +98,14 @@ public static class RestockPlanner
             };
         }
 
-        var allStockout = today.AddDays(DaysOfStock(atAmazon + atHome, perDay));
+        var allStockout = today.AddDays(forecast.DaysCovered(today, atAmazon + atHome));
         var reorderBy = allStockout.AddDays(-leadTimes.OrderLeadDays);
 
         // Order up to the target cover as of arrival; when the order is already late, also make up
         // what will be sold before it lands.
-        var reorder = Math.Max(
-            Units(perDay * leadTimes.TargetStockDays),
-            Units(perDay * (leadTimes.OrderLeadDays + leadTimes.TargetStockDays)) - (atAmazon + atHome));
+        var reorder = rules.RoundOrder(Math.Max(
+            Units(forecast.Units(today.AddDays(leadTimes.OrderLeadDays), leadTimes.TargetStockDays)),
+            Units(forecast.Units(today, leadTimes.OrderLeadDays + leadTimes.TargetStockDays)) - (atAmazon + atHome)));
 
         var nextAction = sendBy is { } s && s < reorderBy ? s : reorderBy;
         return new RestockPlan(
@@ -81,10 +119,11 @@ public static class RestockPlanner
             reorderBy,
             reorderBy.DayNumber - today.DayNumber,
             sendBy?.DayNumber - today.DayNumber,
-            nextAction.DayNumber - today.DayNumber);
+            nextAction.DayNumber - today.DayNumber,
+            forecast.Season.IsLearned ? Math.Round(forecast.Season.Average(today, leadTimes.TargetStockDays), 2) : null,
+            heldForExcess,
+            cappedForAge);
     }
-
-    private static int DaysOfStock(int units, decimal perDay) => (int)Math.Floor(units / perDay);
 
     private static int Units(decimal value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);
 }

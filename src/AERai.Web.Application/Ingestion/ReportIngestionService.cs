@@ -46,6 +46,12 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// </summary>
     public static readonly TimeSpan DataEndSafetyMargin = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// How long a stop holds a waiting run's check before ending it; the run is completed straight after, so this only
+    /// matters if that write fails.
+    /// </summary>
+    private static readonly TimeSpan StopLease = TimeSpan.FromMinutes(15);
+
     /// <summary>How much of a failed report's error document is read; Amazon's are a line or two.</summary>
     private const int MaxFailureDocumentChars = 4_000;
 
@@ -139,6 +145,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     private readonly ISyncScheduleRepository _schedules;
     private readonly ISyncRunRepository _runs;
     private readonly IMarketplaceQueries _marketplaces;
+    private readonly IRunStopSignal _stops;
     private readonly IngestionOptions _options;
     private readonly TimeProvider _clock;
     private readonly ILogger<ReportIngestionService> _logger;
@@ -159,6 +166,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// <param name="schedules">Schedule persistence.</param>
     /// <param name="runs">Run history persistence.</param>
     /// <param name="marketplaces">Marketplace lookups (each schedule pulls for one marketplace).</param>
+    /// <param name="stops">Lets a user stop a run while it is executing.</param>
     /// <param name="options">Polling settings.</param>
     /// <param name="clock">Clock (also drives polling delays, so tests run instantly).</param>
     /// <param name="logger">Logger.</param>
@@ -178,6 +186,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         ISyncScheduleRepository schedules,
         ISyncRunRepository runs,
         IMarketplaceQueries marketplaces,
+        IRunStopSignal stops,
         IOptions<IngestionOptions> options,
         TimeProvider clock,
         ILogger<ReportIngestionService> logger)
@@ -199,6 +208,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         _schedules = schedules;
         _runs = runs;
         _marketplaces = marketplaces;
+        _stops = stops;
         _options = options.Value;
         _clock = clock;
         _logger = logger;
@@ -228,37 +238,44 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             LogBackfill(run.Id, backfill.Start, backfill.End);
         }
 
+        // The work below observes the tracked token, so a user can stop it between (or during) calls to Amazon.
+        using var tracked = _stops.Track(run.Id, cancellationToken);
+        var work = tracked.Token;
         var context = new RunContext(schedule, run, backfill);
         try
         {
-            context.Marketplace = await ResolveMarketplaceAsync(schedule, cancellationToken).ConfigureAwait(false);
+            context.Marketplace = await ResolveMarketplaceAsync(schedule, work).ConfigureAwait(false);
             if (schedule.ReportType == AmazonReportType.AwdInventory)
             {
-                await IngestAwdInventoryAsync(context, cancellationToken).ConfigureAwait(false);
+                await IngestAwdInventoryAsync(context, work).ConfigureAwait(false);
             }
             else if (schedule.ReportType == AmazonReportType.OrdersApi)
             {
-                await IngestOrdersApiAsync(context, cancellationToken).ConfigureAwait(false);
+                await IngestOrdersApiAsync(context, work).ConfigureAwait(false);
             }
             else if (schedule.ReportType == AmazonReportType.DeferredTransactions)
             {
-                await IngestDeferredTransactionsAsync(context, cancellationToken).ConfigureAwait(false);
+                await IngestDeferredTransactionsAsync(context, work).ConfigureAwait(false);
             }
             else if (schedule.ReportType == AmazonReportType.Settlements)
             {
-                await IngestListedReportsAsync(context, cancellationToken).ConfigureAwait(false);
+                await IngestListedReportsAsync(context, work).ConfigureAwait(false);
             }
             else if (schedule.ReportType == AmazonReportType.AdsSpend)
             {
-                if (await RequestAdsSpendAsync(context, cancellationToken).ConfigureAwait(false))
+                if (await RequestAdsSpendAsync(context, work).ConfigureAwait(false))
                 {
                     return Summarize(context);
                 }
             }
-            else if (await RequestReportAsync(context, cancellationToken).ConfigureAwait(false))
+            else if (await RequestReportAsync(context, work).ConfigureAwait(false))
             {
                 return Summarize(context);
             }
+        }
+        catch (OperationCanceledException) when (tracked.StoppedBy is { } stoppedBy)
+        {
+            await StoppedAsync(context, stoppedBy, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -291,13 +308,15 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             ?? throw new InvalidOperationException($"Sync schedule {run.SyncScheduleId} does not exist.");
         var backfill = run.BackfillStart is { } start && run.BackfillEnd is { } end ? new BackfillWindow(start, end) : null;
         var context = new RunContext(schedule, run, backfill);
+        using var tracked = _stops.Track(run.Id, cancellationToken);
+        var work = tracked.Token;
 
         try
         {
-            context.Marketplace = await ResolveMarketplaceAsync(schedule, cancellationToken).ConfigureAwait(false);
+            context.Marketplace = await ResolveMarketplaceAsync(schedule, work).ConfigureAwait(false);
             if (schedule.ReportType == AmazonReportType.AdsSpend)
             {
-                return await CheckAdsSpendAsync(context, cancellationToken).ConfigureAwait(false)
+                return await CheckAdsSpendAsync(context, work).ConfigureAwait(false)
                     ? Summarize(context)
                     : await FinishAsync(context, cancellationToken).ConfigureAwait(false);
             }
@@ -305,7 +324,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             if (run.PendingReportId is not { } reportId)
             {
                 // Held back by the report's request cooldown: ask Amazon now (or wait again if another run asked meanwhile).
-                if (await RequestReportAsync(context, cancellationToken).ConfigureAwait(false))
+                if (await RequestReportAsync(context, work).ConfigureAwait(false))
                 {
                     return Summarize(context);
                 }
@@ -314,7 +333,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             }
 
             context.ReportIds.Add(reportId);
-            var status = await _gateway.GetReportStatusAsync(context.Marketplace, reportId, cancellationToken).ConfigureAwait(false);
+            var status = await _gateway.GetReportStatusAsync(context.Marketplace, reportId, work).ConfigureAwait(false);
             if (status.Status is AmazonProcessingStatus.InQueue or AmazonProcessingStatus.InProgress)
             {
                 var now = _clock.GetUtcNow();
@@ -325,11 +344,15 @@ public sealed partial class ReportIngestionService : IReportIngestionService
 
                 run.PollAttempts++;
                 run.NextCheckAt = now + PollDelay(run.PollAttempts);
-                await _runs.SaveProgressAsync(run, cancellationToken).ConfigureAwait(false);
+                await _runs.SaveProgressAsync(run, work).ConfigureAwait(false);
                 return Summarize(context);
             }
 
-            await IngestFinishedReportAsync(context, reportId, status, cancellationToken).ConfigureAwait(false);
+            await IngestFinishedReportAsync(context, reportId, status, work).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (tracked.StoppedBy is { } stoppedBy)
+        {
+            await StoppedAsync(context, stoppedBy, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -348,6 +371,91 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         }
 
         return await FinishAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result<string>> StopAsync(long runId, string marketplaceId, string stoppedBy, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(stoppedBy);
+
+        var run = await _runs.GetAsync(runId, cancellationToken).ConfigureAwait(false);
+        if (run is null || run.MarketplaceId != marketplaceId)
+        {
+            return Result.Failure<string>("That run no longer exists.");
+        }
+
+        if (run.Status != SyncRunStatus.Running)
+        {
+            return Result.Failure<string>("That run has already finished.");
+        }
+
+        // Working right now on this instance (a first run, or a check in progress): stop it where it is. Asked first, because
+        // a check in progress has already moved NextCheckAt to its lease, which the claim below would also match.
+        if (_stops.RequestStop(run.Id, stoppedBy))
+        {
+            LogRunStopped(run.Id, stoppedBy);
+            return Result.Success("Stopping: it ends after the call to Amazon in progress. Anything already saved is kept.");
+        }
+
+        // Waiting on Amazon: claim the next check (the same compare-and-swap the scheduler uses), so a check can't
+        // start while the run is ended here. A check another instance is running finds the run completed and leaves it.
+        var now = _clock.GetUtcNow();
+        if (run.NextCheckAt is { } nextCheckAt && await _runs.TryClaimCheckAsync(run.Id, nextCheckAt, now + StopLease, cancellationToken).ConfigureAwait(false))
+        {
+            var amazon = await CancelAtAmazonAsync(run, cancellationToken).ConfigureAwait(false);
+            run.Status = SyncRunStatus.Cancelled;
+            run.Message = $"Stopped by {stoppedBy} while waiting for Amazon.{amazon}";
+            run.CompletedAt = now;
+            await _runs.CompleteAsync(run, CancellationToken.None).ConfigureAwait(false);
+            LogRunStopped(run.Id, stoppedBy);
+            return Result.Success($"Stopped. {amazon.Trim()}".Trim());
+        }
+
+        return Result.Failure<string>("That run is being worked on by another copy of the app right now. Try again in a minute.");
+    }
+
+    /// <summary>Asks Amazon to stop making the run's report, best effort.</summary>
+    /// <returns>A note for the run's message (with a leading space), or empty when there was nothing to cancel.</returns>
+    private async Task<string> CancelAtAmazonAsync(SyncRun run, CancellationToken cancellationToken)
+    {
+        if (run.PendingReportId is not { } reportId)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var marketplace = (await _marketplaces.GetAllAsync(cancellationToken).ConfigureAwait(false)).First(m => m.MarketplaceId == run.MarketplaceId);
+            if (run.ReportType == AmazonReportType.AdsSpend)
+            {
+                await _adsGateway.CancelSpendReportAsync(marketplace, reportId, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await _gateway.CancelReportAsync(marketplace, reportId, cancellationToken).ConfigureAwait(false);
+            }
+
+            return $" Amazon was asked to stop making report {reportId}.";
+        }
+#pragma warning disable CA1031 // Amazon refuses to cancel a report it has started; the run is stopped either way.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            LogCancelReportFailed(ex, run.Id, reportId);
+            return $" Amazon had already started report {reportId}, so it finishes there but is never downloaded.";
+        }
+    }
+
+    /// <summary>Records a run a user stopped while it was executing; what it already saved is kept.</summary>
+    private async Task StoppedAsync(RunContext context, string stoppedBy, CancellationToken cancellationToken)
+    {
+        var run = context.Run;
+        var amazon = await CancelAtAmazonAsync(run, cancellationToken).ConfigureAwait(false);
+        var kept = context.BatchIds.Count > 0 || context.RowsWritten > 0 ? " What it saved before stopping is kept." : string.Empty;
+        run.Status = SyncRunStatus.Cancelled;
+        run.Message = $"Stopped by {stoppedBy}.{kept}{amazon}";
+        LogRunStopped(run.Id, stoppedBy);
     }
 
     /// <summary>
@@ -386,7 +494,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         }
 
         run.CompletedAt = _clock.GetUtcNow();
-        if (context.Backfill is { } backfill && run.Status != SyncRunStatus.Failed)
+        if (context.Backfill is { } backfill && run.Status is not (SyncRunStatus.Failed or SyncRunStatus.Cancelled))
         {
             context.Notes.Insert(0, $"Backfill {backfill}.");
         }
@@ -1086,6 +1194,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         AmazonReportType.FbaInventory => ImportSource.FbaInventory,
         AmazonReportType.FbaReservedInventory => ImportSource.FbaReservedInventory,
         AmazonReportType.RestockRecommendations => ImportSource.FbaRestockRecommendations,
+        AmazonReportType.FbaInventoryPlanning => ImportSource.FbaInventoryPlanning,
         AmazonReportType.Settlements => ImportSource.Settlements,
         _ => throw new InvalidOperationException($"No staging source for report type '{reportType}'."),
     };
@@ -1144,4 +1253,10 @@ public sealed partial class ReportIngestionService : IReportIngestionService
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Sync run {RunId} for schedule '{ScheduleName}' failed")]
     private partial void LogRunFailed(Exception exception, long runId, string scheduleName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sync run {RunId} stopped by {StoppedBy}")]
+    private partial void LogRunStopped(long runId, string stoppedBy);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Amazon did not cancel report {ReportId} of stopped sync run {RunId}")]
+    private partial void LogCancelReportFailed(Exception exception, long runId, string reportId);
 }

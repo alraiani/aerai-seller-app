@@ -100,6 +100,18 @@ internal sealed partial class AdsApiClient(HttpClient http, IHttpClientFactory h
             ?? throw new InvalidOperationException($"Amazon Ads returned an empty status for report {reportId}.");
     }
 
+    /// <summary>Deletes (cancels) a report Amazon is still making, so it stops generating it.</summary>
+    /// <param name="region">Region of the profile.</param>
+    /// <param name="profileId">Advertising profile id the report was requested under.</param>
+    /// <param name="reportId">Report id.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A task that completes once Amazon accepts the deletion.</returns>
+    public async Task DeleteReportAsync(AmazonRegion region, string profileId, string reportId, CancellationToken cancellationToken)
+    {
+        using var request = Request(HttpMethod.Delete, region, $"reporting/reports/{Uri.EscapeDataString(reportId)}", AdsApiOperation.DeleteReport, profileId);
+        await SendAsync(request, AdsApiOperation.DeleteReport, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Downloads a completed report from its pre-signed URL, without the Ads token.</summary>
     /// <param name="url">The report's download URL.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

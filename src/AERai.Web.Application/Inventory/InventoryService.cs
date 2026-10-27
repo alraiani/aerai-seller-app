@@ -60,6 +60,8 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
         var positions = await queries.GetPositionsAsync(marketplace.MarketplaceId, cancellationToken).ConfigureAwait(false);
         var sold = await queries.GetUnitsSoldAsync(marketplace.MarketplaceId, LocalTime.StartOfDay(windowStart, zone), cancellationToken).ConfigureAwait(false);
         var leadTimes = await queries.GetLeadTimesAsync(marketplace.MarketplaceId, cancellationToken).ConfigureAwait(false);
+        var familyRules = await queries.GetFamilyRulesAsync(cancellationToken).ConfigureAwait(false);
+        var seasons = await SeasonsAsync(marketplace.MarketplaceId, positions, today, zone, cancellationToken).ConfigureAwait(false);
         var settings = options.Value;
 
         var salesBySku = sold
@@ -73,9 +75,16 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
                 var sales = salesBySku[p.Sku].ToList();
                 var units90 = sales.Sum(s => s.Quantity);
                 var units30 = sales.Where(s => s.Day >= recentStart).Sum(s => s.Quantity);
-                var velocity = Velocity(sales.Select(s => s.Day).DefaultIfEmpty().Min(), units90, today);
+                var firstSale = sales.Select(s => s.Day).DefaultIfEmpty().Min();
+                var velocity = Velocity(firstSale, units90, today);
                 var times = settings.Resolve(leadTimes.GetValueOrDefault(p.Sku));
-                var plan = RestockPlanner.Plan(today, velocity, p.SellThroughStock, p.HomeStock, times, AmazonRecommendation.From(p.AmazonRecommendedQuantity, p.AmazonRecommendedShipDate), p.PendingToAmazon);
+                var covered = today.DayNumber - firstSale.DayNumber + 1;
+                var demand = DemandForecast.Blend(
+                    today, velocity, Math.Min(VelocityWindowDays, covered), units30, Math.Min(RecentSalesDays, covered), seasons.GetValueOrDefault(SeasonKey(p)) ?? SeasonalityIndex.Flat);
+                var rules = p.FamilyId is { } familyId ? familyRules.GetValueOrDefault(familyId) ?? RestockRules.None : RestockRules.None;
+                var limits = new StockLimits(p.EstimatedExcess ?? 0, settings.MaxAmazonCoverDays);
+                var plan = RestockPlanner.Plan(
+                    today, demand, p.SellThroughStock, p.HomeStock, times, rules, AmazonRecommendation.From(p.AmazonRecommendedQuantity, p.AmazonRecommendedShipDate), p.PendingToAmazon, limits);
                 var status = StatusOf(p, units30, velocity, plan, settings.AlertLeadDays);
                 var average30 = AveragePerDay(sales.Where(s => s.Day >= recentStart).Select(s => (s.Day, s.Quantity)), RecentSalesDays, today);
                 var average90 = AveragePerDay(sales.Select(s => (s.Day, s.Quantity)), VelocityWindowDays, today);
@@ -119,14 +128,15 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
             .ToList();
         var soon = options.Value.AlertLeadDays;
 
-        // Palette order, like the printed sheet; SKUs without a color come last so they stand out.
+        // The printed sheet's order: colors in display order (SKUs without a color last, so they stand out), and
+        // inside each color the family's shared styles before its one-offs.
+        var shared = WorksheetSkuOrder.SharedStyles(items.Select(i => (i.Sku, i.Position.Color)));
         var groups = items
             .GroupBy(i => i.Position.Color)
-            .OrderBy(g => g.Key is null)
-            .ThenBy(g => g.Key)
+            .OrderBy(g => g.Key is { } color ? ProductColors.Position(color) : int.MaxValue)
             .Select(g =>
             {
-                var skus = g.OrderBy(i => i.Sku, StringComparer.Ordinal).ToList();
+                var skus = WorksheetSkuOrder.Order(g, i => i.Sku, shared).ToList();
                 return new WorksheetGroup(g.Key, skus, WorksheetTotals.Of(skus, soon));
             })
             .ToList();
@@ -182,6 +192,26 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
         };
         return ordered.ThenBy(i => i.Sku, StringComparer.Ordinal);
     }
+
+    /// <summary>
+    /// Learns a seasonality index per family (a SKU without one learns from its own sales) from the last
+    /// <see cref="SeasonalityIndex.MaxMonths"/> full months: a family's colors and styles share one wedding season,
+    /// and pooling them gives each month enough sales to read.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, SeasonalityIndex>> SeasonsAsync(
+        string marketplaceId, IReadOnlyList<InventoryPosition> positions, DateOnly today, TimeZoneInfo zone, CancellationToken cancellationToken)
+    {
+        var since = LocalTime.StartOfDay(new DateOnly(today.Year, today.Month, 1).AddMonths(-SeasonalityIndex.MaxMonths), zone);
+        var monthly = await queries.GetMonthlyUnitsSoldAsync(marketplaceId, since, cancellationToken).ConfigureAwait(false);
+        var keys = positions.ToDictionary(p => p.Sku, SeasonKey, StringComparer.Ordinal);
+        return monthly
+            .Where(m => keys.ContainsKey(m.Sku))
+            .GroupBy(m => keys[m.Sku], StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => SeasonalityIndex.From(g.Select(m => (m.Year, m.Month, m.Units)), today), StringComparer.Ordinal);
+    }
+
+    private static string SeasonKey(InventoryPosition position) =>
+        position.FamilyId is { } familyId ? $"family:{familyId}" : $"sku:{position.Sku}";
 
     /// <summary>Average units per day over the days the SKU's sales history covers, or null when too thin.</summary>
     private static decimal? Velocity(DateOnly firstSale, int unitsSold, DateOnly today)

@@ -1,5 +1,23 @@
 @using AERai.Web.Application.Inventory
 @model FamilyManagerModel
+@functions {
+    // e.g. "Send 5s (10s from 50) · order 100+ in 10s".
+    private static string FamilyRulesText(RestockRules r)
+    {
+        var parts = new List<string>();
+        if (r.SendMultiple is { } small)
+        {
+            parts.Add($"Send {small}s" + (r.SendMultipleLarge is { } large && r.SendLargeFrom is { } from ? $" ({large}s from {from})" : ""));
+        }
+
+        if (r.OrderMinimum is not null || r.OrderMultiple is not null)
+        {
+            parts.Add("order" + (r.OrderMinimum is { } min ? $" {min}+" : "") + (r.OrderMultiple is { } m ? $" in {m}s" : ""));
+        }
+
+        return string.Join(" · ", parts);
+    }
+}
 @* Create, rename, and delete families. Used inside the Inventory page's Families dialog and on the
    Families page; every form posts to /Inventory/Families and returns to the list the user was on. *@
 <form method="post" asp-page="/Inventory/Families" asp-page-handler="Create" asp-route-back="@Model.Back" class="family-create">
@@ -25,6 +43,30 @@ else
                     <button type="submit" class="btn btn-sm btn-soft btn-icon" aria-label="Save the new name for @f.Name" title="Save name"><partial name="_Icon" model='"check"' /></button>
                 </form>
                 <a class="family-count" href="@Url.Page("/Inventory/Index", new { family = f.Id })" title="Show these SKUs">@f.SkuCount.ToString("N0") SKU@(f.SkuCount == 1 ? "" : "s")</a>
+                <details class="family-rules">
+                    <summary class="btn btn-sm btn-soft" title="How suggested sends and supplier orders are rounded">
+                        <partial name="_Icon" model='"box"' /> @(f.RulesOrNone.Any ? FamilyRulesText(f.RulesOrNone) : "Restock rules")
+                    </summary>
+                    <form method="post" asp-page="/Inventory/Families" asp-page-handler="Rules" asp-route-id="@f.Id" asp-route-back="@Model.Back" class="family-rules-form">
+                        <label>Send in multiples of
+                            <input type="number" name="rules.SendMultiple" value="@f.RulesOrNone.SendMultiple" min="1" max="@RestockRules.MaxValue" class="form-control form-control-sm" placeholder="e.g. 5" />
+                        </label>
+                        <label>then multiples of
+                            <input type="number" name="rules.SendMultipleLarge" value="@f.RulesOrNone.SendMultipleLarge" min="1" max="@RestockRules.MaxValue" class="form-control form-control-sm" placeholder="e.g. 10" />
+                        </label>
+                        <label>from
+                            <input type="number" name="rules.SendLargeFrom" value="@f.RulesOrNone.SendLargeFrom" min="1" max="@RestockRules.MaxValue" class="form-control form-control-sm" placeholder="e.g. 50" />
+                            units</label>
+                        <label>Order at least
+                            <input type="number" name="rules.OrderMinimum" value="@f.RulesOrNone.OrderMinimum" min="1" max="@RestockRules.MaxValue" class="form-control form-control-sm" placeholder="e.g. 100" />
+                        </label>
+                        <label>in multiples of
+                            <input type="number" name="rules.OrderMultiple" value="@f.RulesOrNone.OrderMultiple" min="1" max="@RestockRules.MaxValue" class="form-control form-control-sm" placeholder="e.g. 10" />
+                        </label>
+                        <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"check"' /> Save rules</button>
+                        <span class="form-text">Blank leaves that number unrounded.</span>
+                    </form>
+                </details>
                 <form method="post" asp-page="/Inventory/Families" asp-page-handler="Delete" asp-route-id="@f.Id" asp-route-back="@Model.Back"
                       data-confirm="@(f.SkuCount == 0 ? $"Delete the family \"{f.Name}\"?" : $"Delete the family \"{f.Name}\"? Its {f.SkuCount} SKU{(f.SkuCount == 1 ? "" : "s")} will no longer be in a family (the SKUs themselves are kept).")">
                     <button type="submit" class="btn btn-sm btn-soft-bad btn-icon" aria-label="Delete @f.Name" title="Delete family"><partial name="_Icon" model='"trash"' /></button>

@@ -83,14 +83,30 @@ public interface IHomeStockLedgerService
     /// <returns>The page.</returns>
     Task<PagedResult<HomeStockLedgerEntry>> ListAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, CancellationToken cancellationToken);
 
-    /// <summary>
-    /// Entries grouped by kind of movement, in a fixed order (shipped to Amazon, received from supplier,
-    /// count correction, other, opening balance); kinds without a matching entry are left out.
-    /// </summary>
+    /// <summary>One page of actions (the entries each save wrote), newest first.</summary>
     /// <param name="marketplaceId">Marketplace.</param>
     /// <param name="filter">Filters.</param>
-    /// <param name="search">Text matched against SKU, title, reference, or note; blank for none.</param>
+    /// <param name="request">Paging (in actions) and search.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The groups, each with its newest entries.</returns>
-    Task<IReadOnlyList<HomeStockLedgerGroup>> GetGroupsAsync(string marketplaceId, HomeStockLedgerFilter filter, string? search, CancellationToken cancellationToken);
+    /// <returns>The page; each action lists its newest entries, at most <see cref="HomeStockLedgerService.MaxGroupRows"/>.</returns>
+    Task<PagedResult<HomeStockLedgerAction>> GetActionsAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Undoes a whole action: every entry logged with the given one is reversed, all or nothing, so home stock
+    /// goes back to what it was without leaving the action half undone.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="entryId">Any entry of the action.</param>
+    /// <param name="user">Email of the user undoing it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A message saying what was undone, or why it couldn't be.</returns>
+    Task<Result<string>> UndoActionAsync(string marketplaceId, long entryId, string user, CancellationToken cancellationToken);
+
+    /// <summary>Reverses several entries at once, all or nothing, as one action (e.g. every send of one shipment).</summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="ids">The entries, at most <see cref="HomeStockLedgerService.MaxBulkEntries"/>.</param>
+    /// <param name="user">Email of the user reversing them.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A message saying what was reversed, or why nothing was.</returns>
+    Task<Result<string>> ReverseManyAsync(string marketplaceId, IReadOnlyCollection<long> ids, string user, CancellationToken cancellationToken);
 }

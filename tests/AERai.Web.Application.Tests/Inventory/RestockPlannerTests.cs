@@ -153,4 +153,60 @@ public sealed class RestockPlannerTests
 
         Assert.Equal((before.ReorderBy, before.ReorderQuantity), (after.ReorderBy, after.ReorderQuantity));
     }
+
+    [Fact]
+    public void AmazonReportsExcess_SendsNothing()
+    {
+        var plan = RestockPlanner.Plan(Today, DemandForecast.Flat(2m), 37, 500, Times, RestockRules.None, limits: new StockLimits(ExcessAtAmazon: 4, MaxAmazonCoverDays: 150))!;
+
+        Assert.Equal((0, null, true), (plan.SendToAmazon, plan.SendBy, plan.HeldForExcess));
+        Assert.Equal(143, plan.UnitsNeeded); // Still shown, so the reason the send is held is clear.
+    }
+
+    [Fact]
+    public void LongTarget_IsCappedBelowTheAgingLimit()
+    {
+        var times = Times with { TargetStockDays = 240 };
+
+        var plan = RestockPlanner.Plan(Today, DemandForecast.Flat(1m), 20, 500, times, RestockRules.None, limits: new StockLimits(0, 150))!;
+
+        // 240 wanted at Amazon, but at most 150 days' worth: 150 − 20 already there.
+        Assert.Equal((130, true), (plan.SendToAmazon, plan.CappedForAge));
+    }
+
+    [Fact]
+    public void BatchMinimumOnASlowSeller_StillOrdersTheMinimum()
+    {
+        // Supplier stock is kept at home, so a long cover there draws no Amazon storage fees and isn't held back.
+        var plan = RestockPlanner.Plan(Today, DemandForecast.Flat(0.1m), 5, 10, Times, new RestockRules(null, null, null, 100, 10))!;
+
+        Assert.Equal(100, plan.ReorderQuantity);
+    }
+
+    [Fact]
+    public void FamilyRules_RoundTheSendAndTheOrder()
+    {
+        // 2/day for 90 days = 180 wanted at Amazon; 37 there leaves 143 → 140 in 10s.
+        var plan = RestockPlanner.Plan(Today, DemandForecast.Flat(2m), 37, 500, Times, new RestockRules(5, 10, 50, 100, 10))!;
+
+        Assert.Equal((143, 140, 0), (plan.UnitsNeeded, plan.SendToAmazon, plan.ShortAtHome));
+        Assert.Equal(0, plan.ReorderQuantity % 10);
+        Assert.True(plan.ReorderQuantity >= 180);
+    }
+
+    [Fact]
+    public void Season_AheadOfABusyStretch_PlansMoreThanFlat()
+    {
+        int[] pattern = [10, 10, 20, 30, 30, 30, 30, 30, 30, 20, 10, 10];
+        var history = Enumerable.Range(0, 24).Select(m => Today.AddMonths(-24 + m)).Select(d => (d.Year, d.Month, pattern[d.Month - 1]));
+        var season = SeasonalityIndex.From(history, new DateOnly(2026, 3, 1));
+        var march = new DateOnly(2026, 3, 1);
+
+        var flat = RestockPlanner.Plan(march, DemandForecast.Flat(1m), 0, 1000, Times, RestockRules.None)!;
+        var seasonal = RestockPlanner.Plan(march, new DemandForecast(1m, season), 0, 1000, Times, RestockRules.None)!;
+
+        Assert.True(seasonal.SendToAmazon > flat.SendToAmazon, $"{seasonal.SendToAmazon} vs {flat.SendToAmazon}");
+        Assert.True(seasonal.SeasonFactor > 1m);
+        Assert.Null(flat.SeasonFactor);
+    }
 }

@@ -310,6 +310,10 @@
                             {
                                 <div class="next-step" title="@InventoryFormat.StepsTip(item)">
                                     <div><strong>@send.Action</strong> <span class="text-muted-token">@send.When</span></div>
+                                    @if (InventoryFormat.Season(plan) is { } season)
+                                    {
+                                        <div class="cell-sub">@season</div>
+                                    }
                                     @if (amazon is not null)
                                     {
                                         <div class="cell-sub">@amazon</div>
@@ -318,12 +322,20 @@
                                     {
                                         <div class="cell-sub text-warn">@plan.ShortAtHome.ToString("N0", en) more needed than home stock holds</div>
                                     }
+                                    @if (InventoryFormat.SendHold(plan) is { } hold)
+                                    {
+                                        <div class="cell-sub text-warn">@hold</div>
+                                    }
                                 </div>
                             }
                             else if (item.Restock is { } covered)
                             {
                                 <div title="@InventoryFormat.StepsTip(item)">
-                                    @if (covered.ShortAtHome > 0)
+                                    @if (InventoryFormat.SendHold(covered) is { } held)
+                                    {
+                                        <div class="text-warn">@held</div>
+                                    }
+                                    else if (covered.ShortAtHome > 0)
                                     {
                                         <div class="text-warn">Nothing at home to send</div>
                                     }

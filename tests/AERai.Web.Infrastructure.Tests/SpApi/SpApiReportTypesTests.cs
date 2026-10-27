@@ -15,6 +15,7 @@ public sealed class SpApiReportTypesTests
     [InlineData(AmazonReportType.FbaReservedInventory, "GET_RESERVED_INVENTORY_DATA")]
     [InlineData(AmazonReportType.RestockRecommendations, "GET_RESTOCK_INVENTORY_RECOMMENDATIONS_REPORT")]
     [InlineData(AmazonReportType.Settlements, "GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2")]
+    [InlineData(AmazonReportType.FbaInventoryPlanning, "GET_FBA_INVENTORY_PLANNING_DATA")]
     public void ToCode_ReturnsTheReportWhoseLayoutStagingExpects(AmazonReportType type, string expected) =>
         Assert.Equal(expected, SpApiReportTypes.ToCode(type));
 }

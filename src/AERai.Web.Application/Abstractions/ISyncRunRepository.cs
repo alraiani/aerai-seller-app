@@ -14,7 +14,10 @@ public interface ISyncRunRepository
     /// <returns>The new run id.</returns>
     Task<long> StartAsync(SyncRun run, CancellationToken cancellationToken);
 
-    /// <summary>Saves the final state of a run, clearing any pending Amazon report.</summary>
+    /// <summary>
+    /// Saves the final state of a run, clearing any pending Amazon report. A run no longer in progress (stopped by a
+    /// user, or failed as interrupted) is left as it is.
+    /// </summary>
     /// <param name="run">The run, with status and completion fields set.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>A task that completes when saved.</returns>

@@ -27,4 +27,16 @@ public interface IInventoryQueries
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>Overrides keyed by SKU.</returns>
     Task<IReadOnlyDictionary<string, LeadTimeSettings>> GetLeadTimesAsync(string marketplaceId, CancellationToken cancellationToken);
+
+    /// <summary>Units sold per SKU and calendar month since a point in time, for learning seasonality.</summary>
+    /// <param name="marketplaceId">Marketplace to report on.</param>
+    /// <param name="since">Lower bound on purchase time (inclusive).</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>One row per SKU and month that sold anything.</returns>
+    Task<IReadOnlyList<MonthlyUnitsSold>> GetMonthlyUnitsSoldAsync(string marketplaceId, DateTimeOffset since, CancellationToken cancellationToken);
+
+    /// <summary>Each family's rounding rules (families without any are absent).</summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Rules keyed by family id.</returns>
+    Task<IReadOnlyDictionary<int, RestockRules>> GetFamilyRulesAsync(CancellationToken cancellationToken);
 }

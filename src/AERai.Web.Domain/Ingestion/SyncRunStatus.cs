@@ -14,4 +14,7 @@ public enum SyncRunStatus
 
     /// <summary>Stopped by an error; see <see cref="SyncRun.Message"/>.</summary>
     Failed = 4,
+
+    /// <summary>Stopped by a user before it finished; see <see cref="SyncRun.Message"/>.</summary>
+    Cancelled = 5,
 }

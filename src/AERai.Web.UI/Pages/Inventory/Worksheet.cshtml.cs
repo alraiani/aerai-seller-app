@@ -49,6 +49,11 @@ public sealed class WorksheetModel(IInventoryService inventory, IInventoryItemSe
     /// <summary>Restock actions due within this many days are highlighted.</summary>
     public int SoonDays => options.Value.AlertLeadDays;
 
+    /// <summary>An amount in the marketplace's currency.</summary>
+    /// <param name="amount">The amount.</param>
+    /// <returns>e.g. "$6.00".</returns>
+    public string Money(decimal amount) => DashboardFormat.Price(amount, Marketplace.Currency);
+
     /// <summary>Whether the user can edit home stock.</summary>
     public bool CanEdit => User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator);
 

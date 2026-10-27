@@ -16,7 +16,10 @@ public interface IHomeStockLedgerRepository
     /// <returns>What happened, and the new entry's id when it was recorded.</returns>
     Task<(HomeStockLedgerOutcome Outcome, long? Id)> RecordAsync(HomeStockLedgerWrite write, CancellationToken cancellationToken);
 
-    /// <summary>Records a reversal of an entry: the same type, opposite units, linked to the original.</summary>
+    /// <summary>
+    /// Records a reversal of an entry: the same type, opposite units, linked to the original. A send Amazon
+    /// already shows part of can't be reversed (<see cref="HomeStockLedgerOutcome.AlreadyAtAmazon"/>).
+    /// </summary>
     /// <param name="marketplaceId">Marketplace of the entry.</param>
     /// <param name="id">The entry to reverse.</param>
     /// <param name="createdAt">When the reversal is logged.</param>
@@ -98,12 +101,48 @@ public interface IHomeStockLedgerRepository
     /// <returns>The page.</returns>
     Task<PagedResult<HomeStockLedgerEntry>> ListAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, CancellationToken cancellationToken);
 
-    /// <summary>A marketplace's entries grouped by kind of movement, in no particular order.</summary>
+    /// <summary>
+    /// One page of a marketplace's actions (entries sharing when they were logged and by whom, with sends to Amazon
+    /// apart from the rest of the same save), newest first.
+    /// </summary>
     /// <param name="marketplaceId">Marketplace.</param>
-    /// <param name="filter">SKU, family, type, and date range.</param>
-    /// <param name="search">Text matched against SKU, title, reference, or note; <see langword="null"/> for none.</param>
-    /// <param name="maxRows">Most entries to return per group (the newest).</param>
+    /// <param name="filter">SKU, family, type, and date range (applied to the entries, so totals count matching ones).</param>
+    /// <param name="request">Paging (in actions); search matches SKU, title, reference, or note.</param>
+    /// <param name="maxRows">Most entries to return per action (the newest).</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>One group per kind that has a matching entry.</returns>
-    Task<IReadOnlyList<HomeStockLedgerGroup>> ListGroupsAsync(string marketplaceId, HomeStockLedgerFilter filter, string? search, int maxRows, CancellationToken cancellationToken);
+    /// <returns>The page of actions.</returns>
+    Task<PagedResult<HomeStockLedgerAction>> ListActionsAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, int maxRows, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Undoes the action an entry belongs to (as <see cref="ListActionsAsync"/> groups them, so a send's action never
+    /// includes the recounts saved with it): reverses every entry logged with it that can still be reversed,
+    /// all in one serializable transaction, every reversal logged at <paramref name="createdAt"/> (so the undo
+    /// is one action too). Nothing is written unless all of them can be.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="entryId">Any entry of the action.</param>
+    /// <param name="createdAt">When the undo is logged.</param>
+    /// <param name="createdBy">Email of the user undoing it.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>
+    /// The outcome, how many entries were reversed, and the SKUs that blocked it:
+    /// <see cref="HomeStockLedgerOutcome.NotFound"/>, <see cref="HomeStockLedgerOutcome.CannotReverse"/> (nothing
+    /// left to undo), <see cref="HomeStockLedgerOutcome.WouldGoNegative"/>, or
+    /// <see cref="HomeStockLedgerOutcome.AlreadyAtAmazon"/> (a send Amazon already shows part of).
+    /// </returns>
+    Task<(HomeStockLedgerOutcome Outcome, int Reversed, IReadOnlyList<string> BlockingSkus)> ReverseActionAsync(
+        string marketplaceId, long entryId, DateTimeOffset createdAt, string createdBy, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reverses the given entries (those that can still be reversed), all or nothing, like
+    /// <see cref="ReverseActionAsync"/>.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace.</param>
+    /// <param name="ids">The entries (any that aren't the marketplace's own are ignored).</param>
+    /// <param name="createdAt">When the reversals are logged.</param>
+    /// <param name="createdBy">Email of the user reversing them.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The same as <see cref="ReverseActionAsync"/>; <see cref="HomeStockLedgerOutcome.CannotReverse"/> when none can be reversed.</returns>
+    Task<(HomeStockLedgerOutcome Outcome, int Reversed, IReadOnlyList<string> BlockingSkus)> ReverseEntriesAsync(
+        string marketplaceId, IReadOnlyCollection<long> ids, DateTimeOffset createdAt, string createdBy, CancellationToken cancellationToken);
 }

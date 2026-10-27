@@ -34,6 +34,15 @@ internal sealed class FakeAmazonAdsGateway : IAmazonAdsGateway
     public Task<AdsReportStatus> GetReportStatusAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken) =>
         Task.FromResult(Statuses.Count > 0 ? Statuses.Dequeue() : new AdsReportStatus(AdsReportState.Completed, null));
 
+    /// <summary>Report ids passed to CancelSpendReportAsync.</summary>
+    public List<string> CancelledReports { get; } = [];
+
+    public Task CancelSpendReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
+    {
+        CancelledReports.Add(reportId);
+        return Task.CompletedTask;
+    }
+
     public Task<Stream> OpenReportAsync(Marketplace marketplace, string reportId, CancellationToken cancellationToken)
     {
         var buffer = new MemoryStream();

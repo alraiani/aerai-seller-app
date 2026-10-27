@@ -175,6 +175,19 @@ public sealed class AdsApiTests : IDisposable
         Assert.Equal("[]", await new StreamReader(report).ReadToEndAsync());
     }
 
+    [Fact]
+    public async Task CancelSpendReportAsync_DeletesTheReportUnderTheMarketplacesProfile()
+    {
+        _lwa.Reply(HttpStatusCode.OK, TokenJson);
+        _api.Reply(HttpStatusCode.OK, Profiles).Reply(HttpStatusCode.OK, """{"code":"200","detail":"deleted"}""");
+
+        await CreateGateway().CancelSpendReportAsync(UnitedStates, "r-1", CancellationToken.None);
+
+        Assert.Equal(HttpMethod.Delete, _api.Requests[1].Method);
+        Assert.Equal("https://advertising-api.amazon.com/reporting/reports/r-1", _api.Requests[1].RequestUri!.ToString());
+        Assert.Equal("111", Header(_api.Requests[1], "Amazon-Advertising-API-Scope"));
+    }
+
     [Theory]
     [InlineData("PENDING", AdsReportState.Pending)]
     [InlineData("PROCESSING", AdsReportState.Pending)]

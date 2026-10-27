@@ -116,13 +116,57 @@ internal sealed class FakeHomeStockLedgerRepository : IHomeStockLedgerRepository
         return Task.FromResult<(HomeStockLedgerOutcome, long?)>((outcome, outcome == HomeStockLedgerOutcome.Recorded ? 99 : null));
     }
 
-    public List<HomeStockLedgerGroup> Groups { get; } = [];
+    public List<HomeStockLedgerAction> Actions { get; } = [];
 
-    public (string? Search, int MaxRows)? LastGroupsCall { get; private set; }
+    public (PageRequest Request, int MaxRows)? LastActionsCall { get; private set; }
 
-    public Task<IReadOnlyList<HomeStockLedgerGroup>> ListGroupsAsync(string marketplaceId, HomeStockLedgerFilter filter, string? search, int maxRows, CancellationToken cancellationToken)
+    public Task<PagedResult<HomeStockLedgerAction>> ListActionsAsync(string marketplaceId, HomeStockLedgerFilter filter, PageRequest request, int maxRows, CancellationToken cancellationToken)
     {
-        LastGroupsCall = (search, maxRows);
-        return Task.FromResult<IReadOnlyList<HomeStockLedgerGroup>>(Groups);
+        LastActionsCall = (request, maxRows);
+        return Task.FromResult(new PagedResult<HomeStockLedgerAction>(Actions, Actions.Count, request.SafePage, request.SafePageSize));
+    }
+
+    public Task<(HomeStockLedgerOutcome Outcome, int Reversed, IReadOnlyList<string> BlockingSkus)> ReverseActionAsync(
+        string marketplaceId, long entryId, DateTimeOffset createdAt, string createdBy, CancellationToken cancellationToken)
+    {
+        if (entryId < 1 || entryId > Entries.Count)
+        {
+            return Task.FromResult<(HomeStockLedgerOutcome, int, IReadOnlyList<string>)>((HomeStockLedgerOutcome.NotFound, 0, []));
+        }
+
+        var anchor = Entries[(int)entryId - 1];
+        var ids = Entries.Select((e, i) => (Entry: e, Id: (long)i + 1))
+            .Where(x => x.Entry.CreatedAt == anchor.CreatedAt && x.Entry.CreatedBy == anchor.CreatedBy)
+            .Select(x => x.Id)
+            .ToList();
+        return ReverseEntriesAsync(marketplaceId, ids, createdAt, createdBy, cancellationToken);
+    }
+
+    public Task<(HomeStockLedgerOutcome Outcome, int Reversed, IReadOnlyList<string> BlockingSkus)> ReverseEntriesAsync(
+        string marketplaceId, IReadOnlyCollection<long> ids, DateTimeOffset createdAt, string createdBy, CancellationToken cancellationToken)
+    {
+        // The same all-or-nothing rules as the SQL repository: reversible entries only, checked per SKU before writing.
+        var reversible = ids
+            .Where(id => id >= 1 && id <= Entries.Count)
+            .Select(id => (Id: id, Entry: Entries[(int)id - 1]))
+            .Where(x => x.Entry.MarketplaceId == marketplaceId && x.Entry.ReversesId is null && x.Entry.Type != HomeStockMovementType.OpeningBalance && !Entries.Any(e => e.ReversesId == x.Id))
+            .ToList();
+        if (reversible.Count == 0)
+        {
+            return Task.FromResult<(HomeStockLedgerOutcome, int, IReadOnlyList<string>)>((HomeStockLedgerOutcome.CannotReverse, 0, []));
+        }
+
+        var negative = reversible.GroupBy(x => x.Entry.Sku).Where(g => Balance(marketplaceId, g.Key) - g.Sum(x => x.Entry.Units) < 0).Select(g => g.Key).ToList();
+        if (negative.Count > 0)
+        {
+            return Task.FromResult<(HomeStockLedgerOutcome, int, IReadOnlyList<string>)>((HomeStockLedgerOutcome.WouldGoNegative, 0, negative));
+        }
+
+        foreach (var (id, original) in reversible)
+        {
+            Entries.Add(original with { Units = -original.Units, ReversesId = id, CreatedAt = createdAt, CreatedBy = createdBy });
+        }
+
+        return Task.FromResult<(HomeStockLedgerOutcome, int, IReadOnlyList<string>)>((HomeStockLedgerOutcome.Recorded, reversible.Count, []));
     }
 }
