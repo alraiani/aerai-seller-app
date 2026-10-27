@@ -1086,6 +1086,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         AmazonReportType.FbaInventory => ImportSource.FbaInventory,
         AmazonReportType.FbaReservedInventory => ImportSource.FbaReservedInventory,
         AmazonReportType.RestockRecommendations => ImportSource.FbaRestockRecommendations,
+        AmazonReportType.FbaInventoryPlanning => ImportSource.FbaInventoryPlanning,
         AmazonReportType.Settlements => ImportSource.Settlements,
         _ => throw new InvalidOperationException($"No staging source for report type '{reportType}'."),
     };

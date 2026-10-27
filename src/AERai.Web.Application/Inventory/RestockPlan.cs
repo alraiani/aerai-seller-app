@@ -26,6 +26,18 @@ namespace AERai.Web.Application.Inventory;
 /// <param name="DaysUntilAction">
 /// Days from today to the earliest of the send and reorder deadlines (negative = overdue).
 /// </param>
+/// <param name="HeldForExcess">
+/// Whether the send was held back to nothing because Amazon estimates it already has more of the SKU than will sell
+/// in time.
+/// </param>
+/// <param name="CappedForAge">
+/// Whether the send was cut so stock at Amazon stays under the most days of sales it should hold (so units don't
+/// age into the aged-inventory surcharge).
+/// </param>
+/// <param name="CoverAfterReorderDays">
+/// Days all stock lasts once the suggested supplier order arrives, at the expected sales; long covers draw
+/// long-term storage fees.
+/// </param>
 /// <param name="SeasonFactor">
 /// How busy the target cover period is expected to be compared with an average month (e.g. 1.4 ahead of
 /// wedding season), or <see langword="null"/> when there isn't enough history to know.
@@ -42,4 +54,7 @@ public sealed record RestockPlan(
     int DaysUntilReorder,
     int? DaysUntilSend,
     int DaysUntilAction,
-    decimal? SeasonFactor = null);
+    decimal? SeasonFactor = null,
+    bool HeldForExcess = false,
+    bool CappedForAge = false,
+    int? CoverAfterReorderDays = null);

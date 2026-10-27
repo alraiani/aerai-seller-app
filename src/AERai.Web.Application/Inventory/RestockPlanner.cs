@@ -43,9 +43,18 @@ public static class RestockPlanner
     /// <param name="rules">How sends and supplier orders are rounded.</param>
     /// <param name="amazon">Amazon's recommendation, if its restock report covers the SKU.</param>
     /// <param name="pendingToAmazon">Units sent from home that Amazon's numbers don't show yet.</param>
+    /// <param name="limits">Aging limits; <see cref="StockLimits.None"/> to send whatever the plan wants.</param>
     /// <returns>The plan, or <see langword="null"/> when the sales rate is unknown or zero.</returns>
     public static RestockPlan? Plan(
-        DateOnly today, DemandForecast? demand, int sellThroughStock, int homeStock, LeadTimes leadTimes, RestockRules rules, AmazonRecommendation? amazon = null, int pendingToAmazon = 0)
+        DateOnly today,
+        DemandForecast? demand,
+        int sellThroughStock,
+        int homeStock,
+        LeadTimes leadTimes,
+        RestockRules rules,
+        AmazonRecommendation? amazon = null,
+        int pendingToAmazon = 0,
+        StockLimits? limits = null)
     {
         ArgumentNullException.ThrowIfNull(leadTimes);
         ArgumentNullException.ThrowIfNull(rules);
@@ -64,7 +73,16 @@ public static class RestockPlanner
         var needed = Math.Max(0, Units(forecast.Units(today, leadTimes.TargetStockDays)) - atAmazon);
 
         var amazonUnits = Math.Max(0, (amazon?.Quantity ?? 0) - pending);
-        var (send, wanted) = rules.RoundSend(Math.Max(needed, amazonUnits), atHome);
+        var limit = limits ?? StockLimits.None;
+
+        // Amazon's own excess estimate wins: sending more of a SKU it already can't sell in time only buys fees.
+        var heldForExcess = limit.ExcessAtAmazon > 0 && Math.Max(needed, amazonUnits) > 0;
+        var room = limit.MaxAmazonCoverDays > 0
+            ? Math.Max(0, (int)Math.Floor(forecast.Units(today, limit.MaxAmazonCoverDays)) - atAmazon)
+            : int.MaxValue;
+        var target = heldForExcess ? 0 : Math.Max(needed, amazonUnits);
+        var cappedForAge = target > room;
+        var (send, wanted) = rules.RoundSend(Math.Min(target, room), Math.Min(atHome, room));
         DateOnly? sendBy = null;
         if (send > 0)
         {
@@ -89,6 +107,7 @@ public static class RestockPlanner
             Units(forecast.Units(today.AddDays(leadTimes.OrderLeadDays), leadTimes.TargetStockDays)),
             Units(forecast.Units(today, leadTimes.OrderLeadDays + leadTimes.TargetStockDays)) - (atAmazon + atHome)));
 
+        var coverAfterReorder = forecast.DaysCovered(today, atAmazon + atHome + reorder);
         var nextAction = sendBy is { } s && s < reorderBy ? s : reorderBy;
         return new RestockPlan(
             stockout,
@@ -102,7 +121,10 @@ public static class RestockPlanner
             reorderBy.DayNumber - today.DayNumber,
             sendBy?.DayNumber - today.DayNumber,
             nextAction.DayNumber - today.DayNumber,
-            forecast.Season.IsLearned ? Math.Round(forecast.Season.Average(today, leadTimes.TargetStockDays), 2) : null);
+            forecast.Season.IsLearned ? Math.Round(forecast.Season.Average(today, leadTimes.TargetStockDays), 2) : null,
+            heldForExcess,
+            cappedForAge,
+            coverAfterReorder);
     }
 
     private static int Units(decimal value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);

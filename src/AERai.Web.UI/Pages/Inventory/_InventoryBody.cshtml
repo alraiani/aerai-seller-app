@@ -322,12 +322,20 @@
                                     {
                                         <div class="cell-sub text-warn">@plan.ShortAtHome.ToString("N0", en) more needed than home stock holds</div>
                                     }
+                                    @if (InventoryFormat.SendHold(plan) is { } hold)
+                                    {
+                                        <div class="cell-sub text-warn">@hold</div>
+                                    }
                                 </div>
                             }
                             else if (item.Restock is { } covered)
                             {
                                 <div title="@InventoryFormat.StepsTip(item)">
-                                    @if (covered.ShortAtHome > 0)
+                                    @if (InventoryFormat.SendHold(covered) is { } held)
+                                    {
+                                        <div class="text-warn">@held</div>
+                                    }
+                                    else if (covered.ShortAtHome > 0)
                                     {
                                         <div class="text-warn">Nothing at home to send</div>
                                     }

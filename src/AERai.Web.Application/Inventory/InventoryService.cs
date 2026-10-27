@@ -82,7 +82,9 @@ public sealed class InventoryService(IInventoryQueries queries, IOptions<Invento
                 var demand = DemandForecast.Blend(
                     today, velocity, Math.Min(VelocityWindowDays, covered), units30, Math.Min(RecentSalesDays, covered), seasons.GetValueOrDefault(SeasonKey(p)) ?? SeasonalityIndex.Flat);
                 var rules = p.FamilyId is { } familyId ? familyRules.GetValueOrDefault(familyId) ?? RestockRules.None : RestockRules.None;
-                var plan = RestockPlanner.Plan(today, demand, p.SellThroughStock, p.HomeStock, times, rules, AmazonRecommendation.From(p.AmazonRecommendedQuantity, p.AmazonRecommendedShipDate), p.PendingToAmazon);
+                var limits = new StockLimits(p.EstimatedExcess ?? 0, settings.MaxAmazonCoverDays);
+                var plan = RestockPlanner.Plan(
+                    today, demand, p.SellThroughStock, p.HomeStock, times, rules, AmazonRecommendation.From(p.AmazonRecommendedQuantity, p.AmazonRecommendedShipDate), p.PendingToAmazon, limits);
                 var status = StatusOf(p, units30, velocity, plan, settings.AlertLeadDays);
                 var average30 = AveragePerDay(sales.Where(s => s.Day >= recentStart).Select(s => (s.Day, s.Quantity)), RecentSalesDays, today);
                 var average90 = AveragePerDay(sales.Select(s => (s.Day, s.Quantity)), VelocityWindowDays, today);

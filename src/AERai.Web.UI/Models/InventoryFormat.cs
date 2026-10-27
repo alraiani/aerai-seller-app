@@ -1,5 +1,6 @@
 using System.Globalization;
 using AERai.Web.Application.Inventory;
+using AERai.Web.Domain.Reporting;
 
 namespace AERai.Web.UI.Models;
 
@@ -119,6 +120,64 @@ public static class InventoryFormat
         }
 
         return $"Season ×{factor.ToString("0.0#", CultureInfo.InvariantCulture)}: {(factor > 1m ? "busier" : "quieter")} than usual";
+    }
+
+    /// <summary>
+    /// Why a send is smaller than the plan wanted, when aging limits held it back; <see langword="null"/> otherwise.
+    /// </summary>
+    /// <param name="plan">The plan.</param>
+    /// <returns>The note, or <see langword="null"/>.</returns>
+    public static string? SendHold(RestockPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        return plan.HeldForExcess ? "Held: Amazon says it has more than will sell in time"
+            : plan.CappedForAge ? "Capped so stock at Amazon won't age into storage surcharges"
+            : null;
+    }
+
+    /// <summary>
+    /// A warning when the suggested supplier order would leave more stock than sells in a long time (long-term storage
+    /// fees); <see langword="null"/> otherwise.
+    /// </summary>
+    /// <param name="plan">The plan.</param>
+    /// <param name="warningDays">Cover past which the order is flagged.</param>
+    /// <returns>The warning, or <see langword="null"/>.</returns>
+    public static string? ReorderCoverWarning(RestockPlan plan, int warningDays)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (plan.CoverAfterReorderDays is not { } days || days <= warningDays)
+        {
+            return null;
+        }
+
+        return days >= DemandForecast.MaxDays ? "Covers years of sales: risks storage fees" : $"Covers about {days / 30:N0} months of sales: risks storage fees";
+    }
+
+    /// <summary>The aged-stock note for a SKU, e.g. "12 units over 180 days at Amazon · ~$6.00 surcharge"; <see langword="null"/> when none.</summary>
+    /// <param name="position">The SKU's position.</param>
+    /// <param name="money">Formats an amount in the marketplace's currency.</param>
+    /// <returns>The note, or <see langword="null"/>.</returns>
+    public static string? Aged(InventoryPosition position, Func<decimal, string> money)
+    {
+        ArgumentNullException.ThrowIfNull(position);
+        ArgumentNullException.ThrowIfNull(money);
+        var parts = new List<string>();
+        if (position.AgedUnits is > 0 and { } aged)
+        {
+            parts.Add($"{aged:N0} unit{(aged == 1 ? "" : "s")} over 180 days at Amazon");
+        }
+
+        if (position.EstimatedExcess is > 0 and { } excess)
+        {
+            parts.Add($"{excess:N0} excess per Amazon");
+        }
+
+        if (parts.Count > 0 && position.AgedSurchargeNextMonth is > 0 and { } surcharge)
+        {
+            parts.Add($"~{money(surcharge)} surcharge");
+        }
+
+        return parts.Count == 0 ? null : string.Join(" · ", parts);
     }
 
     /// <summary>Width of the filled part of the cover bar: days of inventory against the target cover.</summary>

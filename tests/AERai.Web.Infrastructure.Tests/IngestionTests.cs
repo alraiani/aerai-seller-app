@@ -37,6 +37,11 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
     private const string RestockHeader =
         "Country\tProduct Name\tFNSKU\tMerchant SKU\tASIN\tCondition\tRecommended replenishment qty\tRecommended ship date\tRecommended action\n";
 
+    private const string PlanningHeader =
+        "snapshot-date\tsku\tasin\tproduct-name\tinv-age-0-to-90-days\tinv-age-91-to-180-days\tinv-age-181-to-270-days\tinv-age-271-to-365-days"
+        + "\tinv-age-365-plus-days\tcurrency\testimated-excess-quantity\tdays-of-supply\testimated-storage-cost-next-month\testimated-ais-181-210-days"
+        + "\testimated-ais-211-240-days\tmarketplace\n";
+
     private async Task<PromotionSummary> StageAndPromoteAsync(ImportSource source, string tsv)
     {
         await using var scope = fixture.Services.CreateAsyncScope();
@@ -119,6 +124,28 @@ public sealed class IngestionTests(SqlDatabaseFixture fixture) : IClassFixture<S
         Assert.Equal(1, promoted.RejectedRowCount);
         Assert.Equal(0, (await PositionAsync("T-RST-1"))!.AmazonRecommendedQuantity);
         Assert.Null((await PositionAsync("T-RST-2"))!.AmazonRecommendedQuantity);
+    }
+
+    [SqlFact]
+    public async Task InventoryPlanning_StoresAgeAndExcessForThisMarketplaceAndReplacesThePrevious()
+    {
+        await StageAndPromoteAsync(ImportSource.FbaInventory, MyiHeader + "T-AGE-1\tB0AGE00001\tWidget\t40\t0\t0\t0\t0\t0\nT-AGE-2\tB0AGE00002\tGadget\t5\t0\t0\t0\t0\t0\n");
+        var promoted = await StageAndPromoteAsync(ImportSource.FbaInventoryPlanning, PlanningHeader
+            + "2026-10-27\tT-AGE-1\tB0AGE00001\tWidget\t20\t8\t7\t3\t2\tUSD\t6\t210\t1.25\t2.50\t1.00\tUS\n"
+            + "2026-10-27\tT-AGE-2\tB0AGE00002\tGadget\t5\t0\t0\t0\t0\tUSD\t0\t\t\t\t\t\n"
+            + "2026-10-27\tT-AGE-1\tB0AGE00001\tWidget\t99\t0\t0\t0\t0\tCAD\t0\t9\t\t\t\tCA\n"
+            + "2026-10-27\tT-AGE-3\tB0AGE00003\tOther\tmany\t0\t0\t0\t0\tUSD\t0\t\t\t\t\tUS\n");
+
+        // The Canada row belongs to Canada's own pull; the unreadable age is rejected, not fatal.
+        Assert.Equal((1, 1, 2), (promoted.SkippedRowCount, promoted.RejectedRowCount, promoted.PromotedRowCount));
+        var aged = await PositionAsync("T-AGE-1");
+        Assert.NotNull(aged);
+        Assert.Equal((12, 6, 3.50m, 1.25m), (aged.AgedUnits, aged.EstimatedExcess, aged.AgedSurchargeNextMonth, aged.StorageCostNextMonth));
+        Assert.Equal((0, 0), ((await PositionAsync("T-AGE-2"))!.AgedUnits, (await PositionAsync("T-AGE-2"))!.EstimatedExcess));
+
+        await StageAndPromoteAsync(ImportSource.FbaInventoryPlanning, PlanningHeader + "2026-10-28\tT-AGE-2\tB0AGE00002\tGadget\t5\t0\t0\t0\t0\tUSD\t0\t\t\t\t\tUS\n");
+
+        Assert.Null((await PositionAsync("T-AGE-1"))!.AgedUnits);
     }
 
     [SqlFact]

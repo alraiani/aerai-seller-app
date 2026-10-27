@@ -56,6 +56,7 @@ public static class DependencyInjection
         services.AddSingleton<IStagingRowMapper, FbaInventoryRowMapper>();
         services.AddSingleton<IStagingRowMapper, FbaReservedInventoryRowMapper>();
         services.AddSingleton<IStagingRowMapper, FbaRestockRowMapper>();
+        services.AddSingleton<IStagingRowMapper, FbaPlanningRowMapper>();
 
         // Scoped because they depend on scoped Infrastructure services (DbContext-backed).
         services.AddScoped<IStagingImportService, StagingImportService>();

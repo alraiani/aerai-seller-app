@@ -62,4 +62,11 @@ public enum AmazonReportType
     /// Reports API, then written straight to <c>core.AdSpend</c>, replacing that range.
     /// </summary>
     AdsSpend = 9,
+
+    /// <summary>
+    /// <c>GET_FBA_INVENTORY_PLANNING_DATA</c> (Amazon's FBA Inventory / inventory health report): requested on demand;
+    /// a point-in-time snapshot of each SKU's stock age, Amazon's estimated excess units, and the storage fees and
+    /// aged-inventory surcharge coming.
+    /// </summary>
+    FbaInventoryPlanning = 10,
 }

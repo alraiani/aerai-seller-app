@@ -215,6 +215,14 @@
                                         {
                                             <span class="cell-sub">—</span>
                                         }
+                                        @if (plan is not null && InventoryFormat.SendHold(plan) is { } hold)
+                                        {
+                                            <div class="cell-sub text-warn">@hold</div>
+                                        }
+                                        @if (InventoryFormat.Aged(p, Model.Money) is { } aged)
+                                        {
+                                            <div class="cell-sub text-warn">@aged</div>
+                                        }
                                         @if (amazon is not null)
                                         {
                                             <div class="cell-sub">@amazon</div>
@@ -245,6 +253,10 @@
                                         {
                                             var reorder = InventoryFormat.Reorder(plan);
                                             <div><strong>@reorder.Action</strong> <span class="@InventoryFormat.DueClass(plan.DaysUntilReorder, Model.SoonDays)">@reorder.When</span></div>
+                                            @if (InventoryFormat.ReorderCoverWarning(plan, Model.ReorderWarningDays) is { } coverWarning)
+                                            {
+                                                <div class="cell-sub text-warn">@coverWarning</div>
+                                            }
                                         }
                                     </td>
                                 </tr>

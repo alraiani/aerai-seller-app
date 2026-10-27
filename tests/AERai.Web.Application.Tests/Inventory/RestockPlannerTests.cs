@@ -155,6 +155,35 @@ public sealed class RestockPlannerTests
     }
 
     [Fact]
+    public void AmazonReportsExcess_SendsNothing()
+    {
+        var plan = RestockPlanner.Plan(Today, DemandForecast.Flat(2m), 37, 500, Times, RestockRules.None, limits: new StockLimits(ExcessAtAmazon: 4, MaxAmazonCoverDays: 150))!;
+
+        Assert.Equal((0, null, true), (plan.SendToAmazon, plan.SendBy, plan.HeldForExcess));
+        Assert.Equal(143, plan.UnitsNeeded); // Still shown, so the reason the send is held is clear.
+    }
+
+    [Fact]
+    public void LongTarget_IsCappedBelowTheAgingLimit()
+    {
+        var times = Times with { TargetStockDays = 240 };
+
+        var plan = RestockPlanner.Plan(Today, DemandForecast.Flat(1m), 20, 500, times, RestockRules.None, limits: new StockLimits(0, 150))!;
+
+        // 240 wanted at Amazon, but at most 150 days' worth: 150 − 20 already there.
+        Assert.Equal((130, true), (plan.SendToAmazon, plan.CappedForAge));
+    }
+
+    [Fact]
+    public void BatchMinimumOnASlowSeller_ReportsTheLongCover()
+    {
+        var plan = RestockPlanner.Plan(Today, DemandForecast.Flat(0.1m), 5, 10, Times, new RestockRules(null, null, null, 100, 10))!;
+
+        Assert.Equal(100, plan.ReorderQuantity);
+        Assert.True(plan.CoverAfterReorderDays > 365, $"{plan.CoverAfterReorderDays}");
+    }
+
+    [Fact]
     public void FamilyRules_RoundTheSendAndTheOrder()
     {
         // 2/day for 90 days = 180 wanted at Amazon; 37 there leaves 143 → 140 in 10s.

@@ -589,6 +589,63 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.InventoryHealth", b =>
+                {
+                    b.Property<string>("MarketplaceId")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("Sku")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("Age0To90")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Age181To270")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Age271To365")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Age365Plus")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Age91To180")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("AgedSurchargeNextMonth")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<int?>("DaysOfSupply")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EstimatedExcess")
+                        .HasColumnType("int");
+
+                    b.Property<long>("LastImportBatchId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateOnly>("SnapshotDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("StorageCostNextMonth")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("MarketplaceId", "Sku");
+
+                    b.HasIndex("Sku");
+
+                    b.ToTable("InventoryHealth", "core", t =>
+                        {
+                            t.HasCheckConstraint("CK_InventoryHealth_Units", "[Age0To90] >= 0 AND [Age91To180] >= 0 AND [Age181To270] >= 0 AND [Age271To365] >= 0 AND [Age365Plus] >= 0 AND [EstimatedExcess] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.InventorySnapshot", b =>
                 {
                     b.Property<long>("Id")
@@ -1468,6 +1525,12 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AERai.Web.Domain.Reporting.InventoryPosition", b =>
                 {
+                    b.Property<decimal?>("AgedSurchargeNextMonth")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("AgedUnits")
+                        .HasColumnType("int");
+
                     b.Property<int?>("AmazonRecommendedQuantity")
                         .HasColumnType("int");
 
@@ -1496,11 +1559,17 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<int?>("EstimatedExcess")
+                        .HasColumnType("int");
+
                     b.Property<string>("Family")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("FamilyId")
                         .HasColumnType("int");
+
+                    b.Property<DateOnly?>("HealthSnapshotDate")
+                        .HasColumnType("date");
 
                     b.Property<int>("HomeStock")
                         .HasColumnType("int");
@@ -1552,6 +1621,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("SnapshotReceivedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<decimal?>("StorageCostNextMonth")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Title")
                         .HasColumnType("nvarchar(max)");
@@ -2174,6 +2246,92 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("FbaInventoryRow", "stg");
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Staging.StgFbaPlanningRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Age0To90")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("Age181To270")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("Age271To365")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("Age365Plus")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("Age91To180")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("AgedSurchargeNextMonth")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("Asin")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("DaysOfSupply")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("EstimatedExcess")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<long>("ImportBatchId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Marketplace")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("ProductName")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("RawLine")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("RowNumber")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Sku")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("StorageCostNextMonth")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ImportBatchId", "RowNumber")
+                        .IsUnique();
+
+                    b.ToTable("FbaPlanningRow", "stg");
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Staging.StgFbaReservedRow", b =>
@@ -2836,6 +2994,21 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.InventoryHealth", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AERai.Web.Domain.Core.Product", null)
+                        .WithMany()
+                        .HasForeignKey("Sku")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.InventorySnapshot", b =>
                 {
                     b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
@@ -3024,6 +3197,15 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Staging.StgFbaPlanningRow", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Staging.ImportBatch", null)
+                        .WithMany("FbaPlanningRows")
+                        .HasForeignKey("ImportBatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Staging.StgFbaReservedRow", b =>
                 {
                     b.HasOne("AERai.Web.Domain.Staging.ImportBatch", null)
@@ -3138,6 +3320,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("AERai.Web.Domain.Staging.ImportBatch", b =>
                 {
                     b.Navigation("FbaInventoryRows");
+
+                    b.Navigation("FbaPlanningRows");
 
                     b.Navigation("FbaReservedRows");
 
