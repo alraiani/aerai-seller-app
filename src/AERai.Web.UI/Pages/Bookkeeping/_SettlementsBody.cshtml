@@ -15,7 +15,7 @@
                         @s.SettlementId
                         @if (s.Currency is not null && s.Currency != s.HomeCurrency)
                         {
-                            <span class="@AERai.Web.UI.Models.SettlementFormat.OriginPill(AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)) ms-1" title="Paid in @s.Currency; exported in @s.HomeCurrency">@AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)</span>
+                            <span class="@AERai.Web.UI.Models.SettlementFormat.OriginPill(AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)) ms-1 has-detail" title="Paid in @s.Currency; exported in @s.HomeCurrency">@AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)</span>
                         }
                     </td>
                     <td>@AERai.Web.UI.Models.SettlementFormat.Period(s.PeriodStart, s.PeriodEnd, Model.Zone)</td>

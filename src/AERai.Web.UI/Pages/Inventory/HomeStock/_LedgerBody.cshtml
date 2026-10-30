@@ -72,7 +72,7 @@
         <span class="card-toolbar-title list-count">
             <span class="text-nowrap">@count.ToString("N0", en) @noun</span>
             <span class="text-muted-token fw-normal">
-                @(Model.Sku is { } onlySku ? $"for {onlySku} " : "")in @Model.Marketplace.Name · times in @Model.Marketplace.TimeZoneId
+                @(Model.Sku is { } onlySku ? $"for {onlySku} " : "")in @Model.Marketplace.Name · times in @ZoneFormat.Name(Model.Marketplace.TimeZoneId)
             </span>
             <partial name="_Tip" model='"Every unit that came into or went out of home stock. By action groups the entries each save wrote (a count sheet, a send, a worksheet save) under when it was saved and by whom; Undo action reverses all of them at once. Each SKU’s entries add up to its home stock; Balance is the SKU’s count right after the entry. Mistakes are reversed, never deleted."' />
         </span>
@@ -310,7 +310,7 @@ else
                     </div>
                     <div class="form-text mb-3">Received and shipped: how many units. Count correction: the new counted total. Other: + to add, − to remove.</div>
                     <div class="mb-3">
-                        <label asp-for="Input.OccurredAt" class="form-label">When (@Model.Marketplace.TimeZoneId)</label>
+                        <label asp-for="Input.OccurredAt" class="form-label">When (@ZoneFormat.Name(Model.Marketplace.TimeZoneId))</label>
                         <input asp-for="Input.OccurredAt" type="datetime-local" step="60" asp-format="{0:yyyy-MM-ddTHH:mm}" class="form-control" />
                     </div>
                     <div class="mb-3">

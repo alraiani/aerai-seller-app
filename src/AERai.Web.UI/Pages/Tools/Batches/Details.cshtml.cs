@@ -1,6 +1,7 @@
 using AERai.Web.Application.Abstractions;
 using AERai.Web.Application.Common;
 using AERai.Web.Application.Imports;
+using AERai.Web.Application.Marketplaces;
 using AERai.Web.UI.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,8 +13,12 @@ namespace AERai.Web.UI.Pages.Tools.Batches;
 /// <param name="batches">Batch queries.</param>
 /// <param name="promotion">Promotion use case.</param>
 /// <param name="importService">Staging use cases (re-stage from the raw file).</param>
-public sealed class DetailsModel(IImportBatchQueries batches, IPromotionService promotion, IStagingImportService importService) : ListPageModel
+/// <param name="currentMarketplace">The marketplace the user is viewing (its time zone).</param>
+public sealed class DetailsModel(IImportBatchQueries batches, IPromotionService promotion, IStagingImportService importService, ICurrentMarketplace currentMarketplace) : ListPageModel
 {
+    /// <summary>The marketplace's time zone (IANA id), for the upload time.</summary>
+    public string TimeZoneId { get; private set; } = "UTC";
+
     /// <summary>The batch.</summary>
     public ImportBatchSummary Batch { get; private set; } = default!;
 
@@ -33,6 +38,7 @@ public sealed class DetailsModel(IImportBatchQueries batches, IPromotionService 
         }
 
         Batch = batch;
+        TimeZoneId = (await currentMarketplace.GetAsync(cancellationToken)).Current.TimeZoneId;
         Rejected = await batches.GetRejectedRowsAsync(id, ToPageRequest(), cancellationToken);
         return Page();
     }

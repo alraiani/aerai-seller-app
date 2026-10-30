@@ -25,9 +25,9 @@
             {
                 <tr>
                     <td class="cell-truncate" title="@e.FileName">@e.FileName</td>
-                    <td>@e.SettlementId</td>
-                    <td class="text-end">@e.NetTotal.ToString("N2") @e.Currency</td>
-                    <td>@e.GeneratedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
+                    <td><a asp-page="Settlement" asp-route-id="@e.SettlementId">@e.SettlementId</a></td>
+                    <td class="text-end money">@SettlementFormat.Money(e.NetTotal, e.Currency)</td>
+                    <td class="text-nowrap">@TimeZoneInfo.ConvertTime(e.GeneratedAt, Model.Zone).ToString("MMM d, yyyy h:mm tt", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</td>
                     <td>@e.GeneratedBy</td>
                     <td class="text-end"><a asp-page="Index" asp-page-handler="Download" asp-route-id="@e.Id" class="btn btn-sm btn-outline-secondary">Download</a></td>
                 </tr>

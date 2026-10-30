@@ -30,4 +30,14 @@ public static class AdvertisingFormat
         <= 0.50m => "text-warn",
         _ => "amount-neg",
     };
+
+    /// <summary>The words for <see cref="AcosClass"/>, so a costly ACoS isn't told by color alone.</summary>
+    /// <param name="acos">ACoS as a fraction, or <see langword="null"/>.</param>
+    /// <returns>"high" over 25%, "very high" over 50%, else <see langword="null"/>.</returns>
+    public static string? AcosLabel(decimal? acos) => acos switch
+    {
+        null or <= 0.25m => null,
+        <= 0.50m => "high",
+        _ => "very high",
+    };
 }

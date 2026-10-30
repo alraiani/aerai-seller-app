@@ -19,7 +19,7 @@
                     <td><a asp-page="Details" asp-route-id="@b.Id">@b.Id</a></td>
                     <td>@b.Source</td>
                     <td class="cell-truncate" title="@b.FileName">@b.FileName</td>
-                    <td>@b.UploadedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="text-nowrap">@ScheduleDisplay.Local(b.UploadedAt, Model.TimeZoneId)</td>
                     <td class="text-nowrap">@BatchFormat.DataRange(b)</td>
                     <td>@b.UploadedBy</td>
                     <td class="text-end">@b.RowCount.ToString("N0")</td>

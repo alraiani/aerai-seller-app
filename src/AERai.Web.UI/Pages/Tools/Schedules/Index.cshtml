@@ -403,7 +403,7 @@
                     @if (!deletedView)
                     {
                         <td>
-                            <span class="pill @(s.AutoPromote ? "pill-info" : "pill-warn")"
+                            <span class="pill @(s.AutoPromote ? "pill-info" : "pill-warn") has-detail"
                                   title="@(s.AutoPromote ? "Goes straight into reports" : "Stops at staging for review under Import batches")">@(s.AutoPromote ? "Yes" : "Review first")</span>
                         </td>
                         <td>

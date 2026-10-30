@@ -33,7 +33,7 @@
     <div class="col-6 col-xl-3">
         <a class="card tile h-100" href="@Model.SortLink(AdSort.Acos)">
             <div class="kpi">
-                <div class="kpi-label">ACoS <partial name="_Tip" model='"Advertising cost of sales: ad spend ÷ ad sales. Lower is better. Click to sort SKUs by ACoS, highest first."' /></div>
+                <div class="kpi-label">ACoS <partial name="_Tip" model='"Advertising cost of sales: ad spend ÷ ad sales. Lower is better: up to 25% is good (green), over 25% is marked high (amber), over 50% very high (red). Click to sort SKUs by ACoS, highest first."' /></div>
                 <div class="kpi-value @AdvertisingFormat.AcosClass(t.Acos)">@AdvertisingFormat.Percent(t.Acos)</div>
                 <div class="kpi-foot">spend ÷ ad sales</div>
             </div>
@@ -74,9 +74,9 @@
             <option value="@AdvertisingFilter.NoFamily" selected="@(Model.FamilyId == AdvertisingFilter.NoFamily)">No family</option>
         </select>
         <label class="filter-label" for="ads-from">Days</label>
-        <input type="date" id="ads-from" name="from" value="@IndexModel.Format(report.From)" max="@IndexModel.Format(Model.LastDay)" class="form-control form-control-sm date-filter" aria-label="From" data-autosubmit />
+        <input type="date" id="ads-from" name="from" value="@IndexModel.Format(report.From)" max="@IndexModel.Format(Model.LastDay)" class="form-control form-control-sm date-filter" aria-label="Ad days from" data-autosubmit />
         <span class="text-muted-token" aria-hidden="true">–</span>
-        <input type="date" name="to" value="@IndexModel.Format(report.To)" max="@IndexModel.Format(Model.LastDay)" class="form-control form-control-sm date-filter" aria-label="To" data-autosubmit />
+        <input type="date" name="to" value="@IndexModel.Format(report.To)" max="@IndexModel.Format(Model.LastDay)" class="form-control form-control-sm date-filter" aria-label="Ad days to" data-autosubmit />
         <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
         @if (Model.IsFiltered)
         {
@@ -164,7 +164,7 @@
                     @* The totals of every listed family, under the header (and stuck with it). *@
                     <tr class="totals-row">
                         <td></td>
-                        <td class="product-col fw-semibold">All listed</td>
+                        <th scope="row" class="product-col fw-semibold">All listed</th>
                         <partial name="_AdMetricCells" model="(t, currency, true)" />
                     </tr>
                 </thead>

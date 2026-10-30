@@ -15,8 +15,15 @@ namespace AERai.Web.UI.Pages.Tools.Schedules;
 /// <param name="schedules">Schedule queries (for names).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
 /// <param name="ingestion">Stops runs that haven't finished.</param>
-public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository schedules, ICurrentMarketplace currentMarketplace, IReportIngestionService ingestion) : ListPageModel
+/// <param name="clock">Clock for relative times.</param>
+public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository schedules, ICurrentMarketplace currentMarketplace, IReportIngestionService ingestion, TimeProvider clock) : ListPageModel
 {
+    /// <summary>Now, for "3 h ago".</summary>
+    public DateTimeOffset Now { get; } = clock.GetUtcNow();
+
+    /// <summary>The marketplace's time zone (IANA id), for exact start times.</summary>
+    public string TimeZoneId { get; private set; } = "UTC";
+
     /// <summary>Optional schedule filter from <c>?scheduleId=</c>.</summary>
     [BindProperty(SupportsGet = true)]
     public int? ScheduleId { get; set; }
@@ -36,6 +43,7 @@ public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository s
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        TimeZoneId = marketplace.TimeZoneId;
         Runs = await runs.ListAsync(marketplace.MarketplaceId, ScheduleId, ToPageRequest(), cancellationToken);
         // Include deleted schedules so their history stays labeled.
         ScheduleNames = (await schedules.ListIncludingDeletedAsync(cancellationToken))

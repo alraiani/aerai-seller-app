@@ -13,7 +13,7 @@
 @* ---------- Summary tiles (counts ignore the status filter, so they stay put when one is clicked) ---------- *@
 <div class="row g-3 mb-3">
     <div class="col-6 col-xl">
-        <a class="card tile h-100 @(t.RestockOverdue > 0 ? "tile-bad" : "")" href="@Model.StatusLink(StockStatusFilter.NeedsAction)">
+        <a class="card tile h-100 @(t.RestockOverdue > 0 ? "tile-bad" : "")" href="@Model.StatusLink(StockStatusFilter.NeedsAction)" aria-current="@(Model.Status == StockStatusFilter.NeedsAction ? "true" : null)">
             <div class="kpi">
                 <div class="kpi-label">Needs restock <partial name="_Tip" model='"SKUs whose send or order deadline has passed or is within a week, worked back from when stock runs out and each SKU’s lead times. Click to list them."' /></div>
                 <div class="kpi-value">@t.NeedsAction <span class="kpi-of">of @t.SkuCount SKUs</span></div>
@@ -32,7 +32,7 @@
         </a>
     </div>
     <div class="col-6 col-xl">
-        <a class="card tile h-100 @(t.OutOfStock > 0 ? "tile-bad" : "")" href="@Model.StatusLink(StockStatusFilter.OutOfStock)">
+        <a class="card tile h-100 @(t.OutOfStock > 0 ? "tile-bad" : "")" href="@Model.StatusLink(StockStatusFilter.OutOfStock)" aria-current="@(Model.Status == StockStatusFilter.OutOfStock ? "true" : null)">
             <div class="kpi">
                 <div class="kpi-label">Out of stock <partial name="_Tip" model='"SKUs with nothing available at Amazon that sold in the last 30 days. Click to list them."' /></div>
                 <div class="kpi-value">@t.OutOfStock</div>

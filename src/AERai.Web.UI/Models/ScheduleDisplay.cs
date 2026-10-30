@@ -96,6 +96,16 @@ public static class ScheduleDisplay
         _ => timeZoneId,
     };
 
+    /// <summary>Formats how long something took, in the largest two units that matter.</summary>
+    /// <param name="elapsed">Elapsed time.</param>
+    /// <returns>e.g. "45 s", "3 m 5 s", "1 h 2 m".</returns>
+    public static string Duration(TimeSpan elapsed) => elapsed switch
+    {
+        { TotalSeconds: < 60 } => $"{Math.Max(0, (int)elapsed.TotalSeconds)} s",
+        { TotalHours: < 1 } => elapsed.Seconds == 0 ? $"{elapsed.Minutes} m" : $"{elapsed.Minutes} m {elapsed.Seconds} s",
+        _ => elapsed.Minutes == 0 ? $"{(int)elapsed.TotalHours} h" : $"{(int)elapsed.TotalHours} h {elapsed.Minutes} m",
+    };
+
     /// <summary>Formats a UTC instant in the schedule's time zone, for tooltips and detail text.</summary>
     /// <param name="instant">The time, or <see langword="null"/>.</param>
     /// <param name="timeZoneId">IANA zone id.</param>
