@@ -21,6 +21,9 @@ internal sealed class FakeProductFamilyRepository : IProductFamilyRepository
 
     public Dictionary<int, RestockRules> Rules { get; } = [];
 
+    public Task<bool> SetShipsFromHomeStockAsync(int id, bool shipsFromHomeStock, CancellationToken cancellationToken) =>
+        Task.FromResult(Families.ContainsKey(id));
+
     public Task<bool> SetRulesAsync(int id, RestockRules rules, CancellationToken cancellationToken)
     {
         if (!Families.ContainsKey(id))

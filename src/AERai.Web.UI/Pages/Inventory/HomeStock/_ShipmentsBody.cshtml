@@ -1,0 +1,285 @@
+@using System.Globalization
+@using AERai.Web.Application.Inventory
+@using AERai.Web.Domain.Core
+@model AERai.Web.UI.Pages.Inventory.HomeStock.ShipmentsModel
+@{
+    var en = CultureInfo.GetCultureInfo("en-US");
+    var list = Model.List;
+    var shipments = list.Shipments;
+
+    // View links keep the family and search, so switching views never loses them.
+    string ViewLink(InboundShipmentView view) => Url.Page("Shipments", new { family = Model.FamilyId, q = Model.Search, view = view == InboundShipmentView.ToReview ? null : view.ToString() })!;
+
+    string Local(DateTimeOffset at) => TimeZoneInfo.ConvertTime(at, Model.Zone).ToString("ddd, MMM d, yyyy", en);
+
+    // Amazon's status as a pill: still being packed, on its way, at Amazon, or dropped.
+    (string Css, string Label) AmazonPill(string status) => status switch
+    {
+        "WORKING" or "READY_TO_SHIP" or "UNCONFIRMED" => ("pill-info", status == "READY_TO_SHIP" ? "Ready to ship" : "Working"),
+        "SHIPPED" or "IN_TRANSIT" => ("pill-running", status == "SHIPPED" ? "Shipped" : "In transit"),
+        "DELIVERED" or "CHECKED_IN" or "RECEIVING" or "MIXED" => ("pill-ok", status switch { "DELIVERED" => "Delivered", "CHECKED_IN" => "Checked in", "MIXED" => "Mixed", _ => "Receiving" }),
+        "CLOSED" => ("pill-ok", "Closed"),
+        "CANCELLED" or "DELETED" or "ABANDONED" => ("pill-bad", status == "ABANDONED" ? "Abandoned" : status == "DELETED" ? "Deleted" : "Cancelled"),
+        _ => ("pill-muted", status),
+    };
+
+    (string Css, string Label) ReviewPill(InboundShipmentRow row) => row.Review switch
+    {
+        InboundShipmentReview.ToReview when row.HasHomeStock => ("pill-warn", "To review"),
+        InboundShipmentReview.ToReview => ("pill-muted", "Not from home"),
+        InboundShipmentReview.Logged => ("pill-ok", "Logged"),
+        InboundShipmentReview.AlreadyLogged => ("pill-ok", "Already logged"),
+        InboundShipmentReview.CancelledByAmazon => ("pill-muted", "Cancelled by Amazon"),
+        _ => ("pill-muted", row.ReviewedBy == InboundShipment.SystemReviewer ? "Set aside (before sync)" : "Dismissed"),
+    };
+}
+
+<partial name="_InventoryNav" model="new AERai.Web.UI.Models.InventoryNavModel(AERai.Web.UI.Models.InventorySection.AmazonShipments, Model.FamilyId)" />
+
+@* ---------- Search and filters ---------- *@
+<div class="list-toolbar mb-3">
+    <form method="get" class="filters" data-autosubmit-form role="search">
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search FBA id, plan, SKU, name…" aria-label="Search Amazon shipments" />
+        </div>
+        <select name="family" class="form-select form-select-sm" aria-label="Family">
+            <option value="">All families</option>
+            @foreach (var f in Model.Families)
+            {
+                <option value="@f.Id" selected="@(Model.FamilyId == f.Id)">@f.Name</option>
+            }
+        </select>
+        @if (Model.ViewParam is { } view)
+        {
+            <input type="hidden" name="view" value="@view" />
+        }
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
+        @if (Model.IsFiltered)
+        {
+            <a asp-page="Shipments" asp-route-view="@Model.ViewParam" class="btn btn-sm btn-link">Clear filters</a>
+        }
+    </form>
+    <div class="card-toolbar-group">
+        <a asp-page="Pending" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"
+           data-bs-toggle="tooltip" data-bs-title="Logged sends Amazon’s numbers don’t show yet"><partial name="_Icon" model='"truck"' /> Awaiting Amazon</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@shipments.Count.ToString("N0", en) shipment@(shipments.Count == 1 ? "" : "s")</span>
+            <span class="text-muted-token fw-normal">in @Model.Marketplace.Name</span>
+            <partial name="_Tip" model='"The shipments you create in Send to Amazon, read by the Amazon shipments sync (Tools → Amazon sync). Accept one to take its units off home stock: it is logged as Shipped to Amazon with its FBA shipment id, so it shows under Awaiting Amazon and clears once Amazon’s inbound numbers show it. Only SKUs of families switched to “Ships from home” (Families dialog) come off home stock. Nothing changes until you accept."' />
+        </span>
+        <nav class="segmented segmented-sm" aria-label="Which shipments">
+            <a href="@ViewLink(InboundShipmentView.ToReview)" class="@(Model.View == InboundShipmentView.ToReview ? "active" : "") @(list.ToReview > 0 ? "has-warn" : "")">To review <span class="segmented-count">@list.ToReview</span></a>
+            <a href="@ViewLink(InboundShipmentView.Logged)" class="@(Model.View == InboundShipmentView.Logged ? "active" : "")">Logged <span class="segmented-count">@list.Logged</span></a>
+            <a href="@ViewLink(InboundShipmentView.SetAside)" class="@(Model.View == InboundShipmentView.SetAside ? "active" : "")">Set aside <span class="segmented-count">@list.SetAside</span></a>
+            <a href="@ViewLink(InboundShipmentView.All)" class="@(Model.View == InboundShipmentView.All ? "active" : "")">All <span class="segmented-count">@list.All</span></a>
+        </nav>
+    </div>
+
+    @if (shipments.Count == 0)
+    {
+        <div class="empty-state py-4">
+            @if (Model.IsFiltered)
+            {
+                <div class="empty-title">No shipments match</div>
+                <div class="empty-detail">Try another search or family.</div>
+                <a asp-page="Shipments" asp-route-view="@Model.ViewParam" class="btn btn-sm btn-soft">Clear filters</a>
+            }
+            else if (Model.View == InboundShipmentView.ToReview)
+            {
+                <div class="empty-title">Nothing to review</div>
+                <div class="empty-detail">New Send to Amazon shipments with SKUs from home stock show here after the next Amazon shipments sync.</div>
+            }
+            else
+            {
+                <div class="empty-title">No shipments here</div>
+                <div class="empty-detail">Shipments appear once the Amazon shipments sync has run (Tools → Amazon sync).</div>
+            }
+        </div>
+    }
+    else
+    {
+        @* The accept forms sit outside the table (a form can't wrap table rows); each shipment's boxes join theirs through form="…". *@
+        @foreach (var row in shipments.Where(r => r.IsToReview && Model.CanEdit))
+        {
+            <form method="post" asp-page="Shipments" asp-page-handler="Accept" asp-route-id="@row.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Search" asp-route-view="@Model.ViewParam"
+                  id="accept-@row.Id" class="d-none" data-confirm="Take these units off home stock and log them as shipped to Amazon under @row.ShipmentConfirmationId?"></form>
+        }
+        var openAll = shipments.Count <= 3 || !string.IsNullOrWhiteSpace(Model.Search);
+        @if (shipments.Count > 3)
+        {
+            <div class="expand-controls d-flex justify-content-end gap-2 px-3 pt-2">
+                <button type="button" class="btn btn-sm btn-soft" data-expand-all="true">Expand all</button>
+                <button type="button" class="btn btn-sm btn-soft" data-expand-all="false">Collapse all</button>
+            </div>
+        }
+        <div class="table-responsive">
+            <table class="table data-table pending-table shipments-table group-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="toggle-col"><span class="visually-hidden">Expand</span></th>
+                        <th>Shipment</th>
+                        <th class="sku-cell">SKU</th>
+                        <th class="text-end">In shipment <partial name="_Tip" model='"Units Amazon has in the shipment now (Send to Amazon). Only SKUs from home stock are taken off home stock."' /></th>
+                        <th class="text-end">At home</th>
+                        <th class="text-end">Send from home <partial name="_Tip" model='"Units to take off home stock. Filled with Amazon’s number (no more than you have at home); change it if some came straight from the supplier, or enter 0 to leave a SKU out."' /></th>
+                        @if (Model.CanEdit)
+                        {
+                            <th class="text-end"><span class="visually-hidden">Actions</span></th>
+                        }
+                    </tr>
+                </thead>
+                @foreach (var row in shipments)
+                {
+                    var groupId = $"shipment-{row.Id}";
+                    var open = openAll || (row.IsToReview && Model.View == InboundShipmentView.ToReview);
+                    var amazon = AmazonPill(row.AmazonStatus);
+                    var review = ReviewPill(row);
+                    var editable = row.IsToReview && Model.CanEdit;
+                    <tbody class="order-group @(open ? "is-expanded" : "")" id="@groupId">
+                        <tr class="group-row @(row.DiffersFromAmazon ? "pending-overdue" : "")">
+                            <td class="toggle-col">
+                                <button type="button" class="btn btn-sm btn-icon group-toggle" data-expand-row aria-expanded="@(open ? "true" : "false")" aria-controls="@groupId"
+                                        aria-label="Show the @row.Lines.Count SKU@(row.Lines.Count == 1 ? "" : "s") of @row.ShipmentConfirmationId">
+                                    <partial name="_Icon" model='"chevron-down"' />
+                                </button>
+                            </td>
+                            <td>
+                                <div class="fw-semibold text-nowrap"><span class="sku-code">@row.ShipmentConfirmationId</span></div>
+                                <div class="cell-sub">@(row.PlanName ?? row.Name ?? "Send to Amazon") · @Local(row.PlanCreatedAt ?? row.FirstSeenAt)</div>
+                                <div class="d-flex flex-wrap gap-1 mt-1">
+                                    <span class="pill @amazon.Css has-detail" title="Amazon’s status">@amazon.Label</span>
+                                    <span class="pill @review.Css">@review.Label</span>
+                                </div>
+                                @if (row.DiffersFromAmazon)
+                                {
+                                    <div class="cell-sub text-warn pending-note">Amazon’s quantities changed after it was logged: check the SKUs below and edit the send on the ledger.</div>
+                                }
+                                else if (row.Review is InboundShipmentReview.Logged or InboundShipmentReview.Dismissed && row.ReviewedBy is { } by && by != InboundShipment.SystemReviewer && row.ReviewedAt is { } at)
+                                {
+                                    <div class="cell-sub">@(row.Review == InboundShipmentReview.Logged ? "Logged" : "Dismissed") @Local(at) · @by</div>
+                                }
+                            </td>
+                            <td class="sku-cell">
+                                <span class="fw-semibold">@row.Lines.Count SKU@(row.Lines.Count == 1 ? "" : "s")</span>
+                                <span class="sku-title" title="@string.Join(", ", row.Lines.Select(l => l.Sku))">@string.Join(", ", row.Lines.Select(l => l.Sku))</span>
+                            </td>
+                            <td class="text-end">
+                                <span class="fw-semibold">@row.AmazonUnits.ToString("N0", en)</span>
+                                @if (row.HomeUnits != row.AmazonUnits)
+                                {
+                                    <div class="cell-sub">@row.HomeUnits.ToString("N0", en) from home</div>
+                                }
+                            </td>
+                            <td></td>
+                            <td class="text-end">
+                                @if (row.LoggedUnits > 0)
+                                {
+                                    <span class="fw-semibold">@row.LoggedUnits.ToString("N0", en)</span>
+                                    <div class="cell-sub">logged</div>
+                                }
+                                else if (editable)
+                                {
+                                    <span class="fw-semibold">@row.Lines.Sum(l => l.Suggested).ToString("N0", en)</span>
+                                    <div class="cell-sub">suggested</div>
+                                }
+                            </td>
+                            @if (Model.CanEdit)
+                            {
+                                <td class="text-end text-nowrap">
+                                    @if (editable)
+                                    {
+                                        <button type="submit" form="accept-@row.Id" class="btn btn-sm btn-primary"
+                                                data-bs-toggle="tooltip" data-bs-title="Log the units below as shipped to Amazon and take them off home stock">
+                                            <partial name="_Icon" model='"check"' /> Accept
+                                        </button>
+                                        <form method="post" asp-page="Shipments" asp-page-handler="Dismiss" asp-route-id="@row.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Search" asp-route-view="@Model.ViewParam" class="d-inline"
+                                              data-confirm="Dismiss @row.ShipmentConfirmationId? Home stock stays as it is.">
+                                            <button type="submit" class="btn btn-sm btn-soft" data-bs-toggle="tooltip" data-bs-title="It didn’t come from home stock, or was logged another way">Dismiss</button>
+                                        </form>
+                                    }
+                                    else if (row.Review == InboundShipmentReview.Dismissed)
+                                    {
+                                        <form method="post" asp-page="Shipments" asp-page-handler="Reopen" asp-route-id="@row.Id" asp-route-family="@Model.FamilyId" asp-route-q="@Model.Search" asp-route-view="@Model.ViewParam" class="d-inline">
+                                            <button type="submit" class="btn btn-sm btn-soft"><partial name="_Icon" model='"restore"' /> Back to review</button>
+                                        </form>
+                                    }
+                                    else if (row.LoggedUnits > 0)
+                                    {
+                                        <a asp-page="Ledger" asp-route-q="@row.ShipmentConfirmationId" asp-route-view="Entries" class="btn btn-sm btn-soft">Ledger</a>
+                                    }
+                                </td>
+                            }
+                        </tr>
+                        @for (var i = 0; i < row.Lines.Count; i++)
+                        {
+                            var line = row.Lines[i];
+                            <tr class="group-child">
+                                <td class="toggle-col"></td>
+                                <td>
+                                    @if (!line.FromHome)
+                                    {
+                                        <span class="cell-sub has-detail" title="Its family isn’t switched to “Ships from home” (Families dialog)">Not from home</span>
+                                    }
+                                    else if (line.FamilyName is { } family)
+                                    {
+                                        <span class="cell-sub">@family</span>
+                                    }
+                                </td>
+                                <td class="sku-cell">
+                                    <span class="sku-code">@line.Sku</span>
+                                    @if (line.Title is { } title)
+                                    {
+                                        <span class="sku-title" title="@title">@title</span>
+                                    }
+                                </td>
+                                <td class="text-end">@line.AmazonUnits.ToString("N0", en)</td>
+                                <td class="text-end">
+                                    @if (line.FromHome)
+                                    {
+                                        <span class="@(line.ShortAtHome ? "text-warn fw-semibold" : null)">@line.HomeStock.ToString("N0", en)</span>
+                                        @if (line.ShortAtHome)
+                                        {
+                                            <div class="cell-sub text-warn">short of Amazon’s @line.AmazonUnits.ToString("N0", en)</div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="cell-sub">—</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    @if (line.LoggedUnits > 0)
+                                    {
+                                        <span class="fw-semibold">@line.LoggedUnits.ToString("N0", en)</span>
+                                        <div class="cell-sub @(line.DiffersFromAmazon ? "text-warn" : null)">@(line.DiffersFromAmazon ? $"logged; Amazon has {line.AmazonUnits:N0}" : "logged")</div>
+                                    }
+                                    else if (editable && line.FromHome)
+                                    {
+                                        <input type="hidden" name="lines[@i].Sku" value="@line.Sku" form="accept-@row.Id" />
+                                        <input type="hidden" name="lines[@i].Current" value="@line.HomeStock" form="accept-@row.Id" />
+                                        <input type="number" name="lines[@i].Units" value="@line.Suggested" min="0" max="@line.HomeStock" step="1" inputmode="numeric" form="accept-@row.Id"
+                                               class="form-control form-control-sm send-input ms-auto" aria-label="Units of @line.Sku sent from home stock" />
+                                    }
+                                    else
+                                    {
+                                        <span class="cell-sub">—</span>
+                                    }
+                                </td>
+                                @if (Model.CanEdit)
+                                {
+                                    <td></td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                }
+            </table>
+        </div>
+    }
+</div>

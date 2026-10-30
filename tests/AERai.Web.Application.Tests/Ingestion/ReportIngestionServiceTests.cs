@@ -32,6 +32,8 @@ public sealed class ReportIngestionServiceTests
     private readonly FakeDeferredTransactionRepository _deferred = new();
     private readonly FakeAmazonAdsGateway _ads = new();
     private readonly FakeAdSpendRepository _adSpend = new();
+    private readonly FakeAmazonInboundGateway _inbound = new();
+    private readonly FakeInboundShipmentRepository _inboundShipments = new();
     private readonly FakeRawFileStore _rawFiles = new();
     private readonly FakeStagingRepository _staged = new();
     private readonly FakePromotionService _promotion = new();
@@ -51,7 +53,7 @@ public sealed class ReportIngestionServiceTests
         // Zero poll interval by default: every check is due immediately, so RunToEndAsync needs no clock moves.
         var options = Options.Create(ingestion ?? new IngestionOptions { ReportPollInterval = TimeSpan.Zero, ReportMaxWait = TimeSpan.FromMinutes(5) });
 
-        return new ReportIngestionService(_gateway, _awd, _awdInventory, _ordersApi, _apiOrders, _finances, _deferred, _ads, _adSpend, _rawFiles, staging, _promotion, _schedules, _runs, _marketplaces, _stops, options, _clock,
+        return new ReportIngestionService(_gateway, _awd, _awdInventory, _ordersApi, _apiOrders, _finances, _deferred, _ads, _adSpend, _inbound, _inboundShipments, _rawFiles, staging, _promotion, _schedules, _runs, _marketplaces, _stops, options, _clock,
             NullLogger<ReportIngestionService>.Instance);
     }
 
@@ -111,6 +113,64 @@ public sealed class ReportIngestionServiceTests
         Assert.Empty(_promotion.Promoted);
         Assert.Empty(_gateway.Requests);
         Assert.Contains("2 SKUs", summary.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_InboundShipments_ReadsRecentPlansOfTheMarketplaceAndRecordsShipmentsWithAnFbaId()
+    {
+        AddSchedule(AmazonReportType.InboundShipments);
+        _inbound.PlanPages.Add(
+        [
+            new InboundPlanSummary("wf1", "Hankies Oct", "ACTIVE", Now.AddDays(-2), Now.AddDays(-1), [MarketplaceIds.UnitedStates]),
+            new InboundPlanSummary("wfCA", "Canada send", "ACTIVE", Now.AddDays(-2), Now.AddDays(-1), [MarketplaceIds.Canada]),
+        ]);
+        _inbound.PlanPages.Add(
+        [
+            new InboundPlanSummary("wf2", "Hankies Sep", "SHIPPED", Now.AddDays(-20), Now.AddDays(-3), [MarketplaceIds.UnitedStates]),
+
+            // Updated before the 7-day lookback: paging stops here, so the third page is never asked for.
+            new InboundPlanSummary("wfOld", "Old", "SHIPPED", Now.AddDays(-40), Now.AddDays(-30), [MarketplaceIds.UnitedStates]),
+        ]);
+        _inbound.PlanPages.Add([new InboundPlanSummary("wfOlder", "Older", "SHIPPED", Now.AddDays(-60), Now.AddDays(-50), [MarketplaceIds.UnitedStates])]);
+        _inbound.PlanShipments["wf1"] = ["sh1", "sh1b"];
+        _inbound.PlanShipments["wf2"] = ["sh2"];
+        _inbound.Shipments["sh1"] = ("FBA15AAA", "WORKING");
+        _inbound.Shipments["sh1b"] = (null, "UNCONFIRMED");
+        _inbound.Shipments["sh2"] = ("FBA15BBB", "RECEIVING");
+        _inbound.Items["sh1"] = [[new AmazonInboundItem("HK-BL", 20), new AmazonInboundItem("HK-PK", 10)], [new AmazonInboundItem("HK-BL", 5)]];
+        _inbound.Items["sh2"] = [[new AmazonInboundItem("HK-GR", 30)]];
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
+        Assert.Equal([null, "1"], _inbound.PlanTokensSeen);
+        Assert.Equal(["wf1", "wf2"], _inbound.PlansRead);
+        var (marketplaceId, shipments) = Assert.Single(_inboundShipments.Applied);
+        Assert.Equal(MarketplaceIds.UnitedStates, marketplaceId);
+        Assert.Equal(["FBA15AAA", "FBA15BBB"], shipments.Select(s => s.ShipmentConfirmationId));
+
+        // A SKU listed on two pages is added up.
+        var first = shipments.First();
+        Assert.Equal([("HK-BL", 25), ("HK-PK", 10)], first.Items.Select(i => (i.Sku, i.Quantity)));
+        Assert.Equal(("wf1", "Hankies Oct", "WORKING"), (first.InboundPlanId, first.PlanName, first.Status));
+        Assert.True(_rawFiles.Files.Keys.Count(k => k.StartsWith("inboundshipments/2026/10/02/", StringComparison.Ordinal)) >= 8);
+        Assert.Contains("without an FBA id yet", summary.Message, StringComparison.Ordinal);
+        Assert.Empty(_staged.Saved);
+    }
+
+    [Fact]
+    public async Task RunAsync_InboundShipmentsCallFails_RecordsNothing()
+    {
+        AddSchedule(AmazonReportType.InboundShipments);
+        _inbound.PlanPages.Add([new InboundPlanSummary("wf1", "P", "ACTIVE", Now, Now, [MarketplaceIds.UnitedStates])]);
+        _inbound.PlanShipments["wf1"] = ["sh1"];
+        _inbound.Failure = new HttpRequestException("SP-API fbaInbound.getShipment failed with HTTP 403");
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Failed, summary.Status);
+        Assert.Contains("403", summary.Message, StringComparison.Ordinal);
+        Assert.Empty(_inboundShipments.Applied);
     }
 
     [Fact]

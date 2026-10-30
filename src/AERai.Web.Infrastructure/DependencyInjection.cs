@@ -124,6 +124,7 @@ public static class DependencyInjection
         services.AddScoped<IDeferredTransactionRepository>(provider => provider.GetRequiredService<DeferredTransactionRepository>());
         services.AddScoped<IDeferredPaymentQueries>(provider => provider.GetRequiredService<DeferredTransactionRepository>());
         services.AddScoped<IAmazonOrderRepository, AmazonOrderRepository>();
+        services.AddScoped<IInboundShipmentRepository, InboundShipmentRepository>();
         services.AddScoped<IAppliedBlobRepository, AppliedBlobRepository>();
         services.AddScoped<ISyncSettingsRepository, SyncSettingsRepository>();
         services.AddScoped<ISettlementExchangeRateRepository, SettlementExchangeRateRepository>();
@@ -205,7 +206,7 @@ public static class DependencyInjection
     /// <summary>
     /// Registers the Amazon gateway for the configured <see cref="SpApiMode"/>. Live mode wires the
     /// SP-API pipeline: LWA token cache, per-operation rate limiter, and the pipeline handler on the
-    /// typed Reports, Catalog Items, and AWD clients. All SP-API traffic goes through that one handler.
+    /// typed Reports, Catalog Items, AWD, Orders, Finances, and Fulfillment Inbound clients. All SP-API traffic goes through that one handler.
     /// </summary>
     private static void AddSpApi(IServiceCollection services, IConfiguration configuration)
     {
@@ -248,6 +249,10 @@ public static class DependencyInjection
                         client.BaseAddress = provider.GetRequiredService<IOptions<SpApiOptions>>().Value.Endpoint)
                     .AddHttpMessageHandler<SpApiPipelineHandler>();
                 services.AddScoped<IAmazonFinancesGateway, SpApiFinancesGateway>();
+                services.AddHttpClient<InboundApiClient>((provider, client) =>
+                        client.BaseAddress = provider.GetRequiredService<IOptions<SpApiOptions>>().Value.Endpoint)
+                    .AddHttpMessageHandler<SpApiPipelineHandler>();
+                services.AddScoped<IAmazonInboundGateway, SpApiInboundGateway>();
                 break;
 
             case SpApiMode.Simulated:
@@ -257,6 +262,9 @@ public static class DependencyInjection
                 services.AddSingleton<IAmazonAwdGateway, SimulatedAwdGateway>();
                 services.AddSingleton<IAmazonOrdersGateway, SimulatedOrdersGateway>();
                 services.AddSingleton<IAmazonFinancesGateway, SimulatedFinancesGateway>();
+                // Scoped: it reads the catalog for SKUs that ship from home stock, so a local run has something to review.
+                services.AddScoped<IAmazonInboundGateway>(provider =>
+                    new SimulatedInboundGateway(provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<AppDbContext>()));
                 break;
 
             default:
@@ -265,6 +273,7 @@ public static class DependencyInjection
                 services.AddSingleton<IAmazonAwdGateway, UnavailableAwdGateway>();
                 services.AddSingleton<IAmazonOrdersGateway, UnavailableOrdersGateway>();
                 services.AddSingleton<IAmazonFinancesGateway, UnavailableFinancesGateway>();
+                services.AddSingleton<IAmazonInboundGateway, UnavailableInboundGateway>();
                 break;
         }
     }

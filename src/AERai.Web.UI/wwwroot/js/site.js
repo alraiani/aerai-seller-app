@@ -11,9 +11,25 @@
         if (!window.bootstrap || !window.bootstrap.Tooltip) { return; }
         var elements = root ? root.querySelectorAll(tipSelector) : document.querySelectorAll(".app-content [data-bs-toggle='tooltip'], .app-content [title]");
         for (var i = 0; i < elements.length; i++) {
+            makeDetailFocusable(elements[i]);
             window.bootstrap.Tooltip.getOrCreateInstance(elements[i], { container: "body", delay: { show: 150, hide: 50 } });
         }
     }
+
+    // A cued value (.has-detail) that isn't a link or button becomes focusable, so a click or tap
+    // focuses it and its tip stays open until focus moves on (Bootstrap keeps a tip open while any
+    // trigger is active). That is what makes the detail reachable on touch screens and by keyboard.
+    function makeDetailFocusable(el) {
+        if (!el.classList.contains("has-detail") || el.matches("a[href], button, input, select, textarea")) { return; }
+        if (!el.hasAttribute("tabindex")) { el.setAttribute("tabindex", "0"); }
+    }
+
+    // Escape closes a tip opened by a click: focus leaves the value, which hides it.
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && document.activeElement && document.activeElement.classList.contains("has-detail")) {
+            document.activeElement.blur();
+        }
+    });
 
     // Tooltips live in <body>, so ones belonging to a section about to be replaced are removed first.
     function disposeTooltips(root) {

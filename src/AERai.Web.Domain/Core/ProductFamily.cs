@@ -26,4 +26,10 @@ public sealed class ProductFamily
 
     /// <summary>Supplier orders are a multiple of this many units (e.g. 10); null = not rounded.</summary>
     public int? OrderMultiple { get; set; }
+
+    /// <summary>
+    /// Whether the family's units go into Amazon from home stock, so an Amazon shipment holding them is offered for
+    /// review as a Shipped to Amazon send (Inventory → Amazon shipments). Off: its SKUs are shown but never subtracted.
+    /// </summary>
+    public bool ShipsFromHomeStock { get; set; }
 }

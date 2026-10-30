@@ -70,6 +70,12 @@ public sealed partial class ProductFamilyService(IProductFamilyRepository reposi
     }
 
     /// <inheritdoc/>
+    public async Task<Result> SetShipsFromHomeStockAsync(int id, bool shipsFromHomeStock, CancellationToken cancellationToken) =>
+        await repository.SetShipsFromHomeStockAsync(id, shipsFromHomeStock, cancellationToken).ConfigureAwait(false)
+            ? Result.Success()
+            : Result.Failure("That family no longer exists.");
+
+    /// <inheritdoc/>
     public async Task<Result<string>> DeleteAsync(int id, CancellationToken cancellationToken)
     {
         if (await repository.DeleteAsync(id, cancellationToken).ConfigureAwait(false) is not { } name)

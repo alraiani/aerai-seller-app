@@ -120,7 +120,7 @@
                                 <div class="cell-sub">@group.Lines.Count line@(group.Lines.Count == 1 ? "" : "s")@(group.IsOrder ? "" : " without an order")</div>
                                 @if (group.AmazonOrderId is { } orderId && Model.Deferrals.TryGetValue(orderId, out var deferral))
                                 {
-                                    <span class="pill pill-info mt-1" title="@SettlementFormat.DeferralReasonTitle(deferral.DeferralReason)">
+                                    <span class="pill pill-info mt-1 has-detail" title="@SettlementFormat.DeferralReasonTitle(deferral.DeferralReason)">
                                         @(deferral.Status == AERai.Web.Domain.Core.DeferredTransactionStatus.Deferred
                                             ? $"Deferred until {SettlementFormat.Day(deferral.MaturityDate, Model.Zone) ?? "unknown"}"
                                             : $"Was deferred · released {SettlementFormat.Day(deferral.ReleasedAt ?? deferral.MaturityDate, Model.Zone) ?? "earlier"}")
@@ -209,7 +209,7 @@
                                     <span class="fw-semibold">No order</span>
                                 }
                             </td>
-                            <td><span class="pill pill-info" title="@SettlementFormat.DeferralReasonTitle(d.DeferralReason)">@(d.DeferralReason ?? "—")</span></td>
+                            <td><span class="pill pill-info has-detail" title="@SettlementFormat.DeferralReasonTitle(d.DeferralReason)">@(d.DeferralReason ?? "—")</span></td>
                             <td class="text-nowrap">
                                 @SettlementFormat.Day(released ? d.ReleasedAt ?? d.MaturityDate : d.MaturityDate, Model.Zone)
                                 @if (released)
@@ -218,7 +218,7 @@
                                 }
                                 else if (d.MaturityDate <= Model.Now)
                                 {
-                                    <span class="pill pill-ok ms-1" title="The release date has passed; Amazon pays it out with the next settlement.">Due</span>
+                                    <span class="pill pill-ok ms-1 has-detail" title="The release date has passed; Amazon pays it out with the next settlement.">Due</span>
                                 }
                                 else
                                 {

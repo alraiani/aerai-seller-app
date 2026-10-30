@@ -121,7 +121,7 @@
                                 }
                             </th>
                             <th class="text-end">@sheet.Totals.HomeStock.ToString("N0", en)</th>
-                            <th title="Units for supplier orders due within @Model.SoonDays days or overdue">@(sheet.Totals.Reorder > 0 ? $"Order {sheet.Totals.Reorder.ToString("N0", en)} now" : "Nothing due")</th>
+                            <th class="has-detail" title="Units for supplier orders due within @Model.SoonDays days or overdue">@(sheet.Totals.Reorder > 0 ? $"Order {sheet.Totals.Reorder.ToString("N0", en)} now" : "Nothing due")</th>
                         </tr>
                     </thead>
                     @foreach (var group in sheet.Groups)
@@ -171,7 +171,7 @@
                                         }
                                         @if (p.PendingToAmazon > 0)
                                         {
-                                            <div class="cell-sub @(item.PendingSendOverdue ? "text-warn" : "")"
+                                            <div class="cell-sub has-detail @(item.PendingSendOverdue ? "text-warn" : "")"
                                                  title="@(item.PendingSendOverdue ? $"Amazon still doesn’t show a send from more than {Model.PendingExpiryDays} days ago; check it on the Awaiting Amazon tab." : "Counted as Amazon stock until an inventory sync shows it.")">
                                                 +@p.PendingToAmazon.ToString("N0", en) sent, awaiting Amazon
                                             </div>
@@ -184,7 +184,7 @@
                                         }
                                         else
                                         {
-                                            <span class="cell-sub" title="Not enough sales history to estimate">—</span>
+                                            <span class="cell-sub has-detail" title="Not enough sales history to estimate">—</span>
                                         }
                                     </td>
                                     <td class="col-send" title="@InventoryFormat.StepsTip(item)">
@@ -247,7 +247,7 @@
                                     <td>
                                         @if (plan is null)
                                         {
-                                            <span class="cell-sub" title="Not enough sales history to estimate a sales rate">—</span>
+                                            <span class="cell-sub has-detail" title="Not enough sales history to estimate a sales rate">—</span>
                                         }
                                         else
                                         {

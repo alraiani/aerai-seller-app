@@ -135,7 +135,7 @@
                             <td class="text-end money">@SettlementFormat.Money(parts.Shipping, parts.Currency)</td>
                             <td class="text-end money">@SettlementFormat.Money(parts.FbaFees, parts.Currency)</td>
                             <td class="text-end money">@SettlementFormat.Money(parts.Commission, parts.Currency)</td>
-                            <td class="text-end money" title="@otherTitle">@SettlementFormat.Money(parts.OtherExpenses, parts.Currency)</td>
+                            <td class="text-end money @(otherTitle is null ? null : "has-detail")" title="@otherTitle">@SettlementFormat.Money(parts.OtherExpenses, parts.Currency)</td>
                             @if (anyReserve)
                             {
                                 <td class="text-end money">@SettlementFormat.Money(total.Reserve, total.Currency)</td>
@@ -170,7 +170,8 @@
                             <td class="text-end money @SettlementFormat.AmountClass(p.Shipping)">@SettlementFormat.Money(p.Shipping, p.Currency)</td>
                             <td class="text-end money @SettlementFormat.AmountClass(p.FbaFees)">@SettlementFormat.Money(p.FbaFees, p.Currency)</td>
                             <td class="text-end money @SettlementFormat.AmountClass(p.Commission)">@SettlementFormat.Money(p.Commission, p.Currency)</td>
-                            <td class="text-end money @SettlementFormat.AmountClass(p.OtherExpenses)" title="@Model.OtherExpensesTitle(r, p.Currency)">@SettlementFormat.Money(p.OtherExpenses, p.Currency)</td>
+                            @{ var rowOtherTitle = Model.OtherExpensesTitle(r, p.Currency); }
+                            <td class="text-end money @SettlementFormat.AmountClass(p.OtherExpenses) @(rowOtherTitle is null ? null : "has-detail")" title="@rowOtherTitle">@SettlementFormat.Money(p.OtherExpenses, p.Currency)</td>
                             @if (anyReserve)
                             {
                                 <td class="text-end money @SettlementFormat.AmountClass(m.Reserve)">@SettlementFormat.Money(m.Reserve, m.Currency)</td>
@@ -181,7 +182,7 @@
                                 <td class="text-end money text-nowrap">
                                     @if (Model.DeferredFor(r) is { } skuHeld)
                                     {
-                                        <span class="deferred-amount" title="@skuHeld.Quantity.ToString("N0", CultureInfo.InvariantCulture) unit@(skuHeld.Quantity == 1 ? "" : "s") in @skuHeld.Orders.ToString("N0", CultureInfo.InvariantCulture) order@(skuHeld.Orders == 1 ? "" : "s") held back">
+                                        <span class="deferred-amount has-detail" title="@skuHeld.Quantity.ToString("N0", CultureInfo.InvariantCulture) unit@(skuHeld.Quantity == 1 ? "" : "s") in @skuHeld.Orders.ToString("N0", CultureInfo.InvariantCulture) order@(skuHeld.Orders == 1 ? "" : "s") held back">
                                             <partial name="_Icon" model='"clock"' />@SettlementFormat.Money(skuHeld.Amount, skuHeld.Currency)
                                         </span>
                                     }

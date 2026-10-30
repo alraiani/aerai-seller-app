@@ -9,6 +9,9 @@ public enum InventorySection
     /// <summary>The family worksheet (sales, sends, home stock, reorders).</summary>
     Worksheet,
 
+    /// <summary>Send to Amazon shipments to review as sends from home stock.</summary>
+    AmazonShipments,
+
     /// <summary>Sends from home that Amazon doesn't show yet.</summary>
     AwaitingAmazon,
 

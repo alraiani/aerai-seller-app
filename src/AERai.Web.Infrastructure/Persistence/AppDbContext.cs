@@ -94,6 +94,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>The products on each deferred transaction (<c>core.DeferredTransactionItem</c>).</summary>
     public DbSet<DeferredTransactionItem> DeferredTransactionItems => Set<DeferredTransactionItem>();
 
+    /// <summary>Shipments into Amazon from Send to Amazon, to review as home-stock sends (<c>core.InboundShipment</c>).</summary>
+    public DbSet<InboundShipment> InboundShipments => Set<InboundShipment>();
+
+    /// <summary>The SKUs of each inbound shipment (<c>core.InboundShipmentItem</c>).</summary>
+    public DbSet<InboundShipmentItem> InboundShipmentItems => Set<InboundShipmentItem>();
+
     /// <summary>Curated settlements.</summary>
     public DbSet<Settlement> Settlements => Set<Settlement>();
 
