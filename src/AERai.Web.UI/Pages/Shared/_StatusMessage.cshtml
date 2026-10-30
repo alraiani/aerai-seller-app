@@ -1,13 +1,24 @@
 @using AERai.Web.UI.Models
+@* The result of the last action (Post/Redirect/Get). Success is announced politely; errors and warnings
+   interrupt (role="alert"). Each can be dismissed, so a long message doesn't sit over the page. *@
 @if (TempData[StatusMessage.Success] is string success)
 {
-    <div class="alert alert-success" role="status">@success</div>
+    <div class="alert alert-success alert-dismissible fade show" role="status">
+        @success
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Dismiss"></button>
+    </div>
 }
 @if (TempData[StatusMessage.Error] is string error)
 {
-    <div class="alert alert-danger" role="alert">@error</div>
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @error
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Dismiss"></button>
+    </div>
 }
 @if (TempData[StatusMessage.Warning] is string warning)
 {
-    <div class="alert alert-warning" role="status">@warning</div>
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        @warning
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Dismiss"></button>
+    </div>
 }

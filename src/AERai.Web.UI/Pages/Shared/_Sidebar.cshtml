@@ -57,7 +57,7 @@
             <span class="visually-hidden">Menu</span>
         </label>
     </div>
-    <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Show navigation" />
+    <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Show navigation" aria-controls="app-sidebar" />
     <div class="nav-links">
         <details class="nav-group nav-group-overview" data-nav-group="overview" open>
             @{ await GroupHead("home", "Overview"); }
@@ -134,5 +134,10 @@
                 </div>
             </details>
         }
+
+        @* Phones only: the top bar hides the account link under 768px, so the menu carries it instead. *@
+        <div class="nav-account">
+            @{ await NavLink("/Account/ChangePassword", "user", "Change password", IsActive("/Account/ChangePassword")); }
+        </div>
     </div>
 </nav>

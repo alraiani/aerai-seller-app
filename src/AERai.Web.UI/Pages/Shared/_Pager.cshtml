@@ -1,13 +1,24 @@
 @model PagerViewModel
-@* Preserves the search term (q) and any filters while moving between pages (p) of the current page route. *@
-<nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Pagination">
-    <span class="text-body-secondary small">@Model.TotalCount.ToString("N0") result(s) · page @Model.Page of @Model.TotalPages</span>
+@* Preserves the search term (q) and any filters while moving between pages (p) of the current page route.
+   A Previous/Next that leads nowhere is plain text, not a link, so keyboard users don't land on it. *@
+<nav class="pager d-flex justify-content-between align-items-center mt-3" aria-label="Pagination">
+    <span class="pager-summary small">@Model.TotalCount.ToString("N0") result@(Model.TotalCount == 1 ? "" : "s") · page @Model.Page of @Model.TotalPages</span>
     <ul class="pagination pagination-sm mb-0">
-        <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
-            <a class="page-link" asp-all-route-data="@Model.RouteFor(Model.Page - 1)">Previous</a>
-        </li>
-        <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
-            <a class="page-link" asp-all-route-data="@Model.RouteFor(Model.Page + 1)">Next</a>
-        </li>
+        @if (Model.Page <= 1)
+        {
+            <li class="page-item disabled"><span class="page-link" aria-disabled="true">Previous</span></li>
+        }
+        else
+        {
+            <li class="page-item"><a class="page-link" asp-all-route-data="@Model.RouteFor(Model.Page - 1)" aria-label="Previous page">Previous</a></li>
+        }
+        @if (Model.Page >= Model.TotalPages)
+        {
+            <li class="page-item disabled"><span class="page-link" aria-disabled="true">Next</span></li>
+        }
+        else
+        {
+            <li class="page-item"><a class="page-link" asp-all-route-data="@Model.RouteFor(Model.Page + 1)" aria-label="Next page">Next</a></li>
+        }
     </ul>
 </nav>
