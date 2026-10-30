@@ -16,6 +16,12 @@ public sealed class SettlementModel(IBookkeepingService bookkeeping, ICurrentMar
     /// <summary>The settlement as it would be exported.</summary>
     public SettlementPreview Preview { get; private set; } = default!;
 
+    /// <summary>Files already generated for this settlement, newest first (exporting again adds another).</summary>
+    public IReadOnlyList<BookkeepingExportSummary> PreviousExports { get; private set; } = [];
+
+    /// <summary>The marketplace's time zone, for showing when a file was generated.</summary>
+    public TimeZoneInfo Zone { get; private set; } = TimeZoneInfo.Utc;
+
     /// <summary>Loads the preview.</summary>
     /// <param name="id">Settlement id from the route.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
@@ -53,6 +59,13 @@ public sealed class SettlementModel(IBookkeepingService bookkeeping, ICurrentMar
         }
 
         Preview = result.Value;
+        Zone = TimeZoneInfo.FindSystemTimeZoneById(marketplace.TimeZoneId);
+        // Re-exporting is allowed (the file may have been lost), but the same entry imported twice would
+        // double the books, so the page shows what was handed over before and asks first.
+        PreviousExports = (await bookkeeping.GetExportsAsync(marketplace.MarketplaceId, cancellationToken))
+            .Where(e => e.SettlementId == id)
+            .OrderByDescending(e => e.GeneratedAt)
+            .ToList();
         return true;
     }
 }

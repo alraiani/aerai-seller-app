@@ -20,7 +20,8 @@
                     <td class="text-end">
                         @if (u.Id != Model.CurrentUserId)
                         {
-                            <form method="post" asp-page-handler="SetLockout" asp-route-userId="@u.Id" asp-route-locked="@(!u.IsLockedOut)">
+                            <form method="post" asp-page-handler="SetLockout" asp-route-userId="@u.Id" asp-route-locked="@(!u.IsLockedOut)"
+                                  data-confirm="@(u.IsLockedOut ? null : $"Lock {u.Email}? They are signed out and can't sign in until unlocked.")">
                                 <button type="submit" class="btn btn-sm @(u.IsLockedOut ? "btn-outline-success" : "btn-outline-danger")">@(u.IsLockedOut ? "Unlock" : "Lock")</button>
                             </form>
                         }

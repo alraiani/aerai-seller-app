@@ -83,7 +83,23 @@
     </div>
 </div>
 
+@if (Model.PreviousExports.Count > 0)
+{
+    var last = Model.PreviousExports[0];
+    var en = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+    <div class="notice notice-warn mb-3" role="note">
+        <partial name="_Icon" model='"history"' />
+        <div>
+            Already exported @(Model.PreviousExports.Count == 1 ? "once" : $"{Model.PreviousExports.Count} times"): last on
+            @TimeZoneInfo.ConvertTime(last.GeneratedAt, Model.Zone).ToString("MMM d, yyyy h:mm tt", en) by @last.GeneratedBy
+            (<a asp-page="Index" asp-page-handler="Download" asp-route-id="@last.Id">@last.FileName</a>).
+            Importing it into QuickBooks again would record this payout twice.
+        </div>
+    </div>
+}
+@* A re-export asks first; the button's own question takes over from the form's (site.js). *@
 <form method="post" asp-page-handler="Export" asp-route-id="@p.SettlementId">
-    <button type="submit" class="btn btn-primary" disabled="@(!p.CanExport)">Export IIF file</button>
+    <button type="submit" class="btn btn-primary" disabled="@(!p.CanExport)"
+            data-confirm="@(Model.PreviousExports.Count > 0 ? $"Settlement {p.SettlementId} was already exported. Create another IIF file anyway?" : null)">@(Model.PreviousExports.Count > 0 ? "Export again" : "Export IIF file")</button>
     <a asp-page="Index" class="btn btn-link">Back</a>
 </form>

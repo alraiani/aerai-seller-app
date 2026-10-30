@@ -39,7 +39,7 @@
             </form>
             @if (b.RawFilePath is not null)
             {
-                <form method="post" asp-page-handler="Restage" asp-route-id="@b.Id">
+                <form method="post" asp-page-handler="Restage" asp-route-id="@b.Id" data-confirm="Re-stage batch @b.Id? This creates a new batch from the stored original file.">
                     <button type="submit" class="btn btn-outline-secondary w-100">Re-stage from raw file</button>
                     <div class="form-text">Creates a new batch from the stored original.</div>
                 </form>

@@ -163,7 +163,7 @@
                             </form>
                             @if (item.ImagePath is not null)
                             {
-                                <form method="post" asp-page-handler="RemovePicture">
+                                <form method="post" asp-page-handler="RemovePicture" data-confirm="Remove the picture for @item.Sku?">
                                     <button type="submit" class="btn btn-sm btn-soft-bad"><partial name="_Icon" model='"trash"' /> Remove</button>
                                 </form>
                             }
