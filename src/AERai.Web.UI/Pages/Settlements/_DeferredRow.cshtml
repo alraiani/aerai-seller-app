@@ -23,7 +23,7 @@
         }
         <div class="cell-sub">@r.Description</div>
     </td>
-    <td><span class="pill pill-info" title="@SettlementFormat.DeferralReasonTitle(r.DeferralReason)">@(r.DeferralReason ?? "—")</span></td>
+    <td><span class="pill pill-info has-detail" title="@SettlementFormat.DeferralReasonTitle(r.DeferralReason)">@(r.DeferralReason ?? "—")</span></td>
     <td class="text-nowrap">@SettlementFormat.Day(r.PostedDate, Model.Zone)</td>
     <td class="text-nowrap">
         @SettlementFormat.Day(released ? r.ReleasedAt ?? r.MaturityDate : r.MaturityDate, Model.Zone)
@@ -33,7 +33,7 @@
         }
         else if (Model.Overview.IsDue(r.MaturityDate))
         {
-            <span class="pill pill-ok ms-1" title="The release date has passed; Amazon pays it out with the next settlement.">Due</span>
+            <span class="pill pill-ok ms-1 has-detail" title="The release date has passed; Amazon pays it out with the next settlement.">Due</span>
         }
         else
         {

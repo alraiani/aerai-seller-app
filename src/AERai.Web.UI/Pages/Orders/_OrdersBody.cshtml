@@ -168,7 +168,7 @@
                                 else if (!cancelled && row.Deferral is { } deferral)
                                 {
                                     @* Amazon holds the payout (its delivery-date policy); the amount is what it will pay out. *@
-                                    <span class="pill pill-info" title="@SettlementFormat.DeferralReasonTitle(deferral.DeferralReason): @SettlementFormat.Money(deferral.Amount, deferral.Currency ?? money) to be paid out">
+                                    <span class="pill pill-info has-detail" title="@SettlementFormat.DeferralReasonTitle(deferral.DeferralReason): @SettlementFormat.Money(deferral.Amount, deferral.Currency ?? money) to be paid out">
                                         Deferred until @(SettlementFormat.Day(deferral.MaturityDate, Model.Zone) ?? "unknown")
                                     </span>
                                 }
@@ -184,7 +184,7 @@
                                         <span class="fw-semibold @SettlementFormat.AmountClass(row.Profit.Profit ?? 0)">@SettlementFormat.Money(row.Profit.Profit ?? 0, money)</span>
                                         break;
                                     case OrderProfitState.CostMissing:
-                                        <span class="pill pill-warn" title="At least one item has no cost of goods in @Model.Marketplace.Name">Cost missing</span>
+                                        <span class="pill pill-warn has-detail" title="At least one item has no cost of goods in @Model.Marketplace.Name">Cost missing</span>
                                         break;
                                     case OrderProfitState.NotPaidOut:
                                         <span class="text-muted-token">After payout</span>

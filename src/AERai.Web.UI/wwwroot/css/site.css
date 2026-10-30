@@ -672,6 +672,15 @@ a.deferred-out:hover strong { color: var(--brand); }
 .tooltip-inner { text-align: left; padding: 0.45rem 0.65rem; line-height: 1.4; white-space: pre-line; }
 .kpi-label .tip, th .tip { margin-left: 0.15rem; }
 th .tip { text-transform: none; }
+/* A value whose tooltip adds information shows it: dotted underline in the info color (like <abbr>).
+   :not(...) outranks the amount colors, so a cued amount reads as "more here"; its sign still shows.
+   Status colors (pills, warnings, connection test) and headers keep their color; they only get the underline.
+   site.js makes the plain ones focusable, so a click or tap opens the tip too. */
+.has-detail { text-decoration: underline dotted; text-decoration-thickness: 1px; text-underline-offset: 0.2em; cursor: help; }
+.has-detail:not(th, .pill, .text-warn, .conn-test) { color: var(--info); }
+.has-detail:hover, .has-detail[aria-describedby] { text-decoration-style: solid; }
+.has-detail:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 2px; }
+a.has-detail { cursor: pointer; }
 
 /* ---------- Card toolbar + bulk selection ---------- */
 .card-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border); }
@@ -724,6 +733,7 @@ th .tip { text-transform: none; }
 /* Totals row: the header's last row (tr.totals-row), stuck under the column names. */
 .table > thead > tr.totals-row > * { font-size: 0.85rem; font-weight: 700; color: var(--text); text-transform: none; letter-spacing: 0; background-color: var(--surface-2); box-shadow: inset 0 -2px 0 var(--border); white-space: normal; }
 .table > thead > tr.totals-row .cell-sub { font-weight: 600; }
+.table > thead > tr.totals-row > .has-detail:not(.pill, .text-warn, .conn-test) { color: var(--info); }
 .has-sticky-head > .card-toolbar {
     position: sticky; top: 0; z-index: 3; background: var(--surface);
     border-radius: var(--bs-card-inner-border-radius) var(--bs-card-inner-border-radius) 0 0;

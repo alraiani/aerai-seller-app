@@ -47,7 +47,7 @@
                 @(orders?.LastSuccessAt is null ? "Sales not synced yet" : $"Sales updated {DashboardFormat.Ago(orders.LastSuccessAt, s.GeneratedAt)}")
                 <partial name="_Tip" model='"Green = sales data from Amazon is fresh. Amber = it is stale or has never synced. Red = the latest Orders sync failed. Details under Data from Amazon."' />
             </span>
-            <span class="sync-head-detail" title="Times shown in @s.TimeZoneId">@zoneName time</span>
+            <span class="sync-head-detail has-detail" title="Times shown in @s.TimeZoneId">@zoneName time</span>
         </div>
     </div>
     <div class="sync-head-actions">
@@ -329,7 +329,7 @@
                         @(pay.PeriodStart?.ToString("MMM d", en)) – @(pay.PeriodEnd?.ToString("MMM d", en))
                         @if (pay.Origin is { } origin)
                         {
-                            <span class="@SettlementFormat.OriginPill(origin) ms-1" title="Paid in another currency; shown converted into @c">@origin</span>
+                            <span class="@SettlementFormat.OriginPill(origin) ms-1 has-detail" title="Paid in another currency; shown converted into @c">@origin</span>
                         }
                     </div>
                     <div class="stat-row"><span class="label">Sales</span><span>@DashboardFormat.Money(pay.Sales, c)</span></div>
@@ -341,7 +341,7 @@
                     @if (pay.DeferredHeld is { } deferredHeld)
                     {
                         @* Sales from this period Amazon still holds: paid in a later settlement, not in the payout above. *@
-                        <a class="stat-row deferred-amount" asp-page="/Settlements/Deferred" asp-route-settlement="@pay.SettlementId" asp-route-view="All"
+                        <a class="stat-row deferred-amount has-detail" asp-page="/Settlements/Deferred" asp-route-settlement="@pay.SettlementId" asp-route-view="All"
                            title="Sales from this period that Amazon is holding back (about 7 days after delivery); they are paid out in a later settlement.">
                             <span class="label"><partial name="_Icon" model='"clock"' /> Still deferred@(SettlementFormat.Day(pay.DeferredUntil, Model.Zone) is { } until ? $" · until {until}" : "")</span>
                             <span>+@DashboardFormat.Money(deferredHeld, c)</span>
@@ -379,7 +379,7 @@
                                 <span class="cell-sub">manual</span>
                             }
                             <span class="when">
-                                <span class="@DashboardFormat.SyncPill(source, s.GeneratedAt, Model.StaleAfter)" title="@(source.LastMessage ?? $"Last successful pull {DashboardFormat.Ago(source.LastSuccessAt, s.GeneratedAt)}")">@DashboardFormat.SyncPillLabel(source, s.GeneratedAt, Model.StaleAfter)</span>
+                                <span class="@DashboardFormat.SyncPill(source, s.GeneratedAt, Model.StaleAfter) has-detail" title="@(source.LastMessage ?? $"Last successful pull {DashboardFormat.Ago(source.LastSuccessAt, s.GeneratedAt)}")">@DashboardFormat.SyncPillLabel(source, s.GeneratedAt, Model.StaleAfter)</span>
                                 <span class="cell-sub">@DashboardFormat.Ago(source.LastSuccessAt, s.GeneratedAt)</span>
                             </span>
                         </li>

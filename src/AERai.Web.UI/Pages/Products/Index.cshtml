@@ -193,7 +193,7 @@
                         <td class="col-updated">
                             @if (p.CostUpdatedAt is { } costAt)
                             {
-                                <span title="Cost last set @TimeZoneInfo.ConvertTime(costAt, zone).ToString("MMM d, yyyy h:mm tt", en)">@TimeZoneInfo.ConvertTime(costAt, zone).ToString("MMM d, yyyy", en)</span>
+                                <span class="has-detail" title="Cost last set @TimeZoneInfo.ConvertTime(costAt, zone).ToString("MMM d, yyyy h:mm tt", en)">@TimeZoneInfo.ConvertTime(costAt, zone).ToString("MMM d, yyyy", en)</span>
                             }
                             else
                             {

@@ -183,7 +183,7 @@
                                 <a asp-page="Summary" asp-route-id="@s.SettlementId" class="fw-semibold">@s.SettlementId</a>
                                 @if (foreign)
                                 {
-                                    <span class="@SettlementFormat.OriginPill(SettlementOrigin.FromCurrency(s.Currency)) ms-1" title="Paid in @s.Currency">@SettlementOrigin.FromCurrency(s.Currency)</span>
+                                    <span class="@SettlementFormat.OriginPill(SettlementOrigin.FromCurrency(s.Currency)) ms-1 has-detail" title="Paid in @s.Currency">@SettlementOrigin.FromCurrency(s.Currency)</span>
                                 }
                             </td>
                             <td class="text-nowrap">@SettlementFormat.Period(s.PeriodStart, s.PeriodEnd, Model.Zone)</td>
@@ -205,7 +205,7 @@
                                 <td class="text-end money text-nowrap">
                                     @if (Model.DeferredOut.TryGetValue(s.SettlementId, out var held))
                                     {
-                                        <a asp-page="Deferred" asp-route-settlement="@s.SettlementId" asp-route-view="All" class="deferred-amount" title="@SettlementFormat.DeferredTitle(held, Model.Zone)">
+                                        <a asp-page="Deferred" asp-route-settlement="@s.SettlementId" asp-route-view="All" class="deferred-amount has-detail" title="@SettlementFormat.DeferredTitle(held, Model.Zone)">
                                             <partial name="_Icon" model='"clock"' />@SettlementFormat.Money(held.Amount, held.Currency)
                                         </a>
                                     }
@@ -220,7 +220,7 @@
                                     }
                                     else if (foreign)
                                     {
-                                        <span class="text-muted-token" title="@SettlementFormat.RateTitle(s)">@SettlementFormat.Money(s.Net, s.Currency)</span>
+                                        <span class="has-detail" title="@SettlementFormat.RateTitle(s)">@SettlementFormat.Money(s.Net, s.Currency)</span>
                                     }
                                 </td>
                             }
