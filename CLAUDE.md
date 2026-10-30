@@ -4,6 +4,8 @@ Multi-user web app for AERai Group's Amazon seller operations: source files (Ama
 
 **Always load the `web-coding-standards` skill before writing or reviewing code here.** It holds the principles, patterns, practices, and commenting standard this solution follows.
 
+**Load the `ui-ux-standards` skill too before any UI work** (pages, partials, `site.css`, `site.js`) or a usability/accessibility review: modern UI/UX principles, WCAG 2.2 AA checks, and the house component recipes.
+
 Work tracked on the GitHub project board (https://github.com/users/alraiani/projects/3) is logged with the `github-board-updates` skill: move the item and comment on its issue at start, each phase, and finish.
 
 This is the only application in the repository. The earlier WPF desktop app (SQLite, QuickBooks IIF export) was retired and its remaining capabilities — the Orders API and the QuickBooks bookkeeping export — were ported here; its source is kept in git history at the tag `desktop-final`.
