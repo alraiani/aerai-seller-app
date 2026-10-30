@@ -9,12 +9,13 @@ public static class AmazonReportTypeExtensions
     /// </summary>
     /// <param name="reportType">The report type.</param>
     /// <returns>
-    /// <see langword="true"/> for inventory snapshots (FBA, AWD, and inventory planning), restock recommendations, and
-    /// deferred transactions.
+    /// <see langword="true"/> for inventory snapshots (FBA, AWD, and inventory planning), restock recommendations,
+    /// deferred transactions, and inbound shipments.
     /// </returns>
     public static bool IsSnapshot(this AmazonReportType reportType) =>
         reportType is AmazonReportType.FbaInventory or AmazonReportType.FbaReservedInventory or AmazonReportType.RestockRecommendations
-            or AmazonReportType.AwdInventory or AmazonReportType.DeferredTransactions or AmazonReportType.FbaInventoryPlanning;
+            or AmazonReportType.AwdInventory or AmazonReportType.DeferredTransactions or AmazonReportType.FbaInventoryPlanning
+            or AmazonReportType.InboundShipments;
 
     /// <summary>
     /// Whether the data comes from the SP-API Reports API (a document that is landed, staged, and promoted)
@@ -23,11 +24,12 @@ public static class AmazonReportTypeExtensions
     /// <param name="reportType">The report type.</param>
     /// <returns>
     /// <see langword="false"/> for <see cref="AmazonReportType.AwdInventory"/>, <see cref="AmazonReportType.OrdersApi"/>,
-    /// <see cref="AmazonReportType.DeferredTransactions"/>, and <see cref="AmazonReportType.AdsSpend"/>.
+    /// <see cref="AmazonReportType.DeferredTransactions"/>, <see cref="AmazonReportType.AdsSpend"/>, and
+    /// <see cref="AmazonReportType.InboundShipments"/>.
     /// </returns>
     public static bool IsReport(this AmazonReportType reportType) =>
         reportType is not (AmazonReportType.AwdInventory or AmazonReportType.OrdersApi or AmazonReportType.DeferredTransactions
-            or AmazonReportType.AdsSpend);
+            or AmazonReportType.AdsSpend or AmazonReportType.InboundShipments);
 
     /// <summary>
     /// The shortest time Amazon allows between two requests for the report in one marketplace. Amazon
@@ -49,7 +51,7 @@ public static class AmazonReportTypeExtensions
 
     /// <summary>The kind of business data the report brings in.</summary>
     /// <param name="reportType">The report type.</param>
-    /// <returns>Its category; restock recommendations count as inventory.</returns>
+    /// <returns>Its category; restock recommendations and inbound shipments count as inventory.</returns>
     public static SyncCategory Category(this AmazonReportType reportType) => reportType switch
     {
         AmazonReportType.Orders or AmazonReportType.OrdersApi => SyncCategory.Orders,

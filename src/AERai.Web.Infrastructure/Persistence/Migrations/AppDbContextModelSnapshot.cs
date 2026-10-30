@@ -589,6 +589,108 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.InboundShipment", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AmazonShipmentId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("AmazonStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("InboundPlanId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTimeOffset?>("PlanCreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PlanName")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("Review")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)");
+
+                    b.Property<DateTimeOffset?>("ReviewedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ReviewedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("ShipmentConfirmationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MarketplaceId", "Review");
+
+                    b.HasIndex("MarketplaceId", "ShipmentConfirmationId")
+                        .IsUnique();
+
+                    b.ToTable("InboundShipment", "core");
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.InboundShipmentItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("InboundShipmentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InboundShipmentId", "Sku")
+                        .IsUnique();
+
+                    b.ToTable("InboundShipmentItem", "core", t =>
+                        {
+                            t.HasCheckConstraint("CK_InboundShipmentItem_Quantity", "Quantity >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.InventoryHealth", b =>
                 {
                     b.Property<string>("MarketplaceId")
@@ -1020,6 +1122,9 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("SendMultipleLarge")
                         .HasColumnType("int");
+
+                    b.Property<bool>("ShipsFromHomeStock")
+                        .HasColumnType("bit");
 
                     b.HasKey("Id");
 
@@ -2994,6 +3099,24 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.InboundShipment", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.InboundShipmentItem", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.InboundShipment", null)
+                        .WithMany("Items")
+                        .HasForeignKey("InboundShipmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.InventoryHealth", b =>
                 {
                     b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
@@ -3303,6 +3426,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Core.DeferredTransaction", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.InboundShipment", b =>
                 {
                     b.Navigation("Items");
                 });

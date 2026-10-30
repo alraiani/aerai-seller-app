@@ -22,7 +22,8 @@ internal sealed class ProductFamilyRepository(AppDbContext dbContext) : IProduct
                 f.Id,
                 f.Name,
                 dbContext.Products.Count(p => p.FamilyId == f.Id),
-                new RestockRules(f.SendMultiple, f.SendMultipleLarge, f.SendLargeFrom, f.OrderMinimum, f.OrderMultiple)))
+                new RestockRules(f.SendMultiple, f.SendMultipleLarge, f.SendLargeFrom, f.OrderMinimum, f.OrderMultiple),
+                f.ShipsFromHomeStock))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -62,6 +63,12 @@ internal sealed class ProductFamilyRepository(AppDbContext dbContext) : IProduct
                 cancellationToken)
             .ConfigureAwait(false) > 0;
     }
+
+    /// <inheritdoc/>
+    public async Task<bool> SetShipsFromHomeStockAsync(int id, bool shipsFromHomeStock, CancellationToken cancellationToken) =>
+        await dbContext.ProductFamilies.Where(f => f.Id == id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(f => f.ShipsFromHomeStock, shipsFromHomeStock), cancellationToken)
+            .ConfigureAwait(false) > 0;
 
     /// <inheritdoc/>
     public async Task<FamilyWriteOutcome> RenameAsync(int id, string name, CancellationToken cancellationToken)

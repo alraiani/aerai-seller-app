@@ -42,6 +42,23 @@
         "http://localhost:5044"
       ],
       "port": 5044
+    },
+    {
+      "name": "aerai-web-sim",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "src/AERai.Web.UI",
+        "--launch-profile",
+        "http",
+        "--urls",
+        "http://localhost:5045",
+        "--SpApi:Mode=Simulated",
+        "--AmazonAds:Mode=Simulated",
+        "--Email:Provider=Smtp"
+      ],
+      "port": 5045
     }
   ]
 }

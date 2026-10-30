@@ -5,7 +5,8 @@ namespace AERai.Web.Application.Inventory;
 /// <param name="Name">Display name.</param>
 /// <param name="SkuCount">SKUs in the family (across every marketplace; families are shared).</param>
 /// <param name="Rules">How its sends and supplier orders are rounded (<see cref="RestockRules.None"/> when unset).</param>
-public sealed record FamilySummary(int Id, string Name, int SkuCount, RestockRules? Rules = null)
+/// <param name="ShipsFromHomeStock">Whether its Amazon shipments are offered for review as sends from home stock.</param>
+public sealed record FamilySummary(int Id, string Name, int SkuCount, RestockRules? Rules = null, bool ShipsFromHomeStock = false)
 {
     /// <summary>The family's rules, never null.</summary>
     public RestockRules RulesOrNone => Rules ?? RestockRules.None;

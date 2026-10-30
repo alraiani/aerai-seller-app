@@ -1,4 +1,5 @@
 using AERai.Web.Application.Alerts;
+using AERai.Web.Application.Inventory;
 using AERai.Web.Application.Marketplaces;
 using AERai.Web.UI.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -8,17 +9,21 @@ namespace AERai.Web.UI.Pages.Notifications;
 
 /// <summary>
 /// Low and out-of-stock alerts for the selected marketplace: open ones first, then those resolved
-/// in the last week. Read state is per user.
+/// in the last week. Read state is per user. Amazon shipments waiting for review are listed above them.
 /// </summary>
 /// <param name="alerts">Alert service.</param>
+/// <param name="shipments">Amazon shipment review (the count waiting).</param>
 /// <param name="currentMarketplace">The marketplace the user is viewing.</param>
-public sealed class IndexModel(IStockAlertService alerts, ICurrentMarketplace currentMarketplace) : PageModel
+public sealed class IndexModel(IStockAlertService alerts, IInboundShipmentService shipments, ICurrentMarketplace currentMarketplace) : PageModel
 {
     /// <summary>The marketplace shown.</summary>
     public Domain.Core.Marketplace Marketplace { get; private set; } = default!;
 
     /// <summary>The alerts.</summary>
     public IReadOnlyList<StockAlertView> Alerts { get; private set; } = [];
+
+    /// <summary>Amazon shipments waiting for review in the marketplace.</summary>
+    public int ShipmentsToReview { get; private set; }
 
     /// <summary>Loads the alerts.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
@@ -27,6 +32,7 @@ public sealed class IndexModel(IStockAlertService alerts, ICurrentMarketplace cu
     {
         Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
         Alerts = await alerts.ListAsync(Marketplace.MarketplaceId, User.Identity!.Name!, cancellationToken);
+        ShipmentsToReview = await shipments.CountToReviewAsync(Marketplace.MarketplaceId, cancellationToken);
     }
 
     /// <summary>Marks one alert read.</summary>

@@ -67,6 +67,16 @@ else
                         <span class="form-text">Blank leaves that number unrounded.</span>
                     </form>
                 </details>
+                @* Whether its Amazon shipments come off home stock once reviewed (Inventory → Amazon shipments). *@
+                <form method="post" asp-page="/Inventory/Families" asp-page-handler="HomeStock" asp-route-id="@f.Id" asp-route-back="@Model.Back" class="family-home-stock">
+                    <label class="form-check form-switch mb-0" title="Offer this family's Amazon shipments for review, to take their units off home stock">
+                        <input type="checkbox" class="form-check-input" name="shipsFromHomeStock" value="true" checked="@f.ShipsFromHomeStock" data-autosubmit aria-label="@f.Name ships from home stock" />
+                        <span class="form-check-label">Ships from home</span>
+                    </label>
+                    @* After the box: model binding takes the first value, so an unticked box posts this one. *@
+                    <input type="hidden" name="shipsFromHomeStock" value="false" />
+                    <button type="submit" class="btn btn-sm btn-soft js-hide">Save</button>
+                </form>
                 <form method="post" asp-page="/Inventory/Families" asp-page-handler="Delete" asp-route-id="@f.Id" asp-route-back="@Model.Back"
                       data-confirm="@(f.SkuCount == 0 ? $"Delete the family \"{f.Name}\"?" : $"Delete the family \"{f.Name}\"? Its {f.SkuCount} SKU{(f.SkuCount == 1 ? "" : "s")} will no longer be in a family (the SKUs themselves are kept).")">
                     <button type="submit" class="btn btn-sm btn-soft-bad btn-icon" aria-label="Delete @f.Name" title="Delete family"><partial name="_Icon" model='"trash"' /></button>
