@@ -242,7 +242,7 @@
                             <td class="select-col"><input type="checkbox" class="form-check-input" name="skus" value="@p.Sku" form="family-bulk-form" data-select-row aria-label="Select @p.Sku" /></td>
                         }
                         <td class="product-col"><partial name="_InventoryProduct" model="item" /></td>
-                        <td><span class="@status.CssClass" title="@status.Tip">@status.Label</span></td>
+                        <td><span class="@status.CssClass has-detail" title="@status.Tip">@status.Label</span></td>
                         <td class="text-end">
                             @if (p.SnapshotDate is null)
                             {
@@ -308,7 +308,7 @@
                             }
                             @if (item.Restock is { } plan && InventoryFormat.Send(plan) is { } send)
                             {
-                                <div class="next-step" title="@InventoryFormat.StepsTip(item)">
+                                <div class="next-step has-detail" title="@InventoryFormat.StepsTip(item)">
                                     <div><strong>@send.Action</strong> <span class="text-muted-token">@send.When</span></div>
                                     @if (InventoryFormat.Season(plan) is { } season)
                                     {
@@ -330,7 +330,7 @@
                             }
                             else if (item.Restock is { } covered)
                             {
-                                <div title="@InventoryFormat.StepsTip(item)">
+                                <div class="has-detail" title="@InventoryFormat.StepsTip(item)">
                                     @if (InventoryFormat.SendHold(covered) is { } held)
                                     {
                                         <div class="text-warn">@held</div>
@@ -379,19 +379,19 @@
                     <tr>
                         <th class="product-col"><a href="@Model.SortLink(InventorySort.Sku)" class="sort-link">Product @Model.SortArrow(InventorySort.Sku)</a></th>
                         <th class="text-end"><span class="th-group">FBA</span><a href="@Model.SortLink(InventorySort.Available)" class="sort-link">Available @Model.SortArrow(InventorySort.Available)</a></th>
-                        <th class="text-end col-group" title="On a shipment plan, not shipped yet"><span class="th-group">FBA inbound</span>Working</th>
-                        <th class="text-end" title="In transit to Amazon"><span class="th-group">FBA inbound</span>Shipped</th>
-                        <th class="text-end" title="Arrived and being checked in"><span class="th-group">FBA inbound</span>Receiving</th>
-                        <th class="text-end col-group" title="Sold, waiting to ship"><span class="th-group">FBA reserved</span>Orders</th>
-                        <th class="text-end" title="Moving between fulfillment centers"><span class="th-group">FBA reserved</span>Transfer</th>
-                        <th class="text-end" title="Held for measuring or investigation"><span class="th-group">FBA reserved</span>Processing</th>
+                        <th class="text-end col-group has-detail" title="On a shipment plan, not shipped yet"><span class="th-group">FBA inbound</span>Working</th>
+                        <th class="text-end has-detail" title="In transit to Amazon"><span class="th-group">FBA inbound</span>Shipped</th>
+                        <th class="text-end has-detail" title="Arrived and being checked in"><span class="th-group">FBA inbound</span>Receiving</th>
+                        <th class="text-end col-group has-detail" title="Sold, waiting to ship"><span class="th-group">FBA reserved</span>Orders</th>
+                        <th class="text-end has-detail" title="Moving between fulfillment centers"><span class="th-group">FBA reserved</span>Transfer</th>
+                        <th class="text-end has-detail" title="Held for measuring or investigation"><span class="th-group">FBA reserved</span>Processing</th>
                         <th class="text-end col-group"><span class="th-group">FBA</span>Unfulfillable</th>
-                        <th class="text-end" title="Every unit in the FBA network, in any state"><span class="th-group">FBA</span>Total</th>
-                        <th class="text-end col-group" title="On its way from you to Amazon Warehousing &amp; Distribution"><span class="th-group">AWD</span>Inbound</th>
-                        <th class="text-end" title="In Amazon Warehousing &amp; Distribution"><span class="th-group">AWD</span>On hand</th>
-                        <th class="text-end" title="Moving from AWD into FBA. Not added to the totals: once the transfer shipment exists, these units are likely counted in FBA inbound too."><span class="th-group">AWD</span>To FBA</th>
+                        <th class="text-end has-detail" title="Every unit in the FBA network, in any state"><span class="th-group">FBA</span>Total</th>
+                        <th class="text-end col-group has-detail" title="On its way from you to Amazon Warehousing &amp; Distribution"><span class="th-group">AWD</span>Inbound</th>
+                        <th class="text-end has-detail" title="In Amazon Warehousing &amp; Distribution"><span class="th-group">AWD</span>On hand</th>
+                        <th class="text-end has-detail" title="Moving from AWD into FBA. Not added to the totals: once the transfer shipment exists, these units are likely counted in FBA inbound too."><span class="th-group">AWD</span>To FBA</th>
                         <th class="text-end col-group">Home</th>
-                        <th class="text-end col-group" title="FBA total + AWD (inbound and on hand) + home">Total</th>
+                        <th class="text-end col-group has-detail" title="FBA total + AWD (inbound and on hand) + home">Total</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -409,7 +409,7 @@
                         }
                         else
                         {
-                            <td colspan="3" class="text-end col-group" title="This source gives inbound as one total">@p.Inbound.ToString("N0", en) <span class="cell-sub">total</span></td>
+                            <td colspan="3" class="text-end col-group has-detail" title="This source gives inbound as one total">@p.Inbound.ToString("N0", en) <span class="cell-sub">total</span></td>
                         }
                         @if (p.HasReservedBreakdown)
                         {
@@ -419,7 +419,7 @@
                         }
                         else
                         {
-                            <td colspan="3" class="text-end col-group" title="No reserved-inventory report for this date, so only the total is known">@p.Reserved.ToString("N0", en) <span class="cell-sub">total</span></td>
+                            <td colspan="3" class="text-end col-group has-detail" title="No reserved-inventory report for this date, so only the total is known">@p.Reserved.ToString("N0", en) <span class="cell-sub">total</span></td>
                         }
                         <td class="text-end col-group">@Units(p.Unfulfillable)</td>
                         <td class="text-end fw-semibold">@Units(p.AmazonTotal)</td>

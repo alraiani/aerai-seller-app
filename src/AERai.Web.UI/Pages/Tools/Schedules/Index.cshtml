@@ -21,7 +21,7 @@
             <span class="sync-head-detail" title="@connDetail">@connDetail</span>
             @if (Model.LastTest is { } test)
             {
-                <span class="conn-test @(test.Succeeded ? "conn-test-ok" : "conn-test-bad")" title="@test.Message · tested @ScheduleDisplay.Relative(test.TestedAt, Model.Now)">
+                <span class="conn-test @(test.Succeeded ? "conn-test-ok" : "conn-test-bad") has-detail" title="@test.Message · tested @ScheduleDisplay.Relative(test.TestedAt, Model.Now)">
                     <partial name="_Icon" model='test.Succeeded ? "check" : "x"' />
                     @(test.Succeeded ? "Test passed" : "Test failed") · @ScheduleDisplay.Relative(test.TestedAt, Model.Now)
                 </span>
@@ -81,7 +81,7 @@
                 }
                 else if (Model.Summary.NextRun is { } next)
                 {
-                    <div class="kpi-value kpi-value-sm" title="@ScheduleDisplay.Local(next.Schedule.NextRunAt, next.Schedule.TimeZoneId)">@ScheduleDisplay.Relative(next.Schedule.NextRunAt, Model.Now)</div>
+                    <div class="kpi-value kpi-value-sm has-detail" title="@ScheduleDisplay.Local(next.Schedule.NextRunAt, next.Schedule.TimeZoneId)">@ScheduleDisplay.Relative(next.Schedule.NextRunAt, Model.Now)</div>
                     <div class="kpi-foot text-truncate">@next.Schedule.Name</div>
                 }
                 else
@@ -357,7 +357,7 @@
                     {
                         <td>
                             <span class="pill pill-bad">Deleted</span>
-                            <div class="cell-sub" title="@ScheduleDisplay.Local(s.DeletedAt, s.TimeZoneId)">@ScheduleDisplay.Relative(s.DeletedAt, Model.Now) by @s.DeletedBy</div>
+                            <div class="cell-sub has-detail" title="@ScheduleDisplay.Local(s.DeletedAt, s.TimeZoneId)">@ScheduleDisplay.Relative(s.DeletedAt, Model.Now) by @s.DeletedBy</div>
                         </td>
                     }
                     else
@@ -373,15 +373,15 @@
                             }
                             else
                             {
-                                <span title="@ScheduleDisplay.Local(s.NextRunAt, s.TimeZoneId)">@ScheduleDisplay.Relative(s.NextRunAt, Model.Now)</span>
+                                <span class="has-detail" title="@ScheduleDisplay.Local(s.NextRunAt, s.TimeZoneId)">@ScheduleDisplay.Relative(s.NextRunAt, Model.Now)</span>
                             }
                         </td>
                     }
                     <td>
                         @if (last is not null)
                         {
-                            <a asp-page="Runs" asp-route-scheduleId="@s.Id" class="@ScheduleDisplay.StatusPill(last.Status)" title="@(last.Message ?? "View run history")">@(ScheduleDisplay.IsWaiting(last) ? "Waiting on Amazon" : ScheduleDisplay.StatusLabel(last.Status))</a>
-                            <div class="cell-sub" title="@ScheduleDisplay.Local(last.StartedAt, s.TimeZoneId)">@ScheduleDisplay.Relative(last.StartedAt, Model.Now)</div>
+                            <a asp-page="Runs" asp-route-scheduleId="@s.Id" class="@ScheduleDisplay.StatusPill(last.Status) has-detail" title="@(last.Message ?? "View run history")">@(ScheduleDisplay.IsWaiting(last) ? "Waiting on Amazon" : ScheduleDisplay.StatusLabel(last.Status))</a>
+                            <div class="cell-sub has-detail" title="@ScheduleDisplay.Local(last.StartedAt, s.TimeZoneId)">@ScheduleDisplay.Relative(last.StartedAt, Model.Now)</div>
                             @if (last.Status == SyncRunStatus.Running)
                             {
                                 <form method="post" asp-page-handler="Stop" asp-route-runId="@last.Id" class="d-inline no-print">
