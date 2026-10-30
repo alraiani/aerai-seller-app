@@ -38,7 +38,10 @@
 }
 
 <div class="card mb-3">
-    <div class="card-header">Open (@open.Count)</div>
+    <div class="card-toolbar">
+        <span class="card-toolbar-title">Open (@open.Count)</span>
+        <span class="cell-sub">Times in @ZoneFormat.Name(Model.Marketplace.TimeZoneId)</span>
+    </div>
     @if (open.Count == 0)
     {
         <div class="card-body">
@@ -78,14 +81,14 @@
 @if (resolved.Count > 0)
 {
     <div class="card">
-        <div class="card-header">Resolved in the last week</div>
+        <div class="card-toolbar"><span class="card-toolbar-title">Resolved in the last week</span></div>
         <ul class="alert-list">
             @foreach (var a in resolved)
             {
                 <li class="alert-row is-read">
                     <span class="pill pill-ok">Resolved</span>
                     <div class="alert-body">
-                        <div class="alert-title">@(a.Title ?? a.Sku) <span class="product-sku">@a.Sku</span></div>
+                        <div class="alert-title"><a asp-page="/Inventory/Index" asp-route-q="@a.Sku">@(a.Title ?? a.Sku)</a> <span class="product-sku">@a.Sku</span></div>
                         <div class="alert-message">Was @(a.Level == StockAlertLevel.Out ? "out of stock" : "low"): @a.Message</div>
                         <div class="cell-sub">Raised @Local(a.RaisedAt) · resolved @Local(a.ResolvedAt!.Value)</div>
                     </div>

@@ -3,6 +3,7 @@ using AERai.Web.Application.Common;
 using AERai.Web.Application.Imports;
 using AERai.Web.Application.Marketplaces;
 using AERai.Web.UI.Models;
+using Microsoft.AspNetCore.Mvc;
 
 namespace AERai.Web.UI.Pages.Tools.Batches;
 
@@ -16,12 +17,17 @@ public sealed class IndexModel(IImportBatchQueries batches, ICurrentMarketplace 
     /// <summary>The current page of batches.</summary>
     public PagedResult<ImportBatchSummary> Batches { get; private set; } = default!;
 
+    /// <summary>The marketplace's time zone (IANA id), for upload times.</summary>
+    public string TimeZoneId { get; private set; } = "UTC";
+
     /// <summary>Loads the requested page.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when the page is loaded.</returns>
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    /// <returns>The page, or only its list for a partial reload.</returns>
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
+        TimeZoneId = marketplace.TimeZoneId;
         Batches = await batches.ListAsync(marketplace.MarketplaceId, ToPageRequest(), cancellationToken);
+        return this.PageOrFragment("_BatchesBody");
     }
 }

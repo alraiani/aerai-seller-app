@@ -201,9 +201,10 @@
                 }
                 else
                 {
-                    <button type="submit" class="btn btn-sm btn-soft-warn btn-icon" aria-label="Pause all scheduled syncs" data-bs-toggle="tooltip"
-                            data-bs-title="Stop every scheduled run (e.g. during an Amazon outage) without changing each schedule's on/off switch. Run and backfill still work.">
-                        <partial name="_Icon" model='"pause"' />
+                    <button type="submit" class="btn btn-sm btn-soft-warn" data-bs-toggle="tooltip"
+                            data-bs-title="Stop every scheduled run (e.g. during an Amazon outage) without changing each schedule's on/off switch. Run and backfill still work."
+                            data-confirm="Pause every scheduled sync for everyone? Run now and backfills still work.">
+                        <partial name="_Icon" model='"pause"' /> Pause all
                     </button>
                 }
             </form>
@@ -216,10 +217,13 @@
                         <partial name="_Icon" model='"play"' /> Sync all
                     </button>
                 </form>
-                <button type="button" class="btn btn-sm btn-soft" data-bs-toggle="modal" data-bs-target="#backfill-all" disabled="@(!canRun || Model.BackfillAllTargets.Count == 0)"
-                        title="@(Model.BackfillAllTargets.Count == 0 ? "Turn on a schedule with history (orders or settlements) first" : "Backfill the same date range for every schedule that is switched on")">
-                    <partial name="_Icon" model='"rewind"' /> Backfill all…
-                </button>
+                @* A disabled button shows no tooltip, so the wrapper carries it (focusable, so keyboard users hear why). *@
+                <span class="d-inline-flex" tabindex="@(canRun && Model.BackfillAllTargets.Count > 0 ? null : "0")" data-bs-toggle="tooltip"
+                      data-bs-title="@(Model.BackfillAllTargets.Count == 0 ? "Turn on a schedule with history (orders or settlements) first" : !canRun ? "Amazon isn't connected, so nothing can run" : "Backfill the same date range for every schedule that is switched on")">
+                    <button type="button" class="btn btn-sm btn-soft" data-bs-toggle="modal" data-bs-target="#backfill-all" disabled="@(!canRun || Model.BackfillAllTargets.Count == 0)">
+                        <partial name="_Icon" model='"rewind"' /> Backfill all…
+                    </button>
+                </span>
             }
             @if (Model.QueuedRuns > 0)
             {
@@ -399,7 +403,7 @@
                     @if (!deletedView)
                     {
                         <td>
-                            <span class="pill @(s.AutoPromote ? "pill-info" : "pill-warn")"
+                            <span class="pill @(s.AutoPromote ? "pill-info" : "pill-warn") has-detail"
                                   title="@(s.AutoPromote ? "Goes straight into reports" : "Stops at staging for review under Import batches")">@(s.AutoPromote ? "Yes" : "Review first")</span>
                         </td>
                         <td>

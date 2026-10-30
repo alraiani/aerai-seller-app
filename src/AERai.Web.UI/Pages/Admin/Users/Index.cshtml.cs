@@ -13,8 +13,15 @@ namespace AERai.Web.UI.Pages.Admin.Users;
 /// <param name="identity">Identity service.</param>
 public sealed class IndexModel(IIdentityService identity) : PageModel
 {
-    /// <summary>All users.</summary>
+    /// <summary>Optional search from <c>?q=</c>: every word must appear in the name, email, or a role.</summary>
+    [BindProperty(SupportsGet = true, Name = "q")]
+    public string? Search { get; set; }
+
+    /// <summary>The users matching <see cref="Search"/> (all of them without one).</summary>
     public IReadOnlyList<UserSummary> Users { get; private set; } = [];
+
+    /// <summary>How many users exist, whatever the search.</summary>
+    public int TotalUsers { get; private set; }
 
     /// <summary>The signed-in admin's user id (used to hide "Lock" on their own row).</summary>
     public string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
@@ -24,7 +31,15 @@ public sealed class IndexModel(IIdentityService identity) : PageModel
     /// <returns>A task that completes when the list is loaded.</returns>
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        Users = await identity.ListUsersAsync(cancellationToken);
+        var all = await identity.ListUsersAsync(cancellationToken);
+        TotalUsers = all.Count;
+        var words = (Search ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        // A handful of accounts: filtering the list here is simpler than a query, and Identity owns the users.
+        Users = all.Where(u => words.All(w =>
+                u.DisplayName.Contains(w, StringComparison.OrdinalIgnoreCase)
+                || u.Email.Contains(w, StringComparison.OrdinalIgnoreCase)
+                || u.Roles.Any(r => r.Contains(w, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
     }
 
     /// <summary>Locks or unlocks a user.</summary>

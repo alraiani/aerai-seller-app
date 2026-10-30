@@ -91,12 +91,12 @@
                     <thead>
                         <tr>
                             <th class="sku-cell">SKU</th>
-                            <th class="text-end">30 day</th>
-                            <th class="text-end">90 day</th>
+                            <th class="text-end">Sold 30d</th>
+                            <th class="text-end">Sold 90d</th>
                             <th class="text-end">Amazon <partial name="_Tip" model='"Units sellable at Amazon now, plus units already on their way in. “Sent, awaiting Amazon” is units sent from home that Amazon’s numbers don’t show yet; they count as Amazon stock until they do."' /></th>
-                            <th class="text-end">Days of inv. <partial name="_Tip" model='"How long Amazon stock (sellable, inbound, FC transfers, and units sent but not showing yet) lasts at the current sales rate. Home stock isn’t counted."' /></th>
+                            <th class="text-end">Days of cover <partial name="_Tip" model='"How long Amazon stock (sellable, inbound, FC transfers, and units sent but not showing yet) lasts at the current sales rate. Home stock isn’t counted."' /></th>
                             <th class="col-send">Send to Amazon <partial name="_Tip" model='Model.CanEdit ? "Type the units you’re sending and save: it’s logged as Shipped to Amazon and taken off home stock. Underneath: the suggested amount and last day to ship — enough for the target cover, or Amazon’s recommendation if it asks for more or sooner." : "Home-stock units to ship in and the last day to ship them: enough for the target cover, or Amazon’s recommendation if it asks for more or sooner (shown underneath)."' /></th>
-                            <th class="text-end">Home inv. <partial name="_Tip" model='"Units at home for this marketplace. Edit a count and save; every change is logged in the home-stock ledger."' /></th>
+                            <th class="text-end">At home <partial name="_Tip" model='"Units at home for this marketplace. Edit a count and save; every change is logged in the home-stock ledger."' /></th>
                             <th>Order next <partial name="_Tip" model='"The next supplier order from the sales rate: how many and the last day to place it so it arrives (through prep and transit) before all stock — Amazon and home — runs out."' /></th>
                         </tr>
                         @* The totals sit in the sticky header so they stay in view while scrolling and typing sends. *@
@@ -181,6 +181,10 @@
                                         @if (item.DaysOfInventory is { } days)
                                         {
                                             <span class="@InventoryFormat.DueClass(plan?.DaysUntilAction, Model.SoonDays)">@days.ToString("N0", en)</span>
+                                            @if (InventoryFormat.DueLabel(plan?.DaysUntilAction, Model.SoonDays) is { } due)
+                                            {
+                                                <div class="cell-sub @InventoryFormat.DueClass(plan?.DaysUntilAction, Model.SoonDays)">@due</div>
+                                            }
                                         }
                                         else
                                         {

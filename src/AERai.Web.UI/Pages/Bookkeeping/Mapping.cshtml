@@ -2,14 +2,17 @@
 @model AERai.Web.UI.Pages.Bookkeeping.MappingModel
 @{
     ViewData["Title"] = "Account mapping";
+    var unmapped = Model.Input.Rows.Count(r => string.IsNullOrWhiteSpace(r.QuickBooksAccountName));
 }
-<form method="post">
+<partial name="_BookkeepingNav" model='"mapping"' />
+@* data-dirty-form: typed accounts show a save bar, and leaving the page warns before they are lost. *@
+<form method="post" data-dirty-form>
     <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
 
     <div class="card col-lg-6 mb-4">
         <div class="card-body">
             <label asp-for="Input.DepositAccountName" class="form-label"></label>
-            <input asp-for="Input.DepositAccountName" class="form-control" autocomplete="off" />
+            <input asp-for="Input.DepositAccountName" data-original="@Model.Input.DepositAccountName" class="form-control" autocomplete="off" />
             <span asp-validation-for="Input.DepositAccountName" class="text-danger small"></span>
             <div class="form-text">The QuickBooks account the @Model.Marketplace.Name (@Model.Marketplace.Currency) payouts land in, spelled exactly as in the company file. Each marketplace has its own.</div>
         </div>
@@ -21,21 +24,35 @@
     </p>
 
     <div class="card mb-3">
+        <div class="card-toolbar">
+            <span class="card-toolbar-title">
+                @Model.Input.Rows.Count.ToString("N0") kind@(Model.Input.Rows.Count == 1 ? "" : "s") of amount
+                @if (unmapped > 0)
+                {
+                    <span class="pill pill-warn ms-1">@unmapped unmapped</span>
+                }
+                else if (Model.Input.Rows.Count > 0)
+                {
+                    <span class="pill pill-ok ms-1">All mapped</span>
+                }
+            </span>
+        </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-            <table class="table table-sm mb-0">
+            <table class="table data-table align-middle mb-0">
                 <thead>
-                    <tr><th>Amount type</th><th>Description</th><th class="text-end">Lines</th><th>QuickBooks account</th></tr>
+                    <tr><th scope="col">Amount type</th><th scope="col">Description</th><th scope="col" class="text-end">Lines</th><th scope="col">QuickBooks account</th></tr>
                 </thead>
                 <tbody>
                 @for (var i = 0; i < Model.Input.Rows.Count; i++)
                 {
-                    <tr>
+                    var isUnmapped = string.IsNullOrWhiteSpace(Model.Input.Rows[i].QuickBooksAccountName);
+                    <tr class="@(isUnmapped ? "row-unmapped" : null)">
                         <td>@Model.Input.Rows[i].AmountType<input type="hidden" asp-for="Input.Rows[i].AmountType" /></td>
                         <td>@Model.Input.Rows[i].AmountDescription<input type="hidden" asp-for="Input.Rows[i].AmountDescription" /></td>
                         <td class="text-end">@Model.Input.Rows[i].LineCount.ToString("N0")<input type="hidden" asp-for="Input.Rows[i].LineCount" /></td>
                         <td>
-                            <input asp-for="Input.Rows[i].QuickBooksAccountName" class="form-control form-control-sm" autocomplete="off" aria-label="QuickBooks account for @Model.Input.Rows[i].AmountType @Model.Input.Rows[i].AmountDescription" />
+                            <input asp-for="Input.Rows[i].QuickBooksAccountName" data-original="@Model.Input.Rows[i].QuickBooksAccountName" placeholder="@(isUnmapped ? "Unmapped — type an account" : null)" class="form-control form-control-sm" autocomplete="off" aria-label="QuickBooks account for @Model.Input.Rows[i].AmountType @Model.Input.Rows[i].AmountDescription" />
                             <span asp-validation-for="Input.Rows[i].QuickBooksAccountName" class="text-danger small"></span>
                         </td>
                     </tr>
@@ -49,8 +66,13 @@
             </div>
         </div>
     </div>
-    <button type="submit" class="btn btn-primary">Save</button>
-    <a asp-page="Index" class="btn btn-link">Back to export</a>
+    <div class="save-bar" data-save-bar>
+        <span class="text-muted-token" data-save-count>Type or change accounts, then save once.</span>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <a asp-page="Mapping" class="btn btn-sm btn-link">Discard</a>
+            <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"check"' /> Save mapping</button>
+        </div>
+    </div>
 </form>
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />

@@ -1,0 +1,12 @@
+@model string
+@* The two bookkeeping pages as one tab bar (model: "export" or "mapping"), like Inventory's. *@
+<nav class="section-tabs no-print" aria-label="Bookkeeping pages">
+    <a asp-page="/Bookkeeping/Index" class="section-tab @(Model == "export" ? "active" : null)" aria-current="@(Model == "export" ? "page" : null)">
+        <partial name="_Icon" model='"book"' />
+        <span>QuickBooks export</span>
+    </a>
+    <a asp-page="/Bookkeeping/Mapping" class="section-tab @(Model == "mapping" ? "active" : null)" aria-current="@(Model == "mapping" ? "page" : null)">
+        <partial name="_Icon" model='"tag"' />
+        <span>Account mapping</span>
+    </a>
+</nav>

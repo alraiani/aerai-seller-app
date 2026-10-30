@@ -1,13 +1,14 @@
 @using AERai.Web.Domain.Staging
 @model ImportBatchStatus
+@* A batch's status as the house pill, with words that say what to do next. *@
 @{
     var (css, label) = Model switch
     {
-        ImportBatchStatus.Received => ("text-bg-secondary", "Received — not promoted"),
-        ImportBatchStatus.Promoted => ("text-bg-success", "Promoted"),
-        ImportBatchStatus.PromotedWithErrors => ("text-bg-warning", "Promoted with errors"),
-        ImportBatchStatus.Failed => ("text-bg-danger", "Failed"),
-        _ => ("text-bg-light", Model.ToString()),
+        ImportBatchStatus.Received => ("pill-muted", "Received — not promoted"),
+        ImportBatchStatus.Promoted => ("pill-ok", "Promoted"),
+        ImportBatchStatus.PromotedWithErrors => ("pill-warn", "Promoted with errors"),
+        ImportBatchStatus.Failed => ("pill-bad", "Failed"),
+        _ => ("pill-muted", Model.ToString()),
     };
 }
-<span class="badge @css">@label</span>
+<span class="pill @css">@label</span>

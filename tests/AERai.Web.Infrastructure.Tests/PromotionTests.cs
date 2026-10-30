@@ -228,9 +228,10 @@ public sealed class PromotionTests(SqlDatabaseFixture fixture) : IClassFixture<S
 
         // Other expenses are explained by kind of charge, per row.
         var other = await reporting.GetSettlementOtherExpensesAsync(s.MarketplaceId, "T-SET-C", CancellationToken.None);
-        var noSku = SettlementOtherExpenses.ByRow(other, SettlementAmounts.Home)[(null, null)];
-        Assert.Equal([("Subscription Fee", -39.99m), ("Advertising", -35.00m)], noSku.Select(i => (i.Label, i.Amount)));
-        Assert.Equal("Promotions", Assert.Single(SettlementOtherExpenses.ByRow(other, SettlementAmounts.Home)[("T-SKU-C", 50.00m)]).Label);
+        var byRow = SettlementOtherExpenses.KindsByRow(other, SettlementAmounts.Home);
+        Assert.Equal(-39.99m, byRow[(null, null)]["Subscription Fee"]);
+        Assert.Equal(-35.00m, byRow[(null, null)]["Advertising"]);
+        Assert.Equal("Promotions", Assert.Single(byRow[("T-SKU-C", 50.00m)]).Key);
 
         // The list totals carry the ad costs and the period range.
         var totals = await reporting.GetSettlementTotalsAsync(s.MarketplaceId, new PageRequest(Search: "T-SET-C"), null, CancellationToken.None);

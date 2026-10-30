@@ -36,6 +36,7 @@
                 <input type="hidden" name="Input.Email" value="@Model.Input.Email" />
                 <input type="hidden" name="Input.Resend" value="true" />
                 <button type="submit" class="btn btn-outline-secondary w-100">Resend code</button>
+                <div class="form-text text-center">Didn't get it? Check spam first; a new code can be sent once every @((int)LoginCodeService.ResendCooldown.TotalSeconds) seconds.</div>
             </form>
             <p class="small mt-4 mb-0"><a asp-page="/Account/Login" asp-route-returnUrl="@Model.ReturnUrl">Sign in with your password instead</a></p>
         </div>

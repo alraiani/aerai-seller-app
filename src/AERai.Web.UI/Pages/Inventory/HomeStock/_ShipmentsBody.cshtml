@@ -60,10 +60,6 @@
             <a asp-page="Shipments" asp-route-view="@Model.ViewParam" class="btn btn-sm btn-link">Clear filters</a>
         }
     </form>
-    <div class="card-toolbar-group">
-        <a asp-page="Pending" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"
-           data-bs-toggle="tooltip" data-bs-title="Logged sends Amazon’s numbers don’t show yet"><partial name="_Icon" model='"truck"' /> Awaiting Amazon</a>
-    </div>
 </div>
 
 <div class="card">
@@ -153,7 +149,7 @@
                                 <div class="fw-semibold text-nowrap"><span class="sku-code">@row.ShipmentConfirmationId</span></div>
                                 <div class="cell-sub">@(row.PlanName ?? row.Name ?? "Send to Amazon") · @Local(row.PlanCreatedAt ?? row.FirstSeenAt)</div>
                                 <div class="d-flex flex-wrap gap-1 mt-1">
-                                    <span class="pill @amazon.Css has-detail" title="Amazon’s status">@amazon.Label</span>
+                                    <span class="pill @amazon.Css"><span class="visually-hidden">Amazon status: </span>@amazon.Label</span>
                                     <span class="pill @review.Css">@review.Label</span>
                                 </div>
                                 @if (row.DiffersFromAmazon)

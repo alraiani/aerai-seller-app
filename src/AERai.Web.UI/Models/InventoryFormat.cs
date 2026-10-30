@@ -199,6 +199,17 @@ public static class InventoryFormat
         _ => string.Empty,
     };
 
+    /// <summary>The words for <see cref="DueClass"/>, so a deadline's urgency isn't told by color alone.</summary>
+    /// <param name="daysUntil">Days from today to the deadline (negative = overdue).</param>
+    /// <param name="soonDays">The alert window in days.</param>
+    /// <returns>"overdue", "due soon", or <see langword="null"/>.</returns>
+    public static string? DueLabel(int? daysUntil, int soonDays) => daysUntil switch
+    {
+        < 0 => "overdue",
+        { } d when d <= soonDays => "due soon",
+        _ => null,
+    };
+
     /// <summary>Short date for restock deadlines.</summary>
     /// <param name="date">The date.</param>
     /// <returns>e.g. "Oct 20".</returns>
