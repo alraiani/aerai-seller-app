@@ -536,6 +536,8 @@ a.pill:hover { filter: brightness(0.95); }
 .notice > .icon { margin-top: 0.15rem; font-size: 1.1rem; }
 .notice-warn { color: var(--text); background: var(--warning-soft); border-color: var(--warning); }
 .notice-warn > .icon { color: var(--warning); }
+.notice-info { color: var(--text); background: var(--info-soft); border-color: var(--info); }
+.notice-info > .icon { color: var(--info); }
 
 .modal-content { background: var(--surface); border-color: var(--border); }
 .dropdown-menu { --bs-dropdown-bg: var(--surface); --bs-dropdown-border-color: var(--border); --bs-dropdown-link-hover-bg: var(--surface-2); --bs-dropdown-link-color: var(--text); --bs-dropdown-link-hover-color: var(--text); font-size: 0.875rem; }
@@ -630,6 +632,8 @@ a.deferred-out:hover strong { color: var(--brand); }
 .owner { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: var(--muted); }
 /* "Off" rows stay full contrast (nothing is greyed out); a left accent marks them instead. */
 .row-off td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+/* Bookkeeping mapping: a kind of amount with no QuickBooks account yet (exports are blocked until it has one). */
+.row-unmapped td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
 .row-actions { display: inline-flex; gap: 0.35rem; align-items: center; justify-content: flex-end; }
 .row-actions form { margin: 0; }
 .toggle-form { margin: 0; }

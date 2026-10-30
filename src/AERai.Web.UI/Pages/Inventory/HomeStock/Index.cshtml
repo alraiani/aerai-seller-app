@@ -42,9 +42,14 @@
         </div>
         @if (Model.Skus.Items.Count == 0)
         {
+            var searched = !string.IsNullOrWhiteSpace(Model.Search);
             <div class="empty-state">
-                <div class="empty-title">No SKUs match</div>
-                <div class="empty-detail">Try a different search, or upload a spreadsheet for SKUs that aren't at Amazon yet.</div>
+                <div class="empty-title">@(searched ? $"No SKUs match “{Model.Search}”" : "No SKUs at Amazon yet")</div>
+                <div class="empty-detail">@(searched ? "Try a different search." : "SKUs appear once Amazon reports them for this marketplace.") Upload a spreadsheet for SKUs that aren't at Amazon yet.</div>
+                @if (searched)
+                {
+                    <a asp-page="Index" class="btn btn-sm btn-soft">Clear search</a>
+                }
             </div>
         }
         else

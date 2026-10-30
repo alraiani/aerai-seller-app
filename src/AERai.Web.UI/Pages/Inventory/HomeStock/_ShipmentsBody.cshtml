@@ -60,10 +60,6 @@
             <a asp-page="Shipments" asp-route-view="@Model.ViewParam" class="btn btn-sm btn-link">Clear filters</a>
         }
     </form>
-    <div class="card-toolbar-group">
-        <a asp-page="Pending" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"
-           data-bs-toggle="tooltip" data-bs-title="Logged sends Amazon’s numbers don’t show yet"><partial name="_Icon" model='"truck"' /> Awaiting Amazon</a>
-    </div>
 </div>
 
 <div class="card">

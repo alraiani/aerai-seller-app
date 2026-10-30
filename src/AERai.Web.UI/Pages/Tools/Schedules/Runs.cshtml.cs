@@ -39,8 +39,8 @@ public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository s
 
     /// <summary>Loads the page.</summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>A task that completes when loaded.</returns>
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    /// <returns>The page, or only its list for a partial reload.</returns>
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         var marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
         TimeZoneId = marketplace.TimeZoneId;
@@ -48,6 +48,7 @@ public sealed class RunsModel(ISyncRunRepository runs, ISyncScheduleRepository s
         // Include deleted schedules so their history stays labeled.
         ScheduleNames = (await schedules.ListIncludingDeletedAsync(cancellationToken))
             .ToDictionary(s => s.Id, s => s.IsDeleted ? $"{s.Name} (deleted)" : s.Name);
+        return this.PageOrFragment("_RunsBody");
     }
 
     /// <summary>Stops a run that hasn't finished (waiting on Amazon, or working right now).</summary>

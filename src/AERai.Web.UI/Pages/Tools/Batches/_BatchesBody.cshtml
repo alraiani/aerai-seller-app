@@ -1,0 +1,76 @@
+@model AERai.Web.UI.Pages.Tools.Batches.IndexModel
+@{
+    var items = Model.Batches.Items;
+    var filtered = !string.IsNullOrWhiteSpace(Model.Search);
+}
+<div class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@Model.Batches.TotalCount.ToString("N0") batch@(Model.Batches.TotalCount == 1 ? "" : "es")</span>
+            <span class="text-muted-token fw-normal">· times in @ZoneFormat.Name(Model.TimeZoneId)</span>
+            <partial name="_Tip" model='"Every file loaded into staging, newest first. Open one to see the rows promotion rejected and to promote or re-stage it."' />
+        </span>
+        <div class="card-toolbar-group">
+            <form method="get" class="filters" role="search">
+                <div class="search-box">
+                    <partial name="_Icon" model='"search"' />
+                    <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search file, type, who…" aria-label="Search import batches" />
+                </div>
+                <button type="submit" class="btn btn-sm btn-soft js-hide">Search</button>
+                @if (filtered)
+                {
+                    <a asp-page="Index" class="btn btn-sm btn-link">Clear</a>
+                }
+            </form>
+            <a asp-page="/Tools/Import" class="btn btn-sm btn-primary" data-fragment-skip><partial name="_Icon" model='"upload"' /> Import data</a>
+        </div>
+    </div>
+    @if (items.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-title">@(filtered ? $"No batches match “{Model.Search}”" : "No imports yet")</div>
+            <div class="empty-detail">@(filtered ? "Try a different search." : "Files you upload or Amazon sync pulls land here before they are promoted.")</div>
+            @if (filtered)
+            {
+                <a asp-page="Index" class="btn btn-sm btn-soft">Clear search</a>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table data-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th scope="col">#</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">File</th>
+                        <th scope="col">Uploaded</th>
+                        <th scope="col">Data covers</th>
+                        <th scope="col">By</th>
+                        <th scope="col" class="text-end">Rows</th>
+                        <th scope="col" class="text-end">Rejected</th>
+                        <th scope="col">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var b in items)
+                {
+                    <tr>
+                        <td><a asp-page="Details" asp-route-id="@b.Id" class="fw-semibold" data-fragment-skip>@b.Id</a></td>
+                        <td>@b.Source</td>
+                        <td class="cell-truncate" title="@b.FileName">@b.FileName</td>
+                        <td class="text-nowrap">@ScheduleDisplay.Local(b.UploadedAt, Model.TimeZoneId)</td>
+                        <td class="text-nowrap">@BatchFormat.DataRange(b)</td>
+                        <td>@b.UploadedBy</td>
+                        <td class="text-end">@b.RowCount.ToString("N0")</td>
+                        <td class="text-end @(b.RejectedRowCount > 0 ? "text-warn fw-semibold" : "")">@b.RejectedRowCount.ToString("N0")</td>
+                        <td><partial name="_BatchStatusBadge" model="b.Status" /></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+<partial name="_Pager" model="Model.Batches.ToPager(Model.Search)" />
