@@ -393,10 +393,12 @@
             table.style.setProperty("--sticky-row1", Math.floor(first.getBoundingClientRect().height) + "px");
         }
 
-        // The toolbar sticks only when its card holds just this table, and the header sits right below it.
+        // The toolbar sticks only when its card shows just this table (other views of it are hidden), and
+        // the header sits right below it.
         var card = wrapper.parentElement;
+        if (wrapper.hidden) { removeFloatHead(wrapper); return; }
         var toolbar = card && card.classList.contains("card") ? card.querySelector(":scope > .card-toolbar") : null;
-        var withToolbar = toolbar !== null && card.querySelectorAll(":scope > .table-responsive").length === 1;
+        var withToolbar = toolbar !== null && card.querySelectorAll(":scope > .table-responsive:not([hidden])").length === 1;
         if (card && card.classList.contains("card")) {
             card.classList.toggle("has-sticky-head", withToolbar);
             if (withToolbar) {
@@ -826,6 +828,74 @@
         var first = document.querySelector("[data-fragment]");
         window.history.replaceState({ fragment: first.getAttribute("data-fragment") }, "", window.location.href);
     }
+
+    // ---------- Column views ----------
+    // A [data-view-switch] inside a [data-views] container picks which of its [data-view-panel]s shows
+    // (e.g. the settlement Summary's Sales and Expenses tables), with no request: both are already on the
+    // page. Its links carry ?view= so the switch works without script. With script, the address is
+    // replaced (not pushed: it is a way of looking, not a place) and every same-page link and GET form
+    // in the section is given the new view, so sorting, paging, and searching keep it.
+    function withView(href, param, value) {
+        var url = new URL(href, window.location.href);
+        if (!fragmentTarget(url)) { return null; }
+        if (value) { url.searchParams.set(param, value); } else { url.searchParams.delete(param); }
+        return url.pathname + url.search + url.hash;
+    }
+
+    function carryView(scope, param, value) {
+        var links = scope.querySelectorAll("a[href]");
+        for (var i = 0; i < links.length; i++) {
+            if (links[i].closest("[data-view-switch]")) { continue; }
+            var href = withView(links[i].getAttribute("href"), param, value);
+            if (href) { links[i].setAttribute("href", href); }
+        }
+        var forms = scope.querySelectorAll("form");
+        for (var f = 0; f < forms.length; f++) {
+            var form = forms[f];
+            if ((form.getAttribute("method") || "get").toLowerCase() !== "get" || !withView(form.action, param, value)) { continue; }
+            var input = form.querySelector("input[type='hidden'][name='" + param + "']");
+            if (!value) {
+                if (input) { input.remove(); }
+            } else {
+                if (!input) {
+                    input = document.createElement("input");
+                    input.type = "hidden";
+                    input.name = param;
+                    form.insertBefore(input, form.firstChild);
+                }
+                input.value = value;
+            }
+        }
+    }
+
+    document.addEventListener("click", function (event) {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) { return; }
+        var link = event.target.closest && event.target.closest("[data-view-switch] a[data-view]");
+        var container = link && link.closest("[data-views]");
+        if (!container) { return; }
+        event.preventDefault();
+        var view = link.getAttribute("data-view");
+        var panels = container.querySelectorAll("[data-view-panel]");
+        for (var i = 0; i < panels.length; i++) { panels[i].hidden = panels[i].getAttribute("data-view-panel") !== view; }
+        // The shown table decides its sticky header now, and the hidden one drops its floating copy.
+        updateAllStickyTables();
+        var options = link.closest("[data-view-switch]").querySelectorAll("a[data-view]");
+        for (var o = 0; o < options.length; o++) {
+            var active = options[o] === link;
+            options[o].classList.toggle("active", active);
+            if (active) { options[o].setAttribute("aria-current", "true"); } else { options[o].removeAttribute("aria-current"); }
+        }
+
+        // The view's value is whatever the link sets (none for the default view).
+        var param = "view";
+        var target = new URL(link.href, window.location.href).searchParams.get(param);
+        if (window.history && window.history.replaceState) {
+            var here = withView(window.location.href, param, target);
+            if (here) { window.history.replaceState(window.history.state, "", here); }
+        }
+        carryView(link.closest("[data-fragment]") || document, param, target);
+        announce("Showing the " + link.textContent.trim() + " view");
+    });
 
     // ---------- Busy submits ----------
     // Every POST shows it is working and can't be sent twice: the pressed button gets a spinner and is

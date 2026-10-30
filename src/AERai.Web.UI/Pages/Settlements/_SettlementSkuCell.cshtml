@@ -1,0 +1,9 @@
+@using System.Globalization
+@model (AERai.Web.Domain.Reporting.SettlementSkuSummary Row, string? AmountsRoute)
+@* A Summary row's product: its SKU linking to the orders behind it, with ASIN and title under it. Shared by both views. *@
+@{ var r = Model.Row; }
+<a asp-page="Lines" asp-route-id="@r.SettlementId" asp-route-sku="@r.Sku" asp-route-price="@r.SalePrice?.ToString(CultureInfo.InvariantCulture)" asp-route-amounts="@Model.AmountsRoute" class="fw-semibold">@(r.Sku ?? "No SKU (service fees)")</a>
+@if (r.Title is not null || r.Asin is not null)
+{
+    <div class="cell-sub cell-truncate" title="@r.Title">@(r.Asin is null ? "" : r.Asin + " · ")@r.Title</div>
+}
