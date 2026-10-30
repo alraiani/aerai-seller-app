@@ -66,6 +66,22 @@ public sealed class FamiliesModel(IProductFamilyService families) : PageModel
         return BackToList(openDialog: true);
     }
 
+    /// <summary>Sets whether a family's Amazon shipments are offered for review as sends from home stock.</summary>
+    /// <param name="id">Family id.</param>
+    /// <param name="shipsFromHomeStock">The new setting.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>A redirect back to the list.</returns>
+    public async Task<IActionResult> OnPostHomeStockAsync(int id, bool shipsFromHomeStock, CancellationToken cancellationToken)
+    {
+        var result = await families.SetShipsFromHomeStockAsync(id, shipsFromHomeStock, cancellationToken);
+        Report(result.IsSuccess, result.IsSuccess
+            ? shipsFromHomeStock
+                ? "Its Amazon shipments are now offered for review under Inventory → Amazon shipments."
+                : "Its Amazon shipments are no longer taken off home stock."
+            : result.Error);
+        return BackToList(openDialog: true);
+    }
+
     /// <summary>Deletes a family; its SKUs become unassigned.</summary>
     /// <param name="id">Family id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

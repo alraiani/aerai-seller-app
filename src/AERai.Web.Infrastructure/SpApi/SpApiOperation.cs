@@ -24,10 +24,15 @@ internal static class SpApiOperation
     public const string ListAwdInventory = "awd.listInventory";
     public const string SearchOrders = "orders.searchOrders";
     public const string ListTransactions = "finances.listTransactions";
+    public const string ListInboundPlans = "fbaInbound.listInboundPlans";
+    public const string GetInboundPlan = "fbaInbound.getInboundPlan";
+    public const string GetInboundShipment = "fbaInbound.getShipment";
+    public const string ListInboundShipmentItems = "fbaInbound.listShipmentItems";
 
     /// <summary>
     /// (requests per second, burst) from the Reports API v2021-06-30, Catalog Items API v2022-04-01,
-    /// AWD API v2024-05-09, Orders API v2026-01-01, and Finances API v2024-06-19 usage plans. Unknown operations fall back to a
+    /// AWD API v2024-05-09, Orders API v2026-01-01, Finances API v2024-06-19, and Fulfillment Inbound API v2024-03-20
+    /// usage plans. Unknown operations fall back to a
     /// conservative default.
     /// </summary>
     public static readonly FrozenDictionary<string, (double RatePerSecond, int Burst)> Limits =
@@ -42,6 +47,10 @@ internal static class SpApiOperation
             [ListAwdInventory] = (2.0, 2),
             [SearchOrders] = (0.0056, 20),
             [ListTransactions] = (0.5, 10),
+            [ListInboundPlans] = (2.0, 6),
+            [GetInboundPlan] = (2.0, 6),
+            [GetInboundShipment] = (2.0, 6),
+            [ListInboundShipmentItems] = (2.0, 30),
         }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Limit applied to operations missing from <see cref="Limits"/>.</summary>

@@ -18,6 +18,25 @@
     }
 </div>
 
+@if (Model.ShipmentsToReview > 0)
+{
+    @* Not an alert with read state: it stays until the shipments are accepted or dismissed. *@
+    <div class="card mb-3">
+        <ul class="alert-list">
+            <li class="alert-row is-unread">
+                <span class="pill pill-warn">To review</span>
+                <div class="alert-body">
+                    <div class="alert-title">
+                        <a asp-page="/Inventory/HomeStock/Shipments">@Model.ShipmentsToReview Amazon shipment@(Model.ShipmentsToReview == 1 ? "" : "s") to review</a>
+                    </div>
+                    <div class="alert-message">Send to Amazon shipments with SKUs from home stock. Accept each to take its units off home stock, or dismiss it.</div>
+                </div>
+                <a asp-page="/Inventory/HomeStock/Shipments" class="btn btn-sm btn-soft">Review</a>
+            </li>
+        </ul>
+    </div>
+}
+
 <div class="card mb-3">
     <div class="card-header">Open (@open.Count)</div>
     @if (open.Count == 0)

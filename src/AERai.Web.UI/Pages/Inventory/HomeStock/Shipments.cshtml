@@ -1,0 +1,11 @@
+@page
+@model AERai.Web.UI.Pages.Inventory.HomeStock.ShipmentsModel
+@{
+    ViewData["Title"] = "Amazon shipments";
+}
+
+@* Search, the family filter, and the view switch reload only this section (site.js partial reloads); Accept, Dismiss,
+   and Reopen still post the whole page. *@
+<div data-fragment="amazon-shipments">
+    <partial name="_ShipmentsBody" />
+</div>

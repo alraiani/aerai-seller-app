@@ -11,6 +11,7 @@ public sealed class SyncCategoryTests
     [InlineData(AmazonReportType.FbaReservedInventory, SyncCategory.Inventory)]
     [InlineData(AmazonReportType.RestockRecommendations, SyncCategory.Inventory)]
     [InlineData(AmazonReportType.AwdInventory, SyncCategory.Inventory)]
+    [InlineData(AmazonReportType.InboundShipments, SyncCategory.Inventory)]
     [InlineData(AmazonReportType.Settlements, SyncCategory.SettlementsAndPayments)]
     [InlineData(AmazonReportType.DeferredTransactions, SyncCategory.SettlementsAndPayments)]
     [InlineData(AmazonReportType.AdsSpend, SyncCategory.Advertising)]

@@ -123,6 +123,10 @@ public static partial class DatabaseInitializer
                 // Sponsored Products spend from the Amazon Ads API. Each run re-reads the last two weeks, whose
                 // attributed sales Amazon is still revising, so the lookback covers a first run the same way.
                 DefaultSchedule(m, "Ads spend — daily 5:45 AM", AmazonReportType.AdsSpend, ScheduleFrequency.Daily, null, new TimeOnly(5, 45), 14, now),
+                // Send to Amazon shipments, offered for review as sends from home stock. Every 4 h like Orders, so a
+                // shipment created in the morning is waiting by the time its boxes go out; plans updated in the last
+                // 30 days are read.
+                DefaultSchedule(m, "Amazon shipments — every 4 h", AmazonReportType.InboundShipments, ScheduleFrequency.Interval, 240, null, 30, now),
                 // AWD only operates in the US; other marketplaces get no default.
                 .. m.Code == "US"
                     ? [DefaultSchedule(m, "AWD inventory — daily 6:05 AM", AmazonReportType.AwdInventory, ScheduleFrequency.Daily, null, new TimeOnly(6, 5), 1, now)]

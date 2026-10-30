@@ -13,7 +13,7 @@
 
     // Inventory's sub-pages have their own links (same order as the tab bar on those pages); every other
     // inventory page (Edit, bulk home stock, uploads, families) keeps the Inventory link current.
-    string[] inventorySubPages = ["/Inventory/Worksheet", "/Inventory/HomeStock/Pending", "/Inventory/HomeStock/Ledger", "/Inventory/Pictures"];
+    string[] inventorySubPages = ["/Inventory/Worksheet", "/Inventory/HomeStock/Shipments", "/Inventory/HomeStock/Pending", "/Inventory/HomeStock/Ledger", "/Inventory/Pictures"];
     var inventoryOverviewCurrent = IsActive("/Inventory") && !inventorySubPages.Any(p => IsActive(p));
     var bookkeepingCurrent = IsActive("/Settlements") || IsActive("/Bookkeeping");
     var settlementsOverviewCurrent = IsActive("/Settlements") && !IsActive("/Settlements/Deferred");
@@ -79,6 +79,7 @@
                             <span class="visually-hidden">Inventory pages</span>
                         </summary>
                         @{ await NavLink("/Inventory/Worksheet", "grid", "Worksheet", IsActive("/Inventory/Worksheet"), "nav-sub"); }
+                        @{ await NavLink("/Inventory/HomeStock/Shipments", "package", "Amazon shipments", IsActive("/Inventory/HomeStock/Shipments"), "nav-sub"); }
                         @{ await NavLink("/Inventory/HomeStock/Pending", "truck", "Awaiting Amazon", IsActive("/Inventory/HomeStock/Pending"), "nav-sub"); }
                         @{ await NavLink("/Inventory/HomeStock/Ledger", "list", "Ledger", IsActive("/Inventory/HomeStock/Ledger"), "nav-sub"); }
                         @{ await NavLink("/Inventory/Pictures", "image", "Pictures", IsActive("/Inventory/Pictures"), "nav-sub"); }

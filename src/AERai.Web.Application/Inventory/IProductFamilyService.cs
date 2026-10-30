@@ -30,6 +30,16 @@ public interface IProductFamilyService
     /// <returns>Success, or why the rules can't be saved.</returns>
     Task<Result> SetRulesAsync(int id, RestockRules rules, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Sets whether the family's units go into Amazon from home stock, so Amazon shipments holding them are offered for
+    /// review as Shipped to Amazon sends.
+    /// </summary>
+    /// <param name="id">Family id.</param>
+    /// <param name="shipsFromHomeStock">The new setting.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Success, or "not found".</returns>
+    Task<Result> SetShipsFromHomeStockAsync(int id, bool shipsFromHomeStock, CancellationToken cancellationToken);
+
     /// <summary>Deletes a family; its SKUs stay, unassigned.</summary>
     /// <param name="id">Family id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

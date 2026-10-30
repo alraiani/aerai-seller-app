@@ -36,6 +36,13 @@ public interface IProductFamilyRepository
     /// <returns>Whether the family exists.</returns>
     Task<bool> SetRulesAsync(int id, RestockRules rules, CancellationToken cancellationToken);
 
+    /// <summary>Sets whether a family's Amazon shipments are offered for review as sends from home stock.</summary>
+    /// <param name="id">Family id.</param>
+    /// <param name="shipsFromHomeStock">The new setting.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>Whether the family exists.</returns>
+    Task<bool> SetShipsFromHomeStockAsync(int id, bool shipsFromHomeStock, CancellationToken cancellationToken);
+
     /// <summary>Deletes a family; its SKUs become unassigned.</summary>
     /// <param name="id">Family id.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>

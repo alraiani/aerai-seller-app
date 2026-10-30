@@ -24,6 +24,9 @@ namespace AERai.Web.Application.Ingestion;
 ///   <see cref="RunAsync"/>, land each page in raw storage, and replace the day's AWD snapshot.</item>
 ///   <item><b>Searched by API</b> (Orders API): page through <c>searchOrders</c> inside <see cref="RunAsync"/>,
 ///   land each page in raw storage, and upsert its orders straight into <c>core</c> as each page arrives.</item>
+///   <item><b>Read by API</b> (inbound shipments): page through the seller's Send to Amazon plans inside
+///   <see cref="RunAsync"/>, read each recent plan's shipments and their SKUs, land every response in raw storage,
+///   and record the shipments for review once everything is read.</item>
 ///   <item><b>Requested from Amazon Ads</b> (Ads spend): like a requested report, but from the Amazon Ads API;
 ///   once ready the report is landed in raw storage, read back from there, and replaces its days in
 ///   <c>core.AdSpend</c>.</item>
@@ -96,6 +99,18 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// </summary>
     private const int MaxDeferredPages = 2_000;
 
+    /// <summary>Raw landing-zone folder for inbound shipment responses (plans, shipments, and their SKUs).</summary>
+    public const string InboundRawFolder = "inboundshipments";
+
+    /// <summary>
+    /// Stops a run whose listing never ends (an Amazon fault) instead of looping forever. At 30 plans a page this
+    /// allows 3,000 plans, far more than a lookback window holds.
+    /// </summary>
+    private const int MaxInboundPlanPages = 100;
+
+    /// <summary>Stops a shipment whose SKU pages never end; at 1,000 SKUs a page this allows 20,000.</summary>
+    private const int MaxInboundItemPages = 20;
+
     /// <summary>Raw landing-zone folder for Orders API pages.</summary>
     public const string OrdersApiRawFolder = "ordersapi";
 
@@ -139,6 +154,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     private readonly IDeferredTransactionRepository _deferred;
     private readonly IAmazonAdsGateway _adsGateway;
     private readonly IAdSpendRepository _adSpend;
+    private readonly IAmazonInboundGateway _inboundGateway;
+    private readonly IInboundShipmentRepository _inboundShipments;
     private readonly IRawFileStore _rawFiles;
     private readonly IStagingImportService _staging;
     private readonly IPromotionService _promotion;
@@ -160,6 +177,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// <param name="deferred">Deferred transaction persistence.</param>
     /// <param name="adsGateway">Amazon Ads reporting gateway.</param>
     /// <param name="adSpend">Ad spend persistence.</param>
+    /// <param name="inboundGateway">SP-API Fulfillment Inbound gateway (shipments into Amazon).</param>
+    /// <param name="inboundShipments">Inbound shipment persistence.</param>
     /// <param name="rawFiles">Raw landing zone.</param>
     /// <param name="staging">Staging use cases.</param>
     /// <param name="promotion">Promotion into core.</param>
@@ -180,6 +199,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         IDeferredTransactionRepository deferred,
         IAmazonAdsGateway adsGateway,
         IAdSpendRepository adSpend,
+        IAmazonInboundGateway inboundGateway,
+        IInboundShipmentRepository inboundShipments,
         IRawFileStore rawFiles,
         IStagingImportService staging,
         IPromotionService promotion,
@@ -202,6 +223,8 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         _deferred = deferred;
         _adsGateway = adsGateway;
         _adSpend = adSpend;
+        _inboundGateway = inboundGateway;
+        _inboundShipments = inboundShipments;
         _rawFiles = rawFiles;
         _staging = staging;
         _promotion = promotion;
@@ -256,6 +279,10 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             else if (schedule.ReportType == AmazonReportType.DeferredTransactions)
             {
                 await IngestDeferredTransactionsAsync(context, work).ConfigureAwait(false);
+            }
+            else if (schedule.ReportType == AmazonReportType.InboundShipments)
+            {
+                await IngestInboundShipmentsAsync(context, work).ConfigureAwait(false);
             }
             else if (schedule.ReportType == AmazonReportType.Settlements)
             {
@@ -753,6 +780,131 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             ? $"AWD snapshot for {snapshotDate:yyyy-MM-dd}: {context.RowsWritten:N0} SKUs ({pages:N0} page{(pages == 1 ? "" : "s")})."
             : "Amazon lists no AWD stock.");
         context.CoveredUntil = startedAt;
+    }
+
+    /// <summary>
+    /// Reads the seller's Send to Amazon plans updated within the schedule's lookback, then each plan's shipments and
+    /// their SKUs, landing every response in raw storage, and records the shipments that have an FBA shipment id for
+    /// review.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Plans are listed most recently updated first, so paging stops at the first plan older than the window. Plans
+    /// for other marketplaces of the region are skipped: Amazon lists the account's plans, not the marketplace's.
+    /// </para>
+    /// <para>
+    /// Like AWD, everything is read before anything is written, so a run that fails part-way records nothing. A
+    /// shipment without an FBA id yet (its plan's placement isn't confirmed) is left for a later run.
+    /// </para>
+    /// </remarks>
+    private async Task IngestInboundShipmentsAsync(RunContext context, CancellationToken cancellationToken)
+    {
+        var startedAt = context.Run.StartedAt;
+        var windowStart = startedAt - TimeSpan.FromDays(Math.Max(1, context.Schedule.LookbackDays));
+        var marketplaceId = context.Schedule.MarketplaceId;
+        var responses = 0;
+
+        var plans = new List<InboundPlanSummary>();
+        string? nextToken = null;
+        var pages = 0;
+        do
+        {
+            if (++pages > MaxInboundPlanPages)
+            {
+                throw new InvalidOperationException($"Inbound plan listing did not end after {MaxInboundPlanPages} pages.");
+            }
+
+            var page = await _inboundGateway.ListPlansPageAsync(context.Marketplace, nextToken, cancellationToken).ConfigureAwait(false);
+            await LandJsonPageAsync(context, InboundRawFolder, "inbound-plans", page.RawJson, ++responses, cancellationToken).ConfigureAwait(false);
+            plans.AddRange(page.Plans.Where(p => (p.LastUpdatedAt ?? p.CreatedAt ?? startedAt) >= windowStart));
+
+            // Newest first: once a page reaches past the window, every later page does too.
+            var reachedEnd = page.Plans.Any(p => (p.LastUpdatedAt ?? p.CreatedAt ?? startedAt) < windowStart);
+            nextToken = reachedEnd || string.IsNullOrEmpty(page.NextToken) ? null : page.NextToken;
+        }
+        while (nextToken is not null);
+
+        var shipments = new List<AmazonInboundShipment>();
+        var waiting = 0;
+        foreach (var plan in plans.Where(p => p.MarketplaceIds.Count == 0 || p.MarketplaceIds.Contains(marketplaceId, StringComparer.Ordinal)))
+        {
+            var detail = await _inboundGateway.GetPlanShipmentsAsync(context.Marketplace, plan.InboundPlanId, cancellationToken).ConfigureAwait(false);
+            await LandJsonPageAsync(context, InboundRawFolder, "inbound-plan", detail.RawJson, ++responses, cancellationToken).ConfigureAwait(false);
+            foreach (var shipmentId in detail.ShipmentIds)
+            {
+                var shipment = await _inboundGateway.GetShipmentAsync(context.Marketplace, plan.InboundPlanId, shipmentId, cancellationToken).ConfigureAwait(false);
+                await LandJsonPageAsync(context, InboundRawFolder, "inbound-shipment", shipment.RawJson, ++responses, cancellationToken).ConfigureAwait(false);
+                if (shipment.ShipmentConfirmationId is null)
+                {
+                    waiting++;
+                    continue;
+                }
+
+                var items = new List<AmazonInboundItem>();
+                string? itemsToken = null;
+                var itemPages = 0;
+                do
+                {
+                    if (++itemPages > MaxInboundItemPages)
+                    {
+                        throw new InvalidOperationException($"Shipment {shipment.ShipmentConfirmationId} SKU listing did not end after {MaxInboundItemPages} pages.");
+                    }
+
+                    var page = await _inboundGateway.ListShipmentItemsPageAsync(context.Marketplace, plan.InboundPlanId, shipmentId, itemsToken, cancellationToken).ConfigureAwait(false);
+                    await LandJsonPageAsync(context, InboundRawFolder, "inbound-items", page.RawJson, ++responses, cancellationToken).ConfigureAwait(false);
+                    items.AddRange(page.Items);
+                    itemsToken = string.IsNullOrEmpty(page.NextToken) ? null : page.NextToken;
+                }
+                while (itemsToken is not null);
+
+                var merged = items
+                    .GroupBy(i => i.Sku, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => new AmazonInboundItem(g.First().Sku, g.Sum(i => i.Quantity)))
+                    .ToList();
+                shipments.Add(new AmazonInboundShipment(
+                    shipment.ShipmentConfirmationId, shipment.ShipmentId, plan.InboundPlanId, plan.Name, plan.CreatedAt, shipment.Name, shipment.Status, merged));
+            }
+        }
+
+        var result = await _inboundShipments.ApplyAsync(marketplaceId, shipments, _clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        context.RowsWritten = result.Shipments;
+        context.Run.DataStart = windowStart;
+        context.Run.DataEnd = startedAt;
+        context.Notes.Add(InboundNote(result, plans.Count, waiting, windowStart));
+        context.CoveredUntil = startedAt;
+    }
+
+    /// <summary>The run message for an inbound shipments run.</summary>
+    private static string InboundNote(InboundApplyResult result, int plans, int waiting, DateTimeOffset windowStart)
+    {
+        var note = new StringBuilder(string.Create(CultureInfo.InvariantCulture,
+            $"{result.Shipments:N0} shipment{(result.Shipments == 1 ? "" : "s")} in {plans:N0} plan{(plans == 1 ? "" : "s")} updated since {windowStart:yyyy-MM-dd}"));
+        if (result.NewToReview > 0)
+        {
+            note.Append(CultureInfo.InvariantCulture, $"; {result.NewToReview:N0} new to review");
+        }
+
+        if (result.AlreadyLogged > 0)
+        {
+            note.Append(CultureInfo.InvariantCulture, $"; {result.AlreadyLogged:N0} already in the ledger");
+        }
+
+        if (result.SetAside > 0)
+        {
+            note.Append(CultureInfo.InvariantCulture, $"; {result.SetAside:N0} already shipped before the first sync, set aside");
+        }
+
+        if (result.Cancelled > 0)
+        {
+            note.Append(CultureInfo.InvariantCulture, $"; {result.Cancelled:N0} cancelled by Amazon");
+        }
+
+        if (waiting > 0)
+        {
+            note.Append(CultureInfo.InvariantCulture, $"; {waiting:N0} without an FBA id yet");
+        }
+
+        return note.Append('.').ToString();
     }
 
     /// <summary>

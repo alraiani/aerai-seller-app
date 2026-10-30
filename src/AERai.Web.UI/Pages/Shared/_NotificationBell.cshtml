@@ -2,10 +2,26 @@
 @using AERai.Web.Application.Marketplaces
 @inject ICurrentMarketplace CurrentMarketplace
 @inject IStockAlertService Alerts
+@inject AERai.Web.Application.Inventory.IInboundShipmentService InboundShipments
 @{
     var marketplace = (await CurrentMarketplace.GetAsync(Context.RequestAborted)).Current;
-    var unread = await Alerts.CountUnreadAsync(marketplace.MarketplaceId, User.Identity!.Name!, Context.RequestAborted);
-    var label = unread == 0 ? $"No new stock alerts in {marketplace.Name}" : $"{unread} new stock alert{(unread == 1 ? "" : "s")} in {marketplace.Name}";
+    var alerts = await Alerts.CountUnreadAsync(marketplace.MarketplaceId, User.Identity!.Name!, Context.RequestAborted);
+
+    // Amazon shipments waiting for review count too: until someone accepts them, home stock overstates what is at home.
+    var shipments = await InboundShipments.CountToReviewAsync(marketplace.MarketplaceId, Context.RequestAborted);
+    var unread = alerts + shipments;
+    var parts = new List<string>();
+    if (alerts > 0)
+    {
+        parts.Add($"{alerts} new stock alert{(alerts == 1 ? "" : "s")}");
+    }
+
+    if (shipments > 0)
+    {
+        parts.Add($"{shipments} Amazon shipment{(shipments == 1 ? "" : "s")} to review");
+    }
+
+    var label = unread == 0 ? $"Nothing new in {marketplace.Name}" : $"{string.Join(" and ", parts)} in {marketplace.Name}";
 }
 @* Rendered on the server for the current marketplace, so it needs no script (CSP). *@
 <a asp-page="/Notifications/Index" class="notify-bell @(unread > 0 ? "has-unread" : null)" aria-label="@label" title="@label">

@@ -2,8 +2,8 @@ namespace AERai.Web.Domain.Ingestion;
 
 /// <summary>
 /// The Amazon data the app ingests automatically, and how each is obtained. Every value but
-/// <see cref="AwdInventory"/>, <see cref="OrdersApi"/>, <see cref="DeferredTransactions"/>, and <see cref="AdsSpend"/>
-/// is an SP-API Reports API report.
+/// <see cref="AwdInventory"/>, <see cref="OrdersApi"/>, <see cref="DeferredTransactions"/>, <see cref="AdsSpend"/>, and
+/// <see cref="InboundShipments"/> is an SP-API Reports API report.
 /// </summary>
 public enum AmazonReportType
 {
@@ -69,4 +69,11 @@ public enum AmazonReportType
     /// aged-inventory surcharge coming.
     /// </summary>
     FbaInventoryPlanning = 10,
+
+    /// <summary>
+    /// Shipments into Amazon from the Fulfillment Inbound API (<c>/inbound/fba/2024-03-20/inboundPlans</c>): not a
+    /// report but the seller's Send to Amazon plans, their shipments, and each shipment's SKUs. Written straight to
+    /// <c>core.InboundShipment</c> as shipments to review; a listing of current plans, so it cannot be backfilled.
+    /// </summary>
+    InboundShipments = 11,
 }

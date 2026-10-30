@@ -35,6 +35,7 @@ public static class ScheduleDisplay
         (AmazonReportType.FbaReservedInventory, "Why stock is reserved (customer orders, FC transfers, FC processing). Run just after FBA inventory."),
         (AmazonReportType.RestockRecommendations, "How many units Amazon recommends sending in, and by when. Once a day is plenty."),
         (AmazonReportType.FbaInventoryPlanning, "How old the stock at Amazon is, what Amazon thinks won't sell in time, and the storage fees coming. Once a day is plenty."),
+        (AmazonReportType.InboundShipments, "Your Send to Amazon shipments, offered on Inventory → Amazon shipments to take off home stock once reviewed. Every few hours is plenty."),
         (AmazonReportType.AwdInventory, "A snapshot of stock in Amazon Warehousing & Distribution (AWD, US only). Once a day is plenty."),
         (AmazonReportType.Settlements, "Amazon publishes these every ~14 days; a daily check picks up new ones once."),
         (AmazonReportType.DeferredTransactions, "Sales Amazon is holding back (paid out about 7 days after delivery), shown on Settlements. Once a day is plenty."),
