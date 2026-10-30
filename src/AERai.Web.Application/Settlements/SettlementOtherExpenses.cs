@@ -2,7 +2,8 @@ namespace AERai.Web.Application.Settlements;
 
 /// <summary>
 /// Explains a settlement's Other expenses column: the charges in it by name, largest first, so a
-/// reader can see what is behind the number (on the Summary page, as a tooltip).
+/// reader can see what is behind the number (on the Summary page, as a tooltip, and as one column per
+/// kind of charge in its Expenses view).
 /// </summary>
 public static class SettlementOtherExpenses
 {
@@ -20,34 +21,13 @@ public static class SettlementOtherExpenses
         "Discount on Fee",
     };
 
-    /// <summary>The charges behind each per-SKU summary row.</summary>
-    /// <param name="lines">The settlement's Other expenses lines, added up by kind.</param>
-    /// <param name="amounts">Which currency the page shows (converted only where the lines have a rate).</param>
-    /// <returns>The items of each row, keyed by its SKU and price per item (as paid).</returns>
-    public static IReadOnlyDictionary<(string? Sku, decimal? SalePrice), IReadOnlyList<SettlementExpenseItem>> ByRow(
-        IReadOnlyList<SettlementExpenseLine> lines, SettlementAmounts amounts)
-    {
-        ArgumentNullException.ThrowIfNull(lines);
-        return lines
-            .GroupBy(l => (l.Sku, l.SalePrice))
-            .ToDictionary(g => g.Key, g => Items(g, amounts));
-    }
-
     /// <summary>The charges behind the whole settlement.</summary>
     /// <param name="lines">The settlement's Other expenses lines, added up by kind.</param>
     /// <param name="amounts">Which currency the page shows (converted only where the lines have a rate).</param>
     /// <returns>The items, largest first.</returns>
     public static IReadOnlyList<SettlementExpenseItem> Items(IEnumerable<SettlementExpenseLine> lines, SettlementAmounts amounts)
     {
-        ArgumentNullException.ThrowIfNull(lines);
-        var items = lines
-            .GroupBy(l => LabelOf(l.TransactionType, l.AmountType, l.AmountDescription), StringComparer.OrdinalIgnoreCase)
-            .Select(g => new SettlementExpenseItem(g.Key, g.Sum(l => AmountOf(l, amounts))))
-            .Where(i => i.Amount != 0)
-            // Expenses are negative: the biggest charge first, credits last.
-            .OrderBy(i => i.Amount)
-            .ThenBy(i => i.Label, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var items = Kinds(lines, amounts);
         if (items.Count <= MaxItems)
         {
             return items;
@@ -56,6 +36,38 @@ public static class SettlementOtherExpenses
         var named = items.Take(MaxItems - 1).ToList();
         named.Add(new SettlementExpenseItem(RestLabel, items.Skip(MaxItems - 1).Sum(i => i.Amount)));
         return named;
+    }
+
+    /// <summary>Every kind of charge in the lines, with no limit: the columns of the Summary's Expenses view.</summary>
+    /// <param name="lines">The settlement's Other expenses lines, added up by kind.</param>
+    /// <param name="amounts">Which currency the page shows (converted only where the lines have a rate).</param>
+    /// <returns>One item per label (see <see cref="LabelOf"/>), the biggest charge first; kinds that add up to zero are left out.</returns>
+    public static IReadOnlyList<SettlementExpenseItem> Kinds(IEnumerable<SettlementExpenseLine> lines, SettlementAmounts amounts)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+        return lines
+            .GroupBy(l => LabelOf(l.TransactionType, l.AmountType, l.AmountDescription), StringComparer.OrdinalIgnoreCase)
+            .Select(g => new SettlementExpenseItem(g.Key, g.Sum(l => AmountOf(l, amounts))))
+            .Where(i => i.Amount != 0)
+            // Expenses are negative: the biggest charge first, credits last.
+            .OrderBy(i => i.Amount)
+            .ThenBy(i => i.Label, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>Each per-SKU summary row's amount of every kind of charge, for the Expenses view's cells.</summary>
+    /// <param name="lines">The settlement's Other expenses lines, added up by kind.</param>
+    /// <param name="amounts">Which currency the page shows (converted only where the lines have a rate).</param>
+    /// <returns>Per row (its SKU and price per item, as paid), the amount by label; a kind the row lacks is absent.</returns>
+    public static IReadOnlyDictionary<(string? Sku, decimal? SalePrice), IReadOnlyDictionary<string, decimal>> KindsByRow(
+        IReadOnlyList<SettlementExpenseLine> lines, SettlementAmounts amounts)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+        return lines
+            .GroupBy(l => (l.Sku, l.SalePrice))
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyDictionary<string, decimal>)Kinds(g, amounts).ToDictionary(i => i.Label, i => i.Amount, StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>What a kind of settlement line is for, in words.</summary>

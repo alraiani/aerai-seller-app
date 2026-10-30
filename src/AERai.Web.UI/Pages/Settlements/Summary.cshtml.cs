@@ -12,7 +12,9 @@ namespace AERai.Web.UI.Pages.Settlements;
 /// <summary>
 /// One settlement broken down by SKU, sale price, and currency (from <c>rpt.vw_SettlementSkuSummary</c>);
 /// each row drills down to the orders behind it. Searchable by SKU, ASIN, or title; the rows can be
-/// narrowed to those with refunds or to the amounts without a SKU, and sorted by any amount. A settlement
+/// narrowed to those with refunds or to the amounts without a SKU, and sorted by any amount. Two views of
+/// the same rows: Sales (sales, refunds, expenses, net) and Expenses (refunds and expenses by category,
+/// other expenses split by kind of charge), switched in the browser without a reload. A settlement
 /// paid in another currency is shown converted into the marketplace's, with its conversion, a switch to
 /// the amounts as paid, and (for Operators) the form that adjusts its rate.
 /// </summary>
@@ -25,6 +27,10 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
     /// <summary>Which currency amounts are shown in, from <c>?amounts=original</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "amounts")]
     public SettlementAmounts Amounts { get; set; }
+
+    /// <summary>Which columns, from <c>?view=</c> (site.js switches it in place and keeps the address up to date).</summary>
+    [BindProperty(SupportsGet = true, Name = "view")]
+    public SettlementSummaryView View { get; set; }
 
     /// <summary>Which rows, from <c>?kind=</c>.</summary>
     [BindProperty(SupportsGet = true, Name = "kind")]
@@ -56,12 +62,15 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
     /// <summary>The conversion banner (shown only for a settlement paid in another currency).</summary>
     public SettlementRatePanel RatePanel { get; private set; } = default!;
 
-    /// <summary>What each row's Other expenses are made of (by SKU and price each as paid), for its tooltip.</summary>
-    public IReadOnlyDictionary<(string? Sku, decimal? SalePrice), IReadOnlyList<SettlementExpenseItem>> OtherExpensesByRow { get; private set; } =
-        new Dictionary<(string? Sku, decimal? SalePrice), IReadOnlyList<SettlementExpenseItem>>();
-
     /// <summary>What the whole settlement's Other expenses are made of, for the total's tooltip.</summary>
     public IReadOnlyList<SettlementExpenseItem> OtherExpenses { get; private set; } = [];
+
+    /// <summary>Every kind of other expense in the settlement with its total, biggest charge first: the Expenses view's columns.</summary>
+    public IReadOnlyList<SettlementExpenseItem> ExpenseKinds { get; private set; } = [];
+
+    /// <summary>Each row's amount of every kind of other expense (by SKU and price each as paid).</summary>
+    public IReadOnlyDictionary<(string? Sku, decimal? SalePrice), IReadOnlyDictionary<string, decimal>> ExpenseKindsByRow { get; private set; } =
+        new Dictionary<(string? Sku, decimal? SalePrice), IReadOnlyDictionary<string, decimal>>();
 
     /// <summary>The current page of summary rows.</summary>
     public PagedResult<SettlementSkuSummary> Rows { get; private set; } = default!;
@@ -94,8 +103,9 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
             settlement, Amounts, LinkWith(("amounts", null)), LinkWith(("amounts", SettlementAmounts.Original.ToString())), rate,
             User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Operator));
         var otherExpenses = await reporting.GetSettlementOtherExpensesAsync(marketplace.MarketplaceId, id, cancellationToken);
-        OtherExpensesByRow = SettlementOtherExpenses.ByRow(otherExpenses, Amounts);
         OtherExpenses = SettlementOtherExpenses.Items(otherExpenses, Amounts);
+        ExpenseKinds = SettlementOtherExpenses.Kinds(otherExpenses, Amounts);
+        ExpenseKindsByRow = SettlementOtherExpenses.KindsByRow(otherExpenses, Amounts);
         Rows = await reporting.GetSettlementSkuSummaryAsync(
             marketplace.MarketplaceId, id, ToPageRequest(), new SettlementSkuFilter(Kind, Sort, Descending, Amounts), cancellationToken);
         return this.PageOrFragment("_SummaryBody");
@@ -117,14 +127,19 @@ public sealed class SummaryModel(IReportingQueries reporting, ISettlementExchang
     /// <returns>A relative URL.</returns>
     public string KindLink(SettlementRowKind kind) => LinkWith(("kind", kind == SettlementRowKind.All ? null : kind.ToString()));
 
-    /// <summary>The tooltip listing what a row's Other expenses are made of.</summary>
+    /// <summary>Link to a view, keeping everything else (site.js follows it without a reload).</summary>
+    /// <param name="view">Which columns.</param>
+    /// <returns>A relative URL.</returns>
+    public string ViewLink(SettlementSummaryView view) => LinkWith(("view", view == SettlementSummaryView.Sales ? null : view.ToString()));
+
+    /// <summary>A row's amount of one kind of other expense.</summary>
     /// <param name="row">A summary row.</param>
-    /// <param name="currency">Currency the row's amounts are shown in.</param>
-    /// <returns>The tooltip text, or <see langword="null"/> when the row has no other expenses.</returns>
-    public string? OtherExpensesTitle(SettlementSkuSummary row, string? currency)
+    /// <param name="label">The kind, as in <see cref="ExpenseKinds"/>.</param>
+    /// <returns>The amount, 0 when the row has none of it.</returns>
+    public decimal ExpenseKindAmount(SettlementSkuSummary row, string label)
     {
         ArgumentNullException.ThrowIfNull(row);
-        return SettlementFormat.ExpenseItemsTitle(OtherExpensesByRow.GetValueOrDefault((row.Sku, row.SalePrice)), currency);
+        return ExpenseKindsByRow.GetValueOrDefault((row.Sku, row.SalePrice))?.GetValueOrDefault(label) ?? 0m;
     }
 
     /// <summary>What Amazon deferred out of this payout for one summary row (its SKU at its price each as paid).</summary>
