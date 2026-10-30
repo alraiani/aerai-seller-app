@@ -3,9 +3,14 @@
 @{
     ViewData["Title"] = "Edit cost of goods";
 }
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">Products &amp; COGS</a>
+    <span aria-hidden="true">/</span>
+    <span>@Model.Product.Sku</span>
+</nav>
 <div class="card col-lg-6">
     <div class="card-body">
-        <h2 class="h6">@Model.Product.Sku <span class="badge text-bg-secondary ms-1">@Model.Marketplace.Code</span></h2>
+        <h2 class="h6">@Model.Product.Sku <span class="pill pill-muted ms-1">@Model.Marketplace.Code</span></h2>
         <p class="text-body-secondary">@Model.Product.Title</p>
         <form method="post">
             <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>

@@ -1,50 +1,78 @@
 @model AERai.Web.UI.Pages.Bookkeeping.IndexModel
-<partial name="_SearchForm" model="Model.Search" />
-<div class="card mb-4">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
-            <thead>
-                <tr><th>Settlement</th><th>Period</th><th class="text-end">Net payout</th><th>Exported</th><th></th></tr>
-            </thead>
-            <tbody>
-            @foreach (var s in Model.Settlements.Items)
+@using AERai.Web.Application.Settlements
+@{
+    var items = Model.Settlements.Items;
+    var filtered = !string.IsNullOrWhiteSpace(Model.Search);
+}
+<div class="card">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title list-count">
+            <span class="text-nowrap">@Model.Settlements.TotalCount.ToString("N0") settlement@(Model.Settlements.TotalCount == 1 ? "" : "s")</span>
+        </span>
+        <form method="get" class="filters" role="search">
+            <div class="search-box">
+                <partial name="_Icon" model='"search"' />
+                <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search settlement…" aria-label="Search settlements" />
+            </div>
+            <button type="submit" class="btn btn-sm btn-soft js-hide">Search</button>
+            @if (filtered)
             {
-                <tr>
-                    <td>
-                        @s.SettlementId
-                        @if (s.Currency is not null && s.Currency != s.HomeCurrency)
-                        {
-                            <span class="@AERai.Web.UI.Models.SettlementFormat.OriginPill(AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)) ms-1" title="Paid in @s.Currency; exported in @s.HomeCurrency">@AERai.Web.Application.Settlements.SettlementOrigin.FromCurrency(s.Currency)</span>
-                        }
-                    </td>
-                    <td>@AERai.Web.UI.Models.SettlementFormat.Period(s.PeriodStart, s.PeriodEnd, Model.Zone)</td>
-                    <td class="text-end fw-semibold">
-                        @if (s.HomeNet is { } homeNet)
-                        {
-                            @homeNet.ToString("N2") @s.HomeCurrency
-                        }
-                        else
-                        {
-                            <span class="pill pill-warn">No rate yet</span> @s.Net.ToString("N2") @s.Currency
-                        }
-                    </td>
-                    <td>
-                        @if (Model.ExportedSettlementIds.Contains(s.SettlementId))
-                        {
-                            <span class="pill pill-ok">Exported</span>
-                        }
-                    </td>
-                    <td class="text-end"><a asp-page="Settlement" asp-route-id="@s.SettlementId" class="btn btn-sm btn-outline-primary">Review &amp; export</a></td>
-                </tr>
+                <a asp-page="Index" class="btn btn-sm btn-link">Clear</a>
             }
-            @if (Model.Settlements.Items.Count == 0)
-            {
-                <tr><td colspan="5" class="text-body-secondary p-3">No settlements yet. They arrive with the Amazon settlements sync, or import a settlement file from Tools.</td></tr>
-            }
-            </tbody>
-        </table>
-        </div>
+        </form>
     </div>
+    @if (items.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-title">@(filtered ? $"No settlements match “{Model.Search}”" : "No settlements yet")</div>
+            <div class="empty-detail">@(filtered ? "Try a different settlement id." : "They arrive with the Amazon settlements sync, or import a settlement file from Tools.")</div>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table data-table align-middle mb-0">
+                <thead>
+                    <tr><th scope="col">Settlement</th><th scope="col">Period</th><th scope="col" class="text-end">Net payout</th><th scope="col">Exported</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr>
+                </thead>
+                <tbody>
+                @foreach (var s in items)
+                {
+                    <tr>
+                        <td>
+                            <a asp-page="Settlement" asp-route-id="@s.SettlementId" class="fw-semibold" data-fragment-skip>@s.SettlementId</a>
+                            @if (s.Currency is not null && s.Currency != s.HomeCurrency)
+                            {
+                                <span class="@SettlementFormat.OriginPill(SettlementOrigin.FromCurrency(s.Currency)) ms-1 has-detail" title="Paid in @s.Currency; exported in @s.HomeCurrency">@SettlementOrigin.FromCurrency(s.Currency)</span>
+                            }
+                        </td>
+                        <td class="text-nowrap">@SettlementFormat.Period(s.PeriodStart, s.PeriodEnd, Model.Zone)</td>
+                        <td class="text-end money fw-semibold">
+                            @if (s.HomeNet is { } homeNet)
+                            {
+                                @SettlementFormat.Money(homeNet, s.HomeCurrency)
+                            }
+                            else
+                            {
+                                <span class="pill pill-warn">No rate yet</span> @SettlementFormat.Money(s.Net, s.Currency)
+                            }
+                        </td>
+                        <td>
+                            @if (Model.ExportedSettlementIds.Contains(s.SettlementId))
+                            {
+                                <span class="pill pill-ok">Exported</span>
+                            }
+                            else
+                            {
+                                <span class="cell-sub">Not yet</span>
+                            }
+                        </td>
+                        <td class="text-end"><a asp-page="Settlement" asp-route-id="@s.SettlementId" class="btn btn-sm btn-soft" data-fragment-skip>Review &amp; export</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
 </div>
 <partial name="_Pager" model="Model.Settlements.ToPager(Model.Search)" />

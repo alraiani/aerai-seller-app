@@ -30,7 +30,8 @@
     </div>
 </div>
 
-<form method="post" asp-route-p="@Model.PageNumber" asp-route-q="@Model.Search">
+@* data-dirty-form: typed counts show a save bar, and leaving (paging, searching) warns before they are lost. *@
+<form method="post" asp-route-p="@Model.PageNumber" asp-route-q="@Model.Search" data-dirty-form>
     <div asp-validation-summary="All" class="alert alert-danger py-2"></div>
     <div class="card">
         <div class="card-toolbar">
@@ -38,13 +39,17 @@
                 Units held outside Amazon for @Model.Marketplace.Name
                 <partial name="_Tip" model='"Change any numbers, then save once. Only changed rows are saved; 0 clears a SKU. SKUs appear here once Amazon reports them for this marketplace; for others, use the spreadsheet upload."' />
             </span>
-            <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"check"' /> Save home stock</button>
         </div>
         @if (Model.Skus.Items.Count == 0)
         {
+            var searched = !string.IsNullOrWhiteSpace(Model.Search);
             <div class="empty-state">
-                <div class="empty-title">No SKUs match</div>
-                <div class="empty-detail">Try a different search, or upload a spreadsheet for SKUs that aren't at Amazon yet.</div>
+                <div class="empty-title">@(searched ? $"No SKUs match “{Model.Search}”" : "No SKUs at Amazon yet")</div>
+                <div class="empty-detail">@(searched ? "Try a different search." : "SKUs appear once Amazon reports them for this marketplace.") Upload a spreadsheet for SKUs that aren't at Amazon yet.</div>
+                @if (searched)
+                {
+                    <a asp-page="Index" class="btn btn-sm btn-soft">Clear search</a>
+                }
             </div>
         }
         else
@@ -71,7 +76,7 @@
                             <td class="text-end">
                                 <input type="hidden" name="Rows[@i].Sku" value="@p.Sku" />
                                 <input type="hidden" name="Rows[@i].Original" value="@p.HomeStock" />
-                                <input type="number" name="Rows[@i].Quantity" value="@Model.ValueFor(item)" min="0" step="1" class="form-control form-control-sm text-end" aria-label="Home stock for @p.Sku" />
+                                <input type="number" name="Rows[@i].Quantity" value="@Model.ValueFor(item)" data-original="@p.HomeStock" min="0" step="1" class="form-control form-control-sm text-end" aria-label="Home stock for @p.Sku" />
                             </td>
                         </tr>
                     }
@@ -80,5 +85,15 @@
             </div>
         }
     </div>
+    @if (Model.Skus.Items.Count > 0)
+    {
+        <div class="save-bar" data-save-bar>
+            <span class="text-muted-token" data-save-count>Change any counts, then save once.</span>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <a asp-page="Index" asp-route-p="@Model.PageNumber" asp-route-q="@Model.Search" class="btn btn-sm btn-link">Discard</a>
+                <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"check"' /> Save home stock</button>
+            </div>
+        </div>
+    }
 </form>
 <partial name="_Pager" model="Model.Skus.ToPager(Model.Search)" />

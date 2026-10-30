@@ -9,7 +9,13 @@
     var c = s.Currency;
     var en = CultureInfo.GetCultureInfo("en-US");
     var orders = s.Sync.Where(x => x.ReportType is AmazonReportType.Orders or AmazonReportType.OrdersApi).MaxBy(x => x.LastSuccessAt);
-    var zoneName = s.TimeZoneId.Split('/').Last().Replace('_', ' ');
+    var zoneName = ZoneFormat.Name(s.TimeZoneId);
+    // The KPI tiles open Orders for the same local days the dashboard is showing.
+    var localZone = TimeZoneInfo.FindSystemTimeZoneById(s.TimeZoneId);
+    var periodFrom = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(s.WindowStart, localZone).DateTime).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    var periodTo = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(s.GeneratedAt, localZone).DateTime).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    // A payout date carries its year only when it isn't this year (around January "Dec 28" is ambiguous).
+    string PayoutDay(DateTimeOffset? day) => day is { } d ? d.ToString(d.Year == s.GeneratedAt.Year ? "MMM d" : "MMM d, yyyy", en) : "";
 
     // Chart geometry in SVG units; bars scale to the busiest bucket. Gridlines at 50% and 100%.
     // Each bar carries its revenue and units above it: two stacked lines when slots are wide, one
@@ -47,7 +53,7 @@
                 @(orders?.LastSuccessAt is null ? "Sales not synced yet" : $"Sales updated {DashboardFormat.Ago(orders.LastSuccessAt, s.GeneratedAt)}")
                 <partial name="_Tip" model='"Green = sales data from Amazon is fresh. Amber = it is stale or has never synced. Red = the latest Orders sync failed. Details under Data from Amazon."' />
             </span>
-            <span class="sync-head-detail has-detail" title="Times shown in @s.TimeZoneId">@zoneName time</span>
+            <span class="sync-head-detail has-detail" title="Times shown in @s.TimeZoneId">@zoneName</span>
         </div>
     </div>
     <div class="sync-head-actions">
@@ -78,7 +84,7 @@
     @foreach (var tile in tiles)
     {
         <div class="col-6 col-xl-3">
-            <a class="card tile h-100" asp-page="/Orders/Index">
+            <a class="card tile h-100" asp-page="/Orders/Index" asp-route-from="@periodFrom" asp-route-to="@periodTo">
                 <div class="kpi">
                     <div class="kpi-label">@tile.Label <partial name="_Tip" model="tile.Tip" /></div>
                     <div class="kpi-value">
@@ -173,6 +179,17 @@
                             }
                         }
                     </svg>
+                    @* The same numbers as a table for screen readers; the bars' hover titles reach neither keyboard nor touch. *@
+                    <table class="visually-hidden">
+                        <caption>Revenue, orders, and units by @(s.Granularity == ChartGranularity.Hour ? "hour" : "day")</caption>
+                        <thead><tr><th scope="col">@(s.Granularity == ChartGranularity.Hour ? "Hour" : "Day")</th><th scope="col">Revenue</th><th scope="col">Orders</th><th scope="col">Units</th></tr></thead>
+                        <tbody>
+                            @foreach (var point in s.Chart.Where(q => !q.IsFuture))
+                            {
+                                <tr><th scope="row">@Label(point)</th><td>@DashboardFormat.Money(point.Revenue, c)</td><td>@point.Orders</td><td>@point.Units</td></tr>
+                            }
+                        </tbody>
+                    </table>
                 }
             </div>
         </div>
@@ -326,7 +343,7 @@
                 {
                     <div class="big-number">@DashboardFormat.Money(pay.Net, c)</div>
                     <div class="text-muted-token small mb-2">
-                        @(pay.PeriodStart?.ToString("MMM d", en)) – @(pay.PeriodEnd?.ToString("MMM d", en))
+                        @PayoutDay(pay.PeriodStart) – @PayoutDay(pay.PeriodEnd)
                         @if (pay.Origin is { } origin)
                         {
                             <span class="@SettlementFormat.OriginPill(origin) ms-1 has-detail" title="Paid in another currency; shown converted into @c">@origin</span>
@@ -390,6 +407,6 @@
     </div>
 </div>
 <p class="page-footnote">
-    Times are in @zoneName time (@s.TimeZoneId). Changes compare the same elapsed time in the previous period and are hidden
+    Times are in @zoneName (@s.TimeZoneId). Changes compare the same elapsed time in the previous period and are hidden
     when synced history doesn't cover it. Hover a <strong>?</strong> for what each number means.
 </p>

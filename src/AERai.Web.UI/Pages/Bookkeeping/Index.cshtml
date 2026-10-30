@@ -3,33 +3,40 @@
 @{
     ViewData["Title"] = "QuickBooks export";
 }
-<div class="card-toolbar">
-    <p class="text-body-secondary mb-0">Review a settlement, then download it as a QuickBooks Desktop IIF journal entry. Every kind of amount needs a QuickBooks account first.</p>
-    <a asp-page="Mapping" class="btn btn-outline-secondary btn-sm">Account mapping</a>
-</div>
+<partial name="_BookkeepingNav" model='"export"' />
+<p class="text-muted-token mb-3">Review a settlement, then download it as a QuickBooks Desktop IIF journal entry. Every kind of amount needs a QuickBooks account first (Account mapping).</p>
 @* Search and the pager reload only this list (site.js partial reloads). *@
 <div data-fragment="bookkeeping-settlements">
     <partial name="_SettlementsBody" />
 </div>
 
-<h2 class="h6 mt-4">Generated files</h2>
-<div class="card">
+@{
+    const int shownFiles = 25;
+}
+<div class="card mt-4">
+    <div class="card-toolbar">
+        <span class="card-toolbar-title">
+            Generated files
+            <span class="text-muted-token fw-normal">@(Model.Exports.Count > shownFiles ? $"· newest {shownFiles} of {Model.Exports.Count}" : "")</span>
+            <partial name="_Tip" model='"Every IIF file handed over, exactly as downloaded then. Exporting a settlement again adds another file."' />
+        </span>
+    </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
+        <table class="table data-table mb-0">
             <thead>
                 <tr><th>File</th><th>Settlement</th><th class="text-end">Net payout</th><th>Generated</th><th>By</th><th></th></tr>
             </thead>
             <tbody>
-            @foreach (var e in Model.Exports)
+            @foreach (var e in Model.Exports.Take(shownFiles))
             {
                 <tr>
                     <td class="cell-truncate" title="@e.FileName">@e.FileName</td>
-                    <td>@e.SettlementId</td>
-                    <td class="text-end">@e.NetTotal.ToString("N2") @e.Currency</td>
-                    <td>@e.GeneratedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
+                    <td><a asp-page="Settlement" asp-route-id="@e.SettlementId">@e.SettlementId</a></td>
+                    <td class="text-end money">@SettlementFormat.Money(e.NetTotal, e.Currency)</td>
+                    <td class="text-nowrap">@TimeZoneInfo.ConvertTime(e.GeneratedAt, Model.Zone).ToString("MMM d, yyyy h:mm tt", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</td>
                     <td>@e.GeneratedBy</td>
-                    <td class="text-end"><a asp-page="Index" asp-page-handler="Download" asp-route-id="@e.Id" class="btn btn-sm btn-outline-secondary">Download</a></td>
+                    <td class="text-end"><a asp-page="Index" asp-page-handler="Download" asp-route-id="@e.Id" class="btn btn-sm btn-soft" aria-label="Download @e.FileName"><partial name="_Icon" model='"download"' /> Download</a></td>
                 </tr>
             }
             @if (Model.Exports.Count == 0)

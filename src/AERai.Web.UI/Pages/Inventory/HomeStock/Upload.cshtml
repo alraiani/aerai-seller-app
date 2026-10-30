@@ -132,7 +132,7 @@
                         <input asp-for="Apply.Reference" class="form-control" />
                     </div>
                     <div class="col-md-6">
-                        <label asp-for="Apply.OccurredAt" class="form-label">When (@Model.Marketplace.TimeZoneId)</label>
+                        <label asp-for="Apply.OccurredAt" class="form-label">When (@ZoneFormat.Name(Model.Marketplace.TimeZoneId))</label>
                         <input asp-for="Apply.OccurredAt" type="datetime-local" step="60" asp-format="{0:yyyy-MM-ddTHH:mm}" class="form-control" />
                     </div>
                     <div class="col-12">

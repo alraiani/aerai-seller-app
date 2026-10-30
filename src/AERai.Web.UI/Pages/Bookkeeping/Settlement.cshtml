@@ -1,16 +1,21 @@
 @page "{id}"
 @model AERai.Web.UI.Pages.Bookkeeping.SettlementModel
 @{
-    ViewData["Title"] = "Export settlement";
+    ViewData["Title"] = "Review & export";
     var p = Model.Preview;
 }
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a asp-page="Index">QuickBooks export</a>
+    <span aria-hidden="true">/</span>
+    <span>Settlement @p.SettlementId</span>
+</nav>
 <div class="card mb-3">
     <div class="card-body">
         <h2 class="h6">Settlement @p.SettlementId</h2>
-        <p class="mb-1">Period @p.PeriodStart?.ToString("yyyy-MM-dd") – @p.PeriodEnd?.ToString("yyyy-MM-dd"). Net payout <strong>@p.NetTotal.ToString("N2") @p.Currency</strong>.</p>
+        <p class="mb-1">Period @SettlementFormat.Period(p.PeriodStart, p.PeriodEnd, Model.Zone). Net payout <strong>@SettlementFormat.Money(p.NetTotal, p.Currency)</strong>.</p>
         @if (p.IsConverted)
         {
-            <p class="mb-1">Paid in @p.OriginalCurrency: @p.OriginalNetTotal?.ToString("N2") @p.OriginalCurrency × @p.ExchangeRate?.ToString("0.######") (@p.RateNote) = @p.NetTotal.ToString("N2") @p.Currency. The entry is written in @p.Currency.</p>
+            <p class="mb-1">Paid in @p.OriginalCurrency: @SettlementFormat.Money(p.OriginalNetTotal ?? 0, p.OriginalCurrency) × @p.ExchangeRate?.ToString("0.######") (@p.RateNote) = @SettlementFormat.Money(p.NetTotal, p.Currency). The entry is written in @p.Currency.</p>
             @if (p.RoundingAdjustment != 0)
             {
                 <p class="mb-1 text-body-secondary small">Each account is converted and rounded to the cent; the @p.RoundingAdjustment.ToString("0.00") @p.Currency left over is added to the largest account line so the entry balances.</p>
@@ -47,8 +52,8 @@
                     }<th class="text-end">Amount@(p.IsConverted ? $" ({p.Currency})" : "")</th></tr>
                 <tr class="totals-row"><th colspan="3">Net payout</th>@if (p.IsConverted)
                     {
-                        <th class="text-end text-body-secondary">@p.OriginalNetTotal?.ToString("N2") @p.OriginalCurrency</th>
-                    }<th class="text-end">@p.NetTotal.ToString("N2") @p.Currency</th></tr>
+                        <th class="text-end money text-body-secondary">@SettlementFormat.Money(p.OriginalNetTotal ?? 0, p.OriginalCurrency)</th>
+                    }<th class="text-end money">@SettlementFormat.Money(p.NetTotal, p.Currency)</th></tr>
             </thead>
             <tbody>
             @foreach (var r in p.Rows)
@@ -68,9 +73,9 @@
                     </td>
                     @if (p.IsConverted)
                     {
-                        <td class="text-end text-body-secondary">@r.Amount.ToString("N2")</td>
+                        <td class="text-end money text-body-secondary">@SettlementFormat.Money(r.Amount, p.OriginalCurrency)</td>
                     }
-                    <td class="text-end">@((p.IsConverted ? r.HomeAmount ?? 0 : r.Amount).ToString("N2"))</td>
+                    <td class="text-end money">@SettlementFormat.Money(p.IsConverted ? r.HomeAmount ?? 0 : r.Amount, p.Currency)</td>
                 </tr>
             }
             @if (p.Rows.Count == 0)
@@ -83,7 +88,23 @@
     </div>
 </div>
 
+@if (Model.PreviousExports.Count > 0)
+{
+    var last = Model.PreviousExports[0];
+    var en = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+    <div class="notice notice-warn mb-3" role="note">
+        <partial name="_Icon" model='"history"' />
+        <div>
+            Already exported @(Model.PreviousExports.Count == 1 ? "once" : $"{Model.PreviousExports.Count} times"): last on
+            @TimeZoneInfo.ConvertTime(last.GeneratedAt, Model.Zone).ToString("MMM d, yyyy h:mm tt", en) by @last.GeneratedBy
+            (<a asp-page="Index" asp-page-handler="Download" asp-route-id="@last.Id">@last.FileName</a>).
+            Importing it into QuickBooks again would record this payout twice.
+        </div>
+    </div>
+}
+@* A re-export asks first; the button's own question takes over from the form's (site.js). *@
 <form method="post" asp-page-handler="Export" asp-route-id="@p.SettlementId">
-    <button type="submit" class="btn btn-primary" disabled="@(!p.CanExport)">Export IIF file</button>
+    <button type="submit" class="btn btn-primary" disabled="@(!p.CanExport)"
+            data-confirm="@(Model.PreviousExports.Count > 0 ? $"Settlement {p.SettlementId} was already exported. Create another IIF file anyway?" : null)">@(Model.PreviousExports.Count > 0 ? "Export again" : "Export IIF file")</button>
     <a asp-page="Index" class="btn btn-link">Back</a>
 </form>

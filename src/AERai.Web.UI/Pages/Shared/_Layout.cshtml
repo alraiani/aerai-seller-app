@@ -16,6 +16,10 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
+@* First stop for keyboard users: jumps past the sidebar and top bar to the page itself. *@
+<a class="skip-link" href="#main">Skip to content</a>
+@* Announces partial reloads and other updates that happen without a page load (site.js). *@
+<div class="visually-hidden" aria-live="polite" aria-atomic="true" data-announcer></div>
 @if (isSignedIn)
 {
     <div class="app-shell">
@@ -27,13 +31,13 @@
                     <partial name="_NotificationBell" />
                     <partial name="_MarketplaceSwitch" />
                     <partial name="_ThemeToggle" />
-                    <a asp-page="/Account/ChangePassword" class="text-body-secondary small d-none d-md-inline" title="Change password">@User.Identity!.Name</a>
+                    <a asp-page="/Account/ChangePassword" class="account-link small d-none d-md-inline" title="Change password" aria-label="Signed in as @User.Identity!.Name. Change password">@User.Identity!.Name</a>
                     <form method="post" asp-page="/Account/Logout">
                         <button type="submit" class="btn btn-sm btn-outline-secondary">Sign out</button>
                     </form>
                 </div>
             </header>
-            <main class="app-content" role="main">
+            <main class="app-content" id="main" tabindex="-1">
                 <partial name="_StatusMessage" />
                 @RenderBody()
             </main>
@@ -42,7 +46,7 @@
 }
 else
 {
-    <main role="main">
+    <main id="main" tabindex="-1">
         <div class="login-theme"><partial name="_ThemeToggle" /></div>
         @RenderBody()
     </main>

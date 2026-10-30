@@ -10,7 +10,7 @@
 <td class="text-end money @strong">@SettlementFormat.Money(m.Spend, currency)</td>
 <td class="text-end money">
     @SettlementFormat.Money(m.AdSales, currency)
-    <div class="cell-sub @strong @AdvertisingFormat.AcosClass(m.Acos)">ACoS @AdvertisingFormat.Percent(m.Acos)</div>
+    <div class="cell-sub @strong @AdvertisingFormat.AcosClass(m.Acos)">ACoS @AdvertisingFormat.Percent(m.Acos)@(AdvertisingFormat.AcosLabel(m.Acos) is { } level ? $" · {level}" : "")</div>
 </td>
 <td class="text-end money">
     @SettlementFormat.Money(m.TotalSales, currency)

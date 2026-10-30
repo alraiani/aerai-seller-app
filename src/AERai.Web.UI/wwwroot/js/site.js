@@ -41,6 +41,16 @@
         }
     }
 
+    // ---------- Announcements ----------
+    // The shared live region in _Layout ([data-announcer]) tells screen readers about changes that happen
+    // without a page load. Cleared first, so the same message twice is read twice.
+    function announce(message) {
+        var region = document.querySelector("[data-announcer]");
+        if (!region) { return; }
+        region.textContent = "";
+        window.setTimeout(function () { region.textContent = message; }, 50);
+    }
+
     // ---------- Sidebar ----------
     // Categories are <details> groups. The server opens Overview and the current page's category; what
     // this browser opened or collapsed since sign-in is kept in localStorage (the login page forgets it,
@@ -155,14 +165,19 @@
         if (!window.bootstrap || !window.bootstrap.Tooltip) { return; }
         for (var i = 0; i < navTips.length; i++) { navTips[i].dispose(); }
         navTips = [];
+        var named = document.querySelectorAll(".app-sidebar summary.nav-section[aria-label]");
+        for (var n = 0; n < named.length; n++) { named[n].removeAttribute("aria-label"); }
         // Labels are visible in the full sidebar, so only the rail needs tooltips (the toggle always has one).
         var targets = document.querySelectorAll(rail ? ".app-sidebar [data-bs-title]" : "[data-nav-rail-toggle]");
         for (var j = 0; j < targets.length; j++) {
             var options = { placement: "right", container: "body", delay: { show: 200, hide: 0 } };
             var group = targets[j].matches("summary.nav-section") ? targets[j].parentElement : null;
             var link = group && !holdsCurrentPage(group) ? firstLink(group) : null;
-            // A category icon in the rail navigates, so its tooltip says where to.
-            if (link) { options.title = targets[j].getAttribute("data-bs-title") + " · opens " + link.querySelector(".nav-label").textContent; }
+            // A category icon in the rail navigates, so its tooltip (and its name for screen readers) says where to.
+            if (link) {
+                options.title = targets[j].getAttribute("data-bs-title") + " · opens " + link.querySelector(".nav-label").textContent;
+                targets[j].setAttribute("aria-label", options.title);
+            }
             navTips.push(new window.bootstrap.Tooltip(targets[j], options));
         }
     }
@@ -378,10 +393,12 @@
             table.style.setProperty("--sticky-row1", Math.floor(first.getBoundingClientRect().height) + "px");
         }
 
-        // The toolbar sticks only when its card holds just this table, and the header sits right below it.
+        // The toolbar sticks only when its card shows just this table (other views of it are hidden), and
+        // the header sits right below it.
         var card = wrapper.parentElement;
+        if (wrapper.hidden) { removeFloatHead(wrapper); return; }
         var toolbar = card && card.classList.contains("card") ? card.querySelector(":scope > .card-toolbar") : null;
-        var withToolbar = toolbar !== null && card.querySelectorAll(":scope > .table-responsive").length === 1;
+        var withToolbar = toolbar !== null && card.querySelectorAll(":scope > .table-responsive:not([hidden])").length === 1;
         if (card && card.classList.contains("card")) {
             card.classList.toggle("has-sticky-head", withToolbar);
             if (withToolbar) {
@@ -697,17 +714,41 @@
         return url.origin === window.location.origin && url.pathname === window.location.pathname && !url.searchParams.has("handler");
     }
 
+    // Focus goes back to the same control in the new content: by id, by name, by link address, or by the
+    // link's text (a sort link's address changes with its direction). Failing that, to the section itself,
+    // so keyboard users never drop back to the top of the page (WCAG 2.4.3).
     function restoreFocus(region, focused) {
         if (!focused) { return; }
-        var match = focused.id ? document.getElementById(focused.id)
-            : focused.name && window.CSS && CSS.escape ? region.querySelector("[name='" + CSS.escape(focused.name) + "']") : null;
-        if (match && region.contains(match)) { match.focus({ preventScroll: true }); }
+        var match = null;
+        if (focused.id) { match = document.getElementById(focused.id); }
+        if (!match && focused.name && window.CSS && CSS.escape) { match = region.querySelector("[name='" + CSS.escape(focused.name) + "']"); }
+        if (!match && focused.href && window.CSS && CSS.escape) { match = region.querySelector("a[href='" + CSS.escape(focused.href) + "']"); }
+        if (!match && focused.text) {
+            var candidates = region.querySelectorAll("a[href], button");
+            for (var i = 0; i < candidates.length && !match; i++) {
+                if (candidates[i].textContent.trim() === focused.text) { match = candidates[i]; }
+            }
+        }
+        if (!match || !region.contains(match)) {
+            if (!region.hasAttribute("tabindex")) { region.setAttribute("tabindex", "-1"); }
+            match = region;
+        }
+        match.focus({ preventScroll: true });
+    }
+
+    // Says what happened in a partial reload for screen readers: the list's own count line when it has one.
+    function fragmentSummary(region) {
+        var count = region.querySelector(".pager-summary, .list-count, .card-toolbar-title");
+        var text = count ? count.textContent.replace(/\s+/g, " ").trim() : "";
+        return text ? "Updated: " + text : "Updated";
     }
 
     function loadFragment(region, url, push) {
         var request = ++fragmentRequest;
         var active = document.activeElement;
-        var focused = active && region.contains(active) && (active.id || active.name) ? { id: active.id, name: active.name } : null;
+        var focused = active && active !== region && region.contains(active)
+            ? { id: active.id, name: active.name, href: active.getAttribute("href"), text: active.textContent.trim() }
+            : null;
         region.setAttribute("aria-busy", "true");
 
         window.fetch(url.href, { headers: { "X-Fragment": "1" }, credentials: "same-origin" })
@@ -729,11 +770,14 @@
                 var bulk = region.querySelector("[data-bulk-bar]");
                 if (bulk) { setupBulk(bulk); }
                 restoreFocus(region, focused);
+                announce(fragmentSummary(region));
                 // A pager at the bottom of a long list brings the list back into view.
                 if (region.getBoundingClientRect().top < 0) { region.scrollIntoView({ block: "start" }); }
             })
             .catch(function () {
-                if (request === fragmentRequest) { window.location.assign(url.href); }
+                if (request !== fragmentRequest) { return; }
+                announce("Couldn't update the list; reloading the page.");
+                window.location.assign(url.href);
             });
     }
 
@@ -784,4 +828,125 @@
         var first = document.querySelector("[data-fragment]");
         window.history.replaceState({ fragment: first.getAttribute("data-fragment") }, "", window.location.href);
     }
+
+    // ---------- Column views ----------
+    // A [data-view-switch] inside a [data-views] container picks which of its [data-view-panel]s shows
+    // (e.g. the settlement Summary's Sales and Expenses tables), with no request: both are already on the
+    // page. Its links carry ?view= so the switch works without script. With script, the address is
+    // replaced (not pushed: it is a way of looking, not a place) and every same-page link and GET form
+    // in the section is given the new view, so sorting, paging, and searching keep it.
+    function withView(href, param, value) {
+        var url = new URL(href, window.location.href);
+        if (!fragmentTarget(url)) { return null; }
+        if (value) { url.searchParams.set(param, value); } else { url.searchParams.delete(param); }
+        return url.pathname + url.search + url.hash;
+    }
+
+    function carryView(scope, param, value) {
+        var links = scope.querySelectorAll("a[href]");
+        for (var i = 0; i < links.length; i++) {
+            if (links[i].closest("[data-view-switch]")) { continue; }
+            var href = withView(links[i].getAttribute("href"), param, value);
+            if (href) { links[i].setAttribute("href", href); }
+        }
+        var forms = scope.querySelectorAll("form");
+        for (var f = 0; f < forms.length; f++) {
+            var form = forms[f];
+            if ((form.getAttribute("method") || "get").toLowerCase() !== "get" || !withView(form.action, param, value)) { continue; }
+            var input = form.querySelector("input[type='hidden'][name='" + param + "']");
+            if (!value) {
+                if (input) { input.remove(); }
+            } else {
+                if (!input) {
+                    input = document.createElement("input");
+                    input.type = "hidden";
+                    input.name = param;
+                    form.insertBefore(input, form.firstChild);
+                }
+                input.value = value;
+            }
+        }
+    }
+
+    document.addEventListener("click", function (event) {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) { return; }
+        var link = event.target.closest && event.target.closest("[data-view-switch] a[data-view]");
+        var container = link && link.closest("[data-views]");
+        if (!container) { return; }
+        event.preventDefault();
+        var view = link.getAttribute("data-view");
+        var panels = container.querySelectorAll("[data-view-panel]");
+        for (var i = 0; i < panels.length; i++) { panels[i].hidden = panels[i].getAttribute("data-view-panel") !== view; }
+        // The shown table decides its sticky header now, and the hidden one drops its floating copy.
+        updateAllStickyTables();
+        var options = link.closest("[data-view-switch]").querySelectorAll("a[data-view]");
+        for (var o = 0; o < options.length; o++) {
+            var active = options[o] === link;
+            options[o].classList.toggle("active", active);
+            if (active) { options[o].setAttribute("aria-current", "true"); } else { options[o].removeAttribute("aria-current"); }
+        }
+
+        // The view's value is whatever the link sets (none for the default view).
+        var param = "view";
+        var target = new URL(link.href, window.location.href).searchParams.get(param);
+        if (window.history && window.history.replaceState) {
+            var here = withView(window.location.href, param, target);
+            if (here) { window.history.replaceState(window.history.state, "", here); }
+        }
+        carryView(link.closest("[data-fragment]") || document, param, target);
+        announce("Showing the " + link.textContent.trim() + " view");
+    });
+
+    // ---------- Busy submits ----------
+    // Every POST shows it is working and can't be sent twice: the pressed button gets a spinner and is
+    // disabled, the form is aria-busy, and screen readers hear "Working…". The button is disabled a tick
+    // later, because a disabled submitter would drop its own name/value from the post. Downloads are GETs,
+    // so a POST always leaves the page. Opt out with data-busy="off" on the form. Registered last, so a
+    // cancelled confirm (data-confirm) is already defaultPrevented here.
+    document.addEventListener("submit", function (event) {
+        var form = event.target;
+        if (!form.matches || (form.getAttribute("method") || "get").toLowerCase() !== "post") { return; }
+        if (form.getAttribute("data-busy") === "off" || (form.target && form.target !== "_self")) { return; }
+        if (form.getAttribute("aria-busy") === "true") { event.preventDefault(); return; }
+        if (event.defaultPrevented) { return; }
+
+        var button = event.submitter || form.querySelector("[type=submit]");
+        form.setAttribute("aria-busy", "true");
+        announce("Working…");
+        window.setTimeout(function () {
+            if (!button) { return; }
+            button.disabled = true;
+            button.classList.add("is-busy");
+            if (!button.querySelector(".busy-spinner")) {
+                var spinner = document.createElement("span");
+                spinner.className = "busy-spinner";
+                spinner.setAttribute("aria-hidden", "true");
+                button.insertBefore(spinner, button.firstChild);
+            }
+        }, 0);
+    });
+
+    // Back to a page from the browser cache: undo any busy state, or its buttons would stay disabled.
+    window.addEventListener("pageshow", function (event) {
+        if (!event.persisted) { return; }
+        document.querySelectorAll("form[aria-busy='true']").forEach(function (form) { form.removeAttribute("aria-busy"); });
+        document.querySelectorAll(".is-busy").forEach(function (button) {
+            button.disabled = false;
+            button.classList.remove("is-busy");
+            var spinner = button.querySelector(".busy-spinner");
+            if (spinner) { spinner.remove(); }
+        });
+    });
+
+    // ---------- Printing ----------
+    // Paper is white: a page printed in the dark theme switches to the light tokens for the print only.
+    var themeBeforePrint = null;
+    window.addEventListener("beforeprint", function () {
+        themeBeforePrint = document.documentElement.getAttribute("data-bs-theme");
+        document.documentElement.setAttribute("data-bs-theme", "light");
+    });
+    window.addEventListener("afterprint", function () {
+        if (themeBeforePrint) { document.documentElement.setAttribute("data-bs-theme", themeBeforePrint); }
+        themeBeforePrint = null;
+    });
 })();

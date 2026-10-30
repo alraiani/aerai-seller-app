@@ -39,6 +39,7 @@
                     <div class="mb-3">
                         <label asp-for="Input.Name" class="form-label">Name</label>
                         <input asp-for="Input.Name" class="form-control" placeholder="e.g. Orders — hourly" />
+                        <span asp-validation-for="Input.Name" class="text-danger small"></span>
                     </div>
                     <div class="mb-3">
                         <label asp-for="Input.MarketplaceId" class="form-label"></label>
@@ -95,11 +96,13 @@
                         <div class="col-sm-6" data-frequency-field="Interval">
                             <label asp-for="Input.IntervalMinutes" class="form-label"></label>
                             <input asp-for="Input.IntervalMinutes" class="form-control" min="@SyncScheduleService.MinIntervalMinutes" step="15" />
+                            <span asp-validation-for="Input.IntervalMinutes" class="text-danger small"></span>
                             <div class="form-text">At least @SyncScheduleService.MinIntervalMinutes minutes — Amazon limits how often reports can be requested.</div>
                         </div>
                         <div class="col-sm-6" data-frequency-field="Daily">
                             <label asp-for="Input.DailyTime" class="form-label"></label>
                             <input asp-for="Input.DailyTime" type="time" class="form-control" />
+                            <span asp-validation-for="Input.DailyTime" class="text-danger small"></span>
                         </div>
                         <div class="col-sm-6" data-frequency-field="Interval">
                             <div class="form-label">Active hours <span class="text-muted">(optional)</span></div>
@@ -108,6 +111,7 @@
                                 <span aria-hidden="true">to</span>
                                 <input asp-for="Input.ActiveUntil" type="time" class="form-control" aria-label="Until" />
                             </div>
+                            <span asp-validation-for="Input.ActiveUntil" class="text-danger small"></span>
                             <div class="form-text">Only run between these local times, e.g. 7:00 AM to 9:00 PM. The first run of the day is at the start time. Leave both empty to run around the clock. Use "Run now" for fresher data in between.</div>
                         </div>
                         <div class="col-sm-6">
@@ -137,6 +141,7 @@
                         <div class="col-sm-6">
                             <label asp-for="Input.LookbackDays" class="form-label"></label>
                             <input asp-for="Input.LookbackDays" class="form-control" min="1" max="@SyncScheduleService.MaxLookbackDays" />
+                            <span asp-validation-for="Input.LookbackDays" class="text-danger small"></span>
                             <div class="form-text">How far back the very first run reaches. Later runs continue where the last one ended.</div>
                         </div>
                         <div class="col-sm-6">
@@ -174,6 +179,7 @@
                         <label asp-for="Input.Notes" class="form-label">Notes <span class="text-muted-token">(optional)</span></label>
                         <textarea asp-for="Input.Notes" class="form-control" rows="2" maxlength="@SyncScheduleService.MaxNotesLength"
                                   placeholder="Why this schedule exists, who relies on it, anything unusual…"></textarea>
+                        <span asp-validation-for="Input.Notes" class="text-danger small"></span>
                     </div>
                 </div>
             </section>

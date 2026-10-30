@@ -58,15 +58,46 @@ public sealed class SettlementOtherExpensesTests
     }
 
     [Fact]
-    public void ByRow_KeysEachRowBySkuAndPrice()
+    public void Kinds_ManyCharges_ListsEveryKindLargestChargeFirst()
     {
-        var rows = SettlementOtherExpenses.ByRow(
+        var lines = Enumerable.Range(1, SettlementOtherExpenses.MaxItems + 2)
+            .Select(i => Line(null, "ServiceFee", "other-transaction", $"Fee {i}", -i))
+            .ToList();
+
+        var kinds = SettlementOtherExpenses.Kinds(lines, SettlementAmounts.Home);
+
+        Assert.Equal(SettlementOtherExpenses.MaxItems + 2, kinds.Count);
+        Assert.Equal($"Fee {SettlementOtherExpenses.MaxItems + 2}", kinds[0].Label);
+        Assert.DoesNotContain(kinds, k => k.Label == SettlementOtherExpenses.RestLabel);
+    }
+
+    [Fact]
+    public void Kinds_ChargeAndCreditOfOneKind_AddUpAndDropWhenZero()
+    {
+        var kinds = SettlementOtherExpenses.Kinds(
         [
-            Line("SKU-1", "Order", "Promotion", "Principal", -1m),
+            Line(null, "ServiceFee", "Cost of Advertising", "TransactionTotalAmount", -50m),
+            Line(null, "ServiceFee", "Refund for Advertiser", "TransactionTotalAmount", 50m),
             Line(null, "ServiceFee", "other-transaction", "Subscription Fee", -39.99m),
         ], SettlementAmounts.Home);
 
-        Assert.Equal("Promotions", Assert.Single(rows[("SKU-1", 10m)]).Label);
-        Assert.Equal("Subscription Fee", Assert.Single(rows[(null, null)]).Label);
+        Assert.Equal("Subscription Fee", Assert.Single(kinds).Label);
+    }
+
+    [Fact]
+    public void KindsByRow_GivesEachRowItsAmountByKind()
+    {
+        var rows = SettlementOtherExpenses.KindsByRow(
+        [
+            Line("SKU-1", "Order", "Promotion", "Principal", -1m, -0.7m),
+            Line("SKU-1", "Order", "Promotion", "Shipping", -2m, -1.4m),
+            Line("SKU-1", "ServiceFee", "Cost of Advertising", "TransactionTotalAmount", -5m, -3.5m),
+            Line(null, "ServiceFee", "other-transaction", "Subscription Fee", -39.99m, -28m),
+        ], SettlementAmounts.Home);
+
+        Assert.Equal(-2.1m, rows[("SKU-1", 10m)]["Promotions"]);
+        Assert.Equal(-3.5m, rows[("SKU-1", 10m)]["advertising"]);
+        Assert.False(rows[("SKU-1", 10m)].ContainsKey("Subscription Fee"));
+        Assert.Equal(-28m, rows[(null, null)]["Subscription Fee"]);
     }
 }
