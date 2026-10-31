@@ -27,32 +27,66 @@
             || (active && /^(INPUT|SELECT|TEXTAREA)$/.test(active.tagName));
     }
 
+    // A reload queries the database, so an idle or background tab must not keep reloading: the serverless
+    // database only auto-pauses after 15 minutes without a query. Refreshing stops once the tab is hidden or
+    // untouched for this long, and resumes (after a short delay) when the person comes back.
+    var idleLimitMs = 5 * 60 * 1000;
+    var resumeDelayMs = 1000;
+
     function setupAutoRefresh(chip) {
         var seconds = parseInt(chip.getAttribute("data-auto-refresh"), 10) || 10;
         var label = chip.querySelector("span:not(.status-light)");
         var button = chip.querySelector("[data-auto-refresh-stop]");
         var timer = null;
+        var lastActivity = Date.now();
+        var idle = false;
 
-        function schedule() {
+        function schedule(delayMs) {
+            window.clearTimeout(timer);
             timer = window.setTimeout(function tick() {
+                if (document.hidden || Date.now() - lastActivity > idleLimitMs) {
+                    // Nobody is looking: make no request and start no timer until they return.
+                    idle = true;
+                    render(false);
+                    return;
+                }
                 if (busy()) {
                     timer = window.setTimeout(tick, 2000);
                     return;
                 }
                 window.location.reload();
-            }, seconds * 1000);
+            }, delayMs === undefined ? seconds * 1000 : delayMs);
         }
 
         function render(off) {
-            chip.classList.toggle("is-off", off);
-            label.textContent = off ? "A run is in progress — auto-refresh is off." : "A run is in progress — refreshing every " + seconds + " s.";
+            chip.classList.toggle("is-off", off || idle);
+            label.textContent = off ? "A run is in progress — auto-refresh is off."
+                : idle ? "A run is in progress — auto-refresh paused while this page is idle."
+                : "A run is in progress — refreshing every " + seconds + " s.";
             button.textContent = off ? "Resume" : "Stop";
         }
+
+        function activity() {
+            lastActivity = Date.now();
+            if (idle && !document.hidden && !storageGet()) {
+                idle = false;
+                render(false);
+                schedule(resumeDelayMs);
+            }
+        }
+
+        ["pointerdown", "keydown", "touchstart", "wheel"].forEach(function (name) {
+            document.addEventListener(name, activity, { passive: true });
+        });
+        document.addEventListener("visibilitychange", function () {
+            if (!document.hidden) { activity(); }
+        });
 
         button.addEventListener("click", function () {
             var off = !storageGet();
             storageSet(off);
             window.clearTimeout(timer);
+            idle = false;
             render(off);
             if (!off) { schedule(); }
         });
