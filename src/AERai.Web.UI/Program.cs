@@ -96,7 +96,9 @@ builder.Services.AddRateLimiter(options =>
             : RateLimitPartition.GetNoLimiter("get");
 });
 
-builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("database");
+// Liveness only, deliberately no database check: App Service pings /healthz about every minute, and a SQL
+// query that often would keep the serverless database from ever auto-pausing.
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
