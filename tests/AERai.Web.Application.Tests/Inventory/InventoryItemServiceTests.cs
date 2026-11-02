@@ -194,30 +194,51 @@ public sealed class InventoryItemServiceTests
     }
 
     [Fact]
-    public async Task PreviewHomeStockImportAsync_ComparesWithHomeStockAndSavesNothing()
+    public async Task PreviewHomeStockImportAsync_AppliesChangesToHomeStockAndSavesNothing()
     {
         _repository.HomeStock[(Us, "MAT-BLK")] = 20;
         _repository.AddProduct("STRAP");
         _repository.HomeStock[(Us, "STRAP")] = 4;
         const string csv =
-            "SKU,Home Stock,product-name\n" +
-            "MAT-BLK,10,Mat\n" +
-            "MAT-BLU,\"1,200\",Mat\n" +
+            "SKU,Change,product-name\n" +
+            "MAT-BLK,-8,Mat\n" +
+            "MAT-BLU,\"+1,200\",Mat\n" +
             "GHOST,5,Unknown\n" +
-            "MAT-BLK,-3,Bad\n" +
+            "MAT-BLK,ten,Bad\n" +
             ",7,No sku\n" +
-            "STRAP,4,Same\n" +
-            "MAT-BLK,12,Last wins\n";
+            "STRAP,,Blank\n" +
+            "MAT-BLK,\u22122,Rows add up\n";
 
         var result = await CreateService().PreviewHomeStockImportAsync(Us, "stock.csv", Text(csv), CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
         var preview = result.Value;
-        Assert.Equal([("MAT-BLU", 0, 1200), ("MAT-BLK", 20, 12)], preview.Changes.Select(c => (c.Sku, c.Current, c.New)));
-        Assert.Equal((1, 1, 1200, 8, 1), (preview.IncreaseCount, preview.DecreaseCount, preview.UnitsIn, preview.UnitsOut, preview.UnchangedCount));
+        Assert.Equal([("MAT-BLU", 0, 1200), ("MAT-BLK", 20, 10)], preview.Changes.Select(c => (c.Sku, c.Current, c.New)));
+        Assert.Equal((1, 1, 1200, 10, 1), (preview.IncreaseCount, preview.DecreaseCount, preview.UnitsIn, preview.UnitsOut, preview.UnchangedCount));
         Assert.Equal([3, 4, 5], preview.Rejected.Select(r => r.RowNumber));
         Assert.Equal(20, _repository.HomeStock[(Us, "MAT-BLK")]);
         Assert.False(_repository.HomeStock.ContainsKey((Us, "MAT-BLU")));
+    }
+
+    [Fact]
+    public async Task PreviewHomeStockImportAsync_RemovingMoreThanAtHome_RejectsThatRowOnly()
+    {
+        _repository.HomeStock[(Us, "MAT-BLK")] = 5;
+        const string csv = "sku,change\nMAT-BLK,-3\nMAT-BLK,-4\nMAT-BLK,-2\n";
+
+        var result = await CreateService().PreviewHomeStockImportAsync(Us, "stock.csv", Text(csv), CancellationToken.None);
+
+        var change = Assert.Single(result.Value.Changes);
+        Assert.Equal((5, 0), (change.Current, change.New));
+        Assert.Contains("only 2 are there", Assert.Single(result.Value.Rejected).ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PreviewHomeStockImportAsync_ChangeOverTheCeiling_SaysSo()
+    {
+        var result = await CreateService().PreviewHomeStockImportAsync(Us, "stock.csv", Text("sku,change\nMAT-BLK,5000000\n"), CancellationToken.None);
+
+        Assert.Contains("at most 1,000,000 either way", Assert.Single(result.Value.Rejected).ErrorMessage, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -225,7 +246,15 @@ public sealed class InventoryItemServiceTests
     {
         var result = await CreateService().PreviewHomeStockImportAsync(Us, "stock.csv", Text("sku,qty\nMAT-BLK,1\n"), CancellationToken.None);
 
-        Assert.Contains("'home-stock'", result.Error, StringComparison.Ordinal);
+        Assert.Contains("'change'", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PreviewHomeStockImportAsync_OlderSheetWithWholeCounts_FailsWithDownloadHint()
+    {
+        var result = await CreateService().PreviewHomeStockImportAsync(Us, "stock.csv", Text("sku,home-stock\nMAT-BLK,1\n"), CancellationToken.None);
+
+        Assert.Contains("older count sheet", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -239,8 +268,8 @@ public sealed class InventoryItemServiceTests
     [Fact]
     public async Task PreviewHomeStockImportAsync_Xlsx_ReadsThroughTheSpreadsheetReader()
     {
-        _spreadsheets.Sheet = new ParsedFile(["sku", "home-stock"],
-            [new ParsedRecord(1, "MAT-BLU\t8", new Dictionary<string, string> { ["sku"] = "MAT-BLU", ["home-stock"] = "8" })]);
+        _spreadsheets.Sheet = new ParsedFile(["sku", "change"],
+            [new ParsedRecord(1, "MAT-BLU\t8", new Dictionary<string, string> { ["sku"] = "MAT-BLU", ["change"] = "8" })]);
 
         var result = await CreateService().PreviewHomeStockImportAsync(Us, "Stock.XLSX", new MemoryStream(), CancellationToken.None);
 

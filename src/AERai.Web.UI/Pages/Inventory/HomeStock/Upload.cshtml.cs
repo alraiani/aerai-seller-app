@@ -13,8 +13,8 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace AERai.Web.UI.Pages.Inventory.HomeStock;
 
 /// <summary>
-/// The count-sheet round trip: download the sheet with current home stock, upload it filled in,
-/// review every change against what's on record, then apply — which logs one ledger entry per
+/// The count-sheet round trip: download the sheet with current home stock, type the units added or
+/// removed in its change column, upload it, review each SKU's count before and after, then apply — which logs one ledger entry per
 /// changed SKU with the movement types chosen for increases and decreases. Nothing is saved until
 /// Apply. Operators and Admins only.
 /// </summary>
@@ -75,8 +75,8 @@ public sealed class UploadModel(
     public async Task OnGetAsync(CancellationToken cancellationToken) => await LoadAsync(cancellationToken);
 
     /// <summary>
-    /// Downloads the count sheet (.xlsx): every SKU, or one family's, with its current count in the
-    /// <c>home-stock</c> column, ready to adjust and upload back unchanged.
+    /// Downloads the count sheet (.xlsx): every SKU, or one family's, with its current count beside an
+    /// empty <c>change</c> column, ready to fill in and upload back unchanged.
     /// </summary>
     /// <param name="family">Only this family's SKUs, or <see langword="null"/> for all.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
@@ -159,7 +159,7 @@ public sealed class UploadModel(
                 if (r.Stale.Count > 0)
                 {
                     TempData[StatusMessage.Error] =
-                        $"Skipped {r.Stale.Count:N0} SKU{(r.Stale.Count == 1 ? "" : "s")} whose home stock changed after the review: {string.Join(", ", r.Stale.Take(10))}{(r.Stale.Count > 10 ? ", …" : "")}. Download a fresh sheet to recount them.";
+                        $"Skipped {r.Stale.Count:N0} SKU{(r.Stale.Count == 1 ? "" : "s")} whose home stock changed after the review: {string.Join(", ", r.Stale.Take(10))}{(r.Stale.Count > 10 ? ", …" : "")}. Upload the sheet again to review them against the new counts.";
                 }
 
                 return RedirectToPage("Ledger");
