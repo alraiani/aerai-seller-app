@@ -195,6 +195,58 @@ public sealed partial class HomeStockLedgerService(
     }
 
     /// <inheritdoc/>
+    public async Task<Result<HomeStockWorksheetResult>> SaveWorksheetAsync(string marketplaceId, IReadOnlyList<HomeStockWorksheetRow> rows, HomeStockWorksheetOptions options, string user, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(rows);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(user);
+
+        var changing = rows.Where(r => r.Change is not null and not 0).ToList();
+        var sending = rows.Where(r => r.Send is > 0).ToList();
+        string? error =
+            changing.Any(r => r.Change > 0) && !HomeStockWorksheetOptions.IncreaseTypes.Contains(options.IncreaseType) ? "Choose how to log the units added."
+            : changing.Any(r => r.Change < 0) && !HomeStockWorksheetOptions.DecreaseTypes.Contains(options.DecreaseType) ? "Choose how to log the units removed."
+            : rows.FirstOrDefault(r => r.Send < 0) is { } negative ? $"Enter how many units of {negative.Sku} to send, from 1 up."
+            : rows.FirstOrDefault(r => r.AfterChange < 0) is { } under ? $"{under.Sku}: removing {-under.Change!.Value:N0} would leave {under.AfterChange:N0} at home; only {under.Original:N0} are there." // Non-null: only a removal goes below the count shown.
+            : rows.FirstOrDefault(r => r.AfterChange > InventoryItemService.MaxHomeStock) is { } over ? $"{over.Sku}: home stock can be at most {InventoryItemService.MaxHomeStock:N0}."
+            : sending.FirstOrDefault(r => r.Send > r.AfterChange) is { } tooMany ? $"Can't send more {tooMany.Sku} than the {tooMany.AfterChange:N0} at home{(tooMany.Change is null or 0 ? "" : " after the change")}."
+            : null;
+        if (error is not null)
+        {
+            return Result.Failure<HomeStockWorksheetResult>(error);
+        }
+
+        HomeStockCountResult? changed = null;
+        if (changing.Count > 0)
+        {
+            var counts = changing.Select(r => new HomeStockCountChange(r.Sku, r.Original, r.AfterChange)).ToList();
+            var result = await ApplyCountsAsync(marketplaceId, counts, new HomeStockCountOptions(options.IncreaseType, options.DecreaseType, null, options.Note, null), user, cancellationToken).ConfigureAwait(false);
+            if (result.IsFailure)
+            {
+                return Result.Failure<HomeStockWorksheetResult>(result.Error);
+            }
+
+            changed = result.Value;
+        }
+
+        if (sending.Count == 0)
+        {
+            return Result.Success(new HomeStockWorksheetResult(changed, null, null));
+        }
+
+        // Each send is checked against the count it was typed against: after its row's change. A SKU whose
+        // change was skipped as stale is then stale for its send too, so nothing goes out from an unseen count.
+        var shipments = sending.Select(r => new HomeStockShipment(r.Sku, r.AfterChange, r.Send!.Value)).ToList(); // Non-null: filtered.
+        var shipped = await ShipToAmazonAsync(marketplaceId, shipments, options.ShipmentReference, user, cancellationToken).ConfigureAwait(false);
+        return shipped.IsSuccess
+            ? Result.Success(new HomeStockWorksheetResult(changed, shipped.Value, null))
+            : changed is null
+                ? Result.Failure<HomeStockWorksheetResult>(shipped.Error)
+                : Result.Success(new HomeStockWorksheetResult(changed, null, shipped.Error));
+    }
+
+    /// <inheritdoc/>
     public async Task<Result> ReverseAsync(string marketplaceId, long id, string user, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);

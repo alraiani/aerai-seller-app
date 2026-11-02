@@ -333,11 +333,12 @@
         update();
     }
 
-    // ---------- Worksheet send amounts ----------
-    // Typing units to send into a [data-send-input] shows what home stock will be after the save
-    // ("→ 70 at home after sending") under the same row's home count. The server does the real subtraction.
-    // The total row's [data-send-total] shows the sum of every box, so it says what will actually go out;
-    // the suggestion moves underneath ([data-send-suggested]). Without script the total is the suggestion.
+    // ---------- Worksheet changes and send amounts ----------
+    // Typing a home-stock change ([data-change-input]: 20 adds, -5 removes) or units to send
+    // ([data-send-input]) shows what home stock will be after the save under the row's count
+    // ("→ 70 at home after saving"), change first, then the send. The server does the real arithmetic.
+    // The total row's [data-send-total] shows the sum of every send box, so it says what will actually
+    // go out; the suggestion moves underneath ([data-send-suggested]). Without script the total is the suggestion.
     function updateSendTotal() {
         var total = document.querySelector("[data-send-total]");
         var boxes = document.querySelectorAll("[data-send-input]");
@@ -355,19 +356,29 @@
 
     document.addEventListener("input", function (event) {
         var input = event.target;
-        if (!input.matches || !input.matches("[data-send-input]")) { return; }
-        updateSendTotal();
+        if (!input.matches || !input.matches("[data-send-input], [data-change-input]")) { return; }
+        if (input.matches("[data-send-input]")) { updateSendTotal(); }
         var row = input.closest("tr");
-        var hint = row && row.querySelector("[data-after-send]");
-        var home = row && row.querySelector(".home-input");
-        if (!hint || !home) { return; }
+        var hint = row && row.querySelector("[data-after-save]");
+        var count = row && row.querySelector("[data-home]");
+        if (!hint || !count) { return; }
 
-        var send = parseInt(input.value, 10);
-        var original = parseInt(home.getAttribute("data-original"), 10);
-        if (!(send > 0) || isNaN(original)) { hint.hidden = true; return; }
+        var original = parseInt(count.getAttribute("data-home"), 10);
+        var changeBox = row.querySelector("[data-change-input]");
+        var sendBox = row.querySelector("[data-send-input]");
+        var change = changeBox ? parseInt(changeBox.value, 10) || 0 : 0;
+        var send = sendBox ? Math.max(parseInt(sendBox.value, 10) || 0, 0) : 0;
+        if ((change === 0 && send === 0) || isNaN(original)) { hint.hidden = true; return; }
 
-        var after = original - send;
-        hint.textContent = after < 0 ? "only " + original.toLocaleString("en-US") + " at home" : "→ " + after.toLocaleString("en-US") + " at home after sending";
+        var afterChange = original + change;
+        var after = afterChange - send;
+        if (afterChange < 0) {
+            hint.textContent = "only " + original.toLocaleString("en-US") + " at home";
+        } else if (after < 0) {
+            hint.textContent = "only " + afterChange.toLocaleString("en-US") + " to send";
+        } else {
+            hint.textContent = "→ " + after.toLocaleString("en-US") + " at home after saving";
+        }
         hint.classList.toggle("text-warn", after < 0);
         hint.hidden = false;
     });
