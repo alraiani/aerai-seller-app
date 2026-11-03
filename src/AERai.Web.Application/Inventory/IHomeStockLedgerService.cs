@@ -41,6 +41,21 @@ public interface IHomeStockLedgerService
     /// <returns>What was logged (<see cref="HomeStockCountResult.UnitsOut"/>) and skipped, or why nothing was.</returns>
     Task<Result<HomeStockCountResult>> ShipToAmazonAsync(string marketplaceId, IReadOnlyList<HomeStockShipment> shipments, string? reference, string user, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Saves the inventory worksheet: each row's home-stock change (current → current + change) is logged
+    /// with the chosen types, then its send to Amazon from the count after the change. Rows are checked
+    /// first (no count below 0 or above the ceiling, no send larger than the count after the change, only
+    /// the worksheet's types); any problem fails the save with nothing written. Changes and sends are two
+    /// transactions, each skipping SKUs whose home stock moved since the page loaded.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace the stock is held for.</param>
+    /// <param name="rows">The worksheet's rows as posted (rows with neither a change nor a send are ignored).</param>
+    /// <param name="options">Movement types and note for changes; shipment id for sends.</param>
+    /// <param name="user">Email of the user saving.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>What was logged and skipped, or why nothing was.</returns>
+    Task<Result<HomeStockWorksheetResult>> SaveWorksheetAsync(string marketplaceId, IReadOnlyList<HomeStockWorksheetRow> rows, HomeStockWorksheetOptions options, string user, CancellationToken cancellationToken);
+
     /// <summary>Reverses an entry.</summary>
     /// <param name="marketplaceId">Marketplace of the entry.</param>
     /// <param name="id">The entry.</param>

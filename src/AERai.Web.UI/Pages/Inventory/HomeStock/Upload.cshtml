@@ -35,7 +35,7 @@
             <div class="card tile h-100"><div class="kpi">
                 <div class="kpi-label">Unchanged</div>
                 <div class="kpi-value">@preview.UnchangedCount.ToString("N0", en)</div>
-                <div class="kpi-foot">Match what's on record</div>
+                <div class="kpi-foot">Blank or 0 in the sheet</div>
             </div></div>
         </div>
         <div class="col-6 col-xl-3">
@@ -52,7 +52,7 @@
         <div class="card mb-3">
             <div class="empty-state">
                 <div class="empty-title">Nothing to change</div>
-                <div class="empty-detail">Every count in the sheet already matches home stock in @Model.Marketplace.Name.</div>
+                <div class="empty-detail">The sheet has no changes for @Model.Marketplace.Name: type units added or removed in its change column (20 adds, -5 removes).</div>
                 <a asp-page="Upload" class="btn btn-sm btn-soft">Upload another sheet</a>
             </div>
         </div>
@@ -63,7 +63,7 @@
             <div class="card-toolbar">
                 <span class="card-toolbar-title">
                     Review @preview.Changes.Count.ToString("N0", en) change@(preview.Changes.Count == 1 ? "" : "s") in @Model.Marketplace.Name
-                    <partial name="_Tip" model='"Each row compares the count in your sheet with home stock on record now. Nothing is saved until you apply; then each SKU gets one ledger entry for the difference. A SKU whose stock changes before you apply is skipped."' />
+                    <partial name="_Tip" model='"Each row applies the change in your sheet to home stock on record now. Nothing is saved until you apply; then each SKU gets one ledger entry for its change. A SKU whose stock changes before you apply is skipped."' />
                 </span>
                 <span class="text-muted-token small">Nothing is saved until you apply</span>
             </div>
@@ -73,8 +73,8 @@
                         <tr>
                             <th>SKU</th>
                             <th class="text-end">On record</th>
-                            <th class="text-end">In sheet</th>
                             <th class="text-end">Change</th>
+                            <th class="text-end">After</th>
                             <th>Direction</th>
                         </tr>
                     </thead>
@@ -90,8 +90,8 @@
                                 }
                             </td>
                             <td class="text-end">@c.Current.ToString("N0", en)</td>
-                            <td class="text-end fw-semibold">@c.New.ToString("N0", en)</td>
                             <td class="text-end"><span class="ledger-units @(c.Difference > 0 ? "in" : "out")">@c.Difference.ToString("+#,0;−#,0", en)</span></td>
+                            <td class="text-end fw-semibold">@c.New.ToString("N0", en)</td>
                             <td><span class="@(c.Difference > 0 ? "pill pill-ok" : "pill pill-warn")">@(c.Difference > 0 ? "Increase" : "Decrease")</span></td>
                         </tr>
                     }
@@ -179,7 +179,7 @@
                 <span class="step">1</span>
                 <div>
                     <h2>Download the count sheet</h2>
-                    <p>An Excel workbook already mapped to this upload: every SKU in @Model.Marketplace.Name (or one family), grouped by family and color, with its current home stock in the yellow <code>home-stock</code> column. Type the new counts there and upload it back as-is.</p>
+                    <p>An Excel workbook already mapped to this upload: every SKU in @Model.Marketplace.Name (or one family), grouped by family and color, with its current home stock beside an empty yellow <code>change</code> column. Type only what moved (<code>20</code> adds, <code>-5</code> removes) and upload it back as-is.</p>
                 </div>
             </div>
             <div class="form-section-body">
@@ -194,7 +194,7 @@
                     </select>
                     <button type="submit" class="btn btn-soft"><partial name="_Icon" model='"download"' /> Download .xlsx</button>
                 </form>
-                <div class="form-text mt-2">Reference columns (product name, family, color, Amazon stock, 30-day sales, what to send) help with the count and are ignored on upload.</div>
+                <div class="form-text mt-2">Reference columns (at home, product name, family, color, Amazon stock, 30-day sales, what to send) help fill it in and are ignored on upload.</div>
             </div>
         </section>
 
@@ -203,7 +203,7 @@
                 <span class="step">2</span>
                 <div>
                     <h2>Upload, review, apply</h2>
-                    <p>The sheet is checked against home stock on record in @Model.Marketplace.Name. You'll see every increase and decrease and choose how they're logged before anything is saved. SKUs not in the file are left alone.</p>
+                    <p>Each change is applied on paper to home stock on record in @Model.Marketplace.Name. You'll see every SKU's count before and after and choose how increases and decreases are logged before anything is saved. Blank rows and SKUs not in the file are left alone.</p>
                 </div>
             </div>
             <div class="form-section-body">
@@ -224,11 +224,11 @@
             <div class="card-body">
                 <div class="kpi-label mb-2">File layout</div>
                 <ul class="summary-facts">
-                    <li>A header row with <code>sku</code> and <code>home-stock</code> columns; others are ignored (the downloaded sheet already has them)</li>
+                    <li>A header row with <code>sku</code> and <code>change</code> columns; others are ignored (the downloaded sheet already has them)</li>
+                    <li><code>20</code> adds 20 units, <code>-5</code> removes 5; blank or <code>0</code> leaves a SKU alone</li>
                     <li>Nothing is saved until you review and apply; each change then becomes one entry in the <a asp-page="Ledger">home-stock ledger</a>, logged as the type you choose</li>
-                    <li><code>0</code> clears a SKU</li>
-                    <li>Unknown SKUs and bad numbers are skipped and listed</li>
-                    <li>If a SKU appears twice, the last row wins</li>
+                    <li>Unknown SKUs, bad numbers, and changes that would leave less than 0 at home are skipped and listed</li>
+                    <li>If a SKU appears twice, its changes add up</li>
                 </ul>
             </div>
         </div>

@@ -226,6 +226,79 @@ public sealed class HomeStockLedgerServiceTests
         Assert.Equal(1, _alerts.Requests); // Only the receipt; nothing was shipped.
     }
 
+    private static readonly HomeStockWorksheetOptions WorksheetOptions =
+        new(HomeStockMovementType.ReceivedFromSupplier, HomeStockMovementType.CountCorrection, null, "FBA15XYZ");
+
+    private Task<Result<HomeStockWorksheetResult>> SaveWorksheetAsync(HomeStockWorksheetOptions options, params HomeStockWorksheetRow[] rows) =>
+        CreateService().SaveWorksheetAsync(Us, rows, options, User, CancellationToken.None);
+
+    [Fact]
+    public async Task SaveWorksheetAsync_ChangeAndSendOnOneRow_LogsTheChangeThenSendsFromTheNewCount()
+    {
+        await RecordAsync(HomeStockMovementType.CountCorrection, 65);
+
+        var result = await SaveWorksheetAsync(WorksheetOptions, new HomeStockWorksheetRow("FOB00BL", 65, 10, 5));
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal((1, 10), (result.Value.Changed!.Applied, result.Value.Changed.UnitsIn));
+        Assert.Equal((1, 5), (result.Value.Shipped!.Applied, result.Value.Shipped.UnitsOut));
+        Assert.Equal(
+            [(HomeStockMovementType.ReceivedFromSupplier, 10, (string?)null), (HomeStockMovementType.ShippedToAmazon, -5, "FBA15XYZ")],
+            _repository.Entries.Skip(1).Select(e => (e.Type, e.Units, e.Reference)));
+        Assert.Equal(70, _repository.Balance(Us, "FOB00BL"));
+    }
+
+    [Fact]
+    public async Task SaveWorksheetAsync_RemovalLogsTheDecreaseType()
+    {
+        await RecordAsync(HomeStockMovementType.CountCorrection, 20);
+
+        var result = await SaveWorksheetAsync(WorksheetOptions, new HomeStockWorksheetRow("FOB00BL", 20, -4, null));
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal((HomeStockMovementType.CountCorrection, -4), (_repository.Entries[^1].Type, _repository.Entries[^1].Units));
+        Assert.Null(result.Value.Shipped);
+    }
+
+    [Theory]
+    [InlineData(-21, null, "would leave -1 at home")]
+    [InlineData(-5, 16, "than the 15 at home after the change")]
+    [InlineData(null, 21, "than the 20 at home")]
+    public async Task SaveWorksheetAsync_MoreThanAtHome_FailsAndWritesNothing(int? change, int? send, string message)
+    {
+        await RecordAsync(HomeStockMovementType.CountCorrection, 20);
+
+        var result = await SaveWorksheetAsync(WorksheetOptions, new HomeStockWorksheetRow("FOB00BL", 20, change, send));
+
+        Assert.Contains(message, result.Error, StringComparison.Ordinal);
+        Assert.Single(_repository.Entries);
+    }
+
+    [Fact]
+    public async Task SaveWorksheetAsync_RemovalAsShippedToAmazon_IsRefused()
+    {
+        await RecordAsync(HomeStockMovementType.CountCorrection, 20);
+        var options = WorksheetOptions with { DecreaseType = HomeStockMovementType.ShippedToAmazon };
+
+        var result = await SaveWorksheetAsync(options, new HomeStockWorksheetRow("FOB00BL", 20, -4, null));
+
+        Assert.True(result.IsFailure);
+        Assert.Single(_repository.Entries);
+    }
+
+    [Fact]
+    public async Task SaveWorksheetAsync_StaleChange_SkipsItsSendToo()
+    {
+        await RecordAsync(HomeStockMovementType.CountCorrection, 30);
+
+        // The page showed 20; it is 30 now, so neither the change nor the send from it applies.
+        var result = await SaveWorksheetAsync(WorksheetOptions, new HomeStockWorksheetRow("FOB00BL", 20, 5, 3));
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(["FOB00BL"], result.Value.Stale);
+        Assert.Equal(30, _repository.Balance(Us, "FOB00BL"));
+    }
+
     [Fact]
     public void Payload_RoundTripsAndRejectsBadLines()
     {

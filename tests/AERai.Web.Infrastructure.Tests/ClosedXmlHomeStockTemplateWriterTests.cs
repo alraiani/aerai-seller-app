@@ -23,15 +23,15 @@ public sealed class ClosedXmlHomeStockTemplateWriterTests
         var parsed = await new ClosedXmlSpreadsheetReader().ReadAsync(stream, 100, CancellationToken.None);
 
         Assert.True(parsed.IsSuccess, parsed.Error);
-        Assert.Equal(["sku", "home-stock"], parsed.Value.Headers.Take(2));
-        Assert.Equal([("FOB00BL", "75"), ("FOB00GR", "44")], parsed.Value.Records.Select(r => (r.Get("sku"), r.Get("home-stock"))));
+        Assert.Equal(["sku", "change", "at-home"], parsed.Value.Headers.Take(3));
+        Assert.Equal([("FOB00BL", null, "75"), ("FOB00GR", null, "44")], parsed.Value.Records.Select(r => (r.Get("sku"), r.Get("change"), r.Get("at-home"))));
     }
 
     [Fact]
     public void Write_StoresTitlesAsTextNeverFormulas()
     {
         using var workbook = new XLWorkbook(new MemoryStream(new ClosedXmlHomeStockTemplateWriter().Write("Home stock", Rows)));
-        var cell = workbook.Worksheet("Home stock").Cell(2, 3);
+        var cell = workbook.Worksheet("Home stock").Cell(2, 4);
 
         Assert.False(cell.HasFormula);
         Assert.Equal("=Handkerchief, Blue", cell.GetString());

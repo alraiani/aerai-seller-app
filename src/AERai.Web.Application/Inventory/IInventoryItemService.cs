@@ -66,8 +66,9 @@ public interface IInventoryItemService
     Task<Result<int>> SetHomeStockAsync(string marketplaceId, IReadOnlyList<HomeStockEntry> entries, string user, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reads a count sheet (.csv, .tsv, or .xlsx with columns <c>sku</c> and <c>home-stock</c>) and
-    /// checks it against current home stock. <b>Nothing is saved</b>; the changes are applied with
+    /// Reads a count sheet (.csv, .tsv, or .xlsx with columns <c>sku</c> and <c>change</c>: units
+    /// added or removed; blank leaves a SKU alone, and rows for the same SKU add up) and works out each
+    /// SKU's new home stock from its current one. <b>Nothing is saved</b>; the changes are applied with
     /// <see cref="IHomeStockLedgerService.ApplyCountsAsync"/> once reviewed.
     /// </summary>
     /// <param name="marketplaceId">Marketplace the stock is held for.</param>
