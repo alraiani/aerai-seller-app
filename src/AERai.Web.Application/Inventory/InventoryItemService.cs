@@ -37,8 +37,8 @@ public sealed partial class InventoryItemService(
     /// <summary>Longest lead time or target accepted, in days (two years).</summary>
     public const int MaxLeadTimeDays = 730;
 
-    /// <summary>Required columns of a home-stock upload (normalized header names).</summary>
-    public static IReadOnlyList<string> HomeStockColumns { get; } = ["sku", "home-stock"];
+    /// <summary>Required columns of a home-stock upload (normalized header names): units added or removed per SKU.</summary>
+    public static IReadOnlyList<string> HomeStockColumns { get; } = ["sku", "change"];
 
     /// <inheritdoc/>
     public Task<InventoryItemDetails?> GetAsync(string sku, string marketplaceId, CancellationToken cancellationToken) =>
@@ -243,7 +243,11 @@ public sealed partial class InventoryItemService(
 
         if (HomeStockColumns.FirstOrDefault(c => !parsed.Value.Headers.Contains(c, StringComparer.Ordinal)) is { } missing)
         {
-            return Result.Failure<HomeStockReconciliation>($"The file has no '{missing}' column. Use the count sheet: columns sku and home-stock.");
+            // An older count sheet held whole counts in a home-stock column; reading those as changes would
+            // add every SKU's stock to itself, so it is refused rather than guessed at.
+            var oldSheet = parsed.Value.Headers.Contains("home-stock", StringComparer.Ordinal) ? " This looks like an older count sheet with whole counts." : string.Empty;
+            return Result.Failure<HomeStockReconciliation>(
+                $"The file has no '{missing}' column.{oldSheet} Download the current count sheet: columns sku and change (20 adds, -5 removes).");
         }
 
         var records = parsed.Value.Records;
@@ -251,42 +255,69 @@ public sealed partial class InventoryItemService(
             marketplaceId, records.Select(r => r.Get("sku")).OfType<string>().Distinct(StringComparer.Ordinal).ToList(), cancellationToken).ConfigureAwait(false);
 
         var rejected = new List<RejectedRow>();
-        var counted = new List<HomeStockEntry>();
+        var totals = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var record in records)
         {
             var sku = record.Get("sku");
-            var quantityText = record.Get("home-stock");
+            var changeText = record.Get("change");
             if (sku is null)
             {
                 rejected.Add(new RejectedRow(record.RowNumber, "Missing sku.", record.RawLine));
             }
-            else if (!current.ContainsKey(sku))
+            else if (!current.TryGetValue(sku, out var stock))
             {
                 rejected.Add(new RejectedRow(record.RowNumber, $"Unknown SKU '{sku}'.", record.RawLine));
             }
-            else if (!int.TryParse(quantityText, NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var quantity) || quantity is < 0 or > MaxHomeStock)
+            else if (changeText is null)
             {
-                rejected.Add(new RejectedRow(record.RowNumber, $"home-stock must be a whole number from 0 to {MaxHomeStock:N0} (got '{quantityText}').", record.RawLine));
+                // A blank change leaves the SKU alone, so a sheet only needs the rows that moved.
+                totals.TryAdd(sku, 0);
+            }
+            else if (!TryParseChange(changeText, out var change))
+            {
+                rejected.Add(new RejectedRow(record.RowNumber, $"change must be a whole number, e.g. 20 to add or -5 to remove (got '{changeText}').", record.RawLine));
+            }
+            else if (change is < -MaxHomeStock or > MaxHomeStock)
+            {
+                rejected.Add(new RejectedRow(record.RowNumber, $"change can be at most {MaxHomeStock:N0} either way (got '{changeText}').", record.RawLine));
             }
             else
             {
-                counted.Add(new HomeStockEntry(sku, quantity));
+                // Rows for the same SKU add up (two deliveries listed apart); a row that would take the
+                // running total out of range is skipped on its own, so the rest still apply.
+                var total = totals.GetValueOrDefault(sku) + change;
+                var after = stock.HomeStock + total;
+                if (after < 0)
+                {
+                    rejected.Add(new RejectedRow(record.RowNumber, $"Removing {-change:N0} would leave {after:N0} at home; only {stock.HomeStock + totals.GetValueOrDefault(sku):N0} are there.", record.RawLine));
+                }
+                else if (after > MaxHomeStock)
+                {
+                    rejected.Add(new RejectedRow(record.RowNumber, $"Home stock can be at most {MaxHomeStock:N0}.", record.RawLine));
+                }
+                else
+                {
+                    totals[sku] = total;
+                }
             }
         }
 
-        // The same SKU twice keeps the last row, like a sheet read top to bottom.
-        var latest = counted.GroupBy(e => e.Sku, StringComparer.Ordinal).Select(g => g.Last()).ToList();
-        var changes = latest
-            .Select(e => (Entry: e, Now: current[e.Sku]))
-            .Where(x => x.Entry.Quantity != x.Now.HomeStock)
-            .Select(x => new HomeStockCountChange(x.Entry.Sku, x.Now.HomeStock, x.Entry.Quantity, x.Now.Title, x.Now.Color))
+        var changes = totals
+            .Where(t => t.Value != 0)
+            .Select(t => (Sku: t.Key, Change: t.Value, Now: current[t.Key]))
+            .Select(x => new HomeStockCountChange(x.Sku, x.Now.HomeStock, x.Now.HomeStock + x.Change, x.Now.Title, x.Now.Color))
             .OrderByDescending(c => Math.Abs(c.Difference))
             .ThenBy(c => c.Sku, StringComparer.Ordinal)
             .ToList();
+        var unchanged = totals.Count - changes.Count;
 
-        LogHomeStockPreviewed(fileName, changes.Count, latest.Count - changes.Count, rejected.Count, marketplaceId);
-        return Result.Success(new HomeStockReconciliation(changes, latest.Count - changes.Count, rejected));
+        LogHomeStockPreviewed(fileName, changes.Count, unchanged, rejected.Count, marketplaceId);
+        return Result.Success(new HomeStockReconciliation(changes, unchanged, rejected));
     }
+
+    /// <summary>Reads a signed whole number as people type it in a sheet: "20", "+20", "-5", "−5" (minus sign), "1,200".</summary>
+    private static bool TryParseChange(string text, out int change) =>
+        int.TryParse(text.Replace('\u2212', '-'), NumberStyles.AllowLeadingSign | NumberStyles.AllowThousands | NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite, CultureInfo.InvariantCulture, out change);
 
     /// <summary>Checks that every set lead-time field is in range; the target must also be at least a day.</summary>
     private static string? ValidateLeadTimes(LeadTimeSettings settings)

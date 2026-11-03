@@ -49,7 +49,7 @@
         @if (Model.CanEdit)
         {
             <a asp-page="HomeStock/Upload" asp-page-handler="Template" asp-route-family="@Model.FamilyId" class="btn btn-sm btn-soft"
-               data-bs-toggle="tooltip" data-bs-title="Excel sheet of this family's SKUs to count home stock and upload back"><partial name="_Icon" model='"download"' /> Count sheet</a>
+               data-bs-toggle="tooltip" data-bs-title="Excel sheet of this family's SKUs to enter home-stock changes and upload back"><partial name="_Icon" model='"download"' /> Count sheet</a>
             <a asp-page="HomeStock/Upload" class="btn btn-sm btn-soft btn-icon" aria-label="Upload home stock"
                data-bs-toggle="tooltip" data-bs-title="Upload a filled-in count sheet"><partial name="_Icon" model='"upload"' /></a>
         }
@@ -96,7 +96,7 @@
                             <th class="text-end">Amazon <partial name="_Tip" model='"Units sellable at Amazon now, plus units already on their way in. “Sent, awaiting Amazon” is units sent from home that Amazon’s numbers don’t show yet; they count as Amazon stock until they do."' /></th>
                             <th class="text-end">Days of cover <partial name="_Tip" model='"How long Amazon stock (sellable, inbound, FC transfers, and units sent but not showing yet) lasts at the current sales rate. Home stock isn’t counted."' /></th>
                             <th class="col-send">Send to Amazon <partial name="_Tip" model='Model.CanEdit ? "Type the units you’re sending and save: it’s logged as Shipped to Amazon and taken off home stock. Underneath: the suggested amount and last day to ship — enough for the target cover, or Amazon’s recommendation if it asks for more or sooner." : "Home-stock units to ship in and the last day to ship them: enough for the target cover, or Amazon’s recommendation if it asks for more or sooner (shown underneath)."' /></th>
-                            <th class="text-end">At home <partial name="_Tip" model='"Units at home for this marketplace. Edit a count and save; every change is logged in the home-stock ledger."' /></th>
+                            <th class="text-end">At home <partial name="_Tip" model='Model.CanEdit ? "Units at home for this marketplace. To change it, type the difference in the box (20 adds, -5 removes) and save; the save bar sets how it’s logged. Every change is in the home-stock ledger." : "Units at home for this marketplace. Every change is in the home-stock ledger."' /></th>
                             <th>Order next <partial name="_Tip" model='"The next supplier order from the sales rate: how many and the last day to place it so it arrives (through prep and transit) before all stock — Amazon and home — runs out."' /></th>
                         </tr>
                         @* The totals sit in the sticky header so they stay in view while scrolling and typing sends. *@
@@ -233,18 +233,16 @@
                                         }
                                     </td>
                                     <td class="text-end">
+                                        <div class="fw-semibold home-count" data-home="@p.HomeStock">@p.HomeStock.ToString("N0", en)</div>
                                         @if (Model.CanEdit)
                                         {
+                                            @* data-original is empty: any change is unsaved. min stops a removal below zero. *@
                                             <input type="hidden" name="Rows[@row].Sku" value="@p.Sku" />
                                             <input type="hidden" name="Rows[@row].Original" value="@p.HomeStock" />
-                                            <input type="number" name="Rows[@row].Quantity" value="@Model.ValueFor(item)" data-original="@p.HomeStock" min="0" step="1"
-                                                   class="form-control form-control-sm home-input" aria-label="Home stock for @p.Sku" />
-                                            <div class="cell-sub after-send no-print" data-after-send hidden></div>
+                                            <input type="number" name="Rows[@row].Change" value="@Model.ChangeValueFor(item)" data-original="" data-change-input min="@(-p.HomeStock)" step="1"
+                                                   placeholder="±0" class="form-control form-control-sm change-input no-print" aria-label="Change home stock for @p.Sku (20 adds, -5 removes)" />
+                                            <div class="cell-sub after-save no-print" data-after-save hidden></div>
                                             row++;
-                                        }
-                                        else
-                                        {
-                                            <span class="fw-semibold">@p.HomeStock.ToString("N0", en)</span>
                                         }
                                         <div class="cell-sub no-print"><a asp-page="HomeStock/Ledger" asp-route-sku="@p.Sku">ledger</a></div>
                                     </td>
@@ -271,8 +269,27 @@
     @if (Model.CanEdit && Model.Sheet is { IsEmpty: false })
     {
         <div class="save-bar" data-save-bar>
-            <span class="text-muted-token" data-save-count>Enter send amounts or change home counts, then save.</span>
+            <span class="text-muted-token" data-save-count>Enter home-stock changes or send amounts, then save.</span>
             <div class="d-flex flex-wrap align-items-center gap-2">
+                <label class="save-bar-field">
+                    <span>Added as</span>
+                    <select asp-for="IncreaseType" class="form-select form-select-sm">
+                        @foreach (var type in HomeStockWorksheetOptions.IncreaseTypes)
+                        {
+                            <option value="@type">@AERai.Web.UI.Pages.Inventory.HomeStock.UploadModel.Label(type)</option>
+                        }
+                    </select>
+                </label>
+                <label class="save-bar-field">
+                    <span>Removed as</span>
+                    <select asp-for="DecreaseType" class="form-select form-select-sm">
+                        @foreach (var type in HomeStockWorksheetOptions.DecreaseTypes)
+                        {
+                            <option value="@type">@AERai.Web.UI.Pages.Inventory.HomeStock.UploadModel.Label(type)</option>
+                        }
+                    </select>
+                </label>
+                <input asp-for="ChangeNote" class="form-control form-control-sm change-note" placeholder="Note (required for Other)" aria-label="Note for the home-stock changes, required when logged as Other" maxlength="500" />
                 <input asp-for="ShipmentReference" class="form-control form-control-sm shipment-ref" placeholder="FBA shipment id (optional)" aria-label="FBA shipment id for the units sent" maxlength="100" />
                 <a asp-route-family="@Model.FamilyId" class="btn btn-sm btn-link">Discard</a>
                 <button type="submit" class="btn btn-sm btn-primary"><partial name="_Icon" model='"check"' /> Save</button>
