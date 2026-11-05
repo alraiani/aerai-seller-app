@@ -7,7 +7,7 @@ Azure SQL, Blob Storage, and Key Vault through its **system-assigned managed ide
 | Module | Provisions |
 |---|---|
 | `modules/monitoring.bicep` | Log Analytics workspace + Application Insights |
-| `modules/sql.bicep` | Azure SQL server (Entra-only auth) + serverless `AERaiSeller` database |
+| `modules/sql.bicep` | Azure SQL server (Entra-only auth) + Standard S0 `AERaiSeller` database |
 | `modules/appService.bicep` | Linux App Service plan + .NET 10 web app (HTTPS-only, `/healthz` health check, basic-auth publishing off) |
 | `modules/storage.bicep` | Storage account (Entra-only, no shared keys) + private `raw` container: the landing zone for source files, with soft delete, versioning, and Cool/Archive tiering |
 | `modules/keyVault.bicep` | Key Vault (RBAC) + *Key Vault Secrets User* for the web app identity |

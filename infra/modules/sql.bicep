@@ -55,19 +55,24 @@ resource database 'Microsoft.Sql/servers/databases@2023-08-01' = {
   location: location
   tags: tags
   sku: {
-    // Serverless General Purpose: scales to zero-ish cost when idle, fine for an internal app.
-    name: 'GP_S_Gen5'
-    tier: 'GeneralPurpose'
-    family: 'Gen5'
-    capacity: 2
+    // Standard S0 (10 DTU): a flat ~$15/month. Serverless cost $80+/month even when pausing,
+    // because scheduled syncs wake it around the clock.
+    name: 'S0'
+    tier: 'Standard'
+    capacity: 10
   }
   properties: {
-    // Minutes without any query before compute pauses (15 is the minimum). Background work only
-    // queries when something is due, so the database can sleep between scheduled pulls; the first
-    // request after a pause waits while it resumes (EF retries cover the failed connect).
-    autoPauseDelay: 15
-    minCapacity: json('0.5')
+    maxSizeBytes: 268435456000 // 250 GB, included in the S0 price.
     requestedBackupStorageRedundancy: 'Local'
+  }
+}
+
+// Restore backups are included in the DTU price, so keep the maximum window.
+resource shortTermRetention 'Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies@2023-08-01' = {
+  parent: database
+  name: 'default'
+  properties: {
+    retentionDays: 35
   }
 }
 
