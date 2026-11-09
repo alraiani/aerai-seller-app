@@ -36,10 +36,13 @@ public sealed class ProfitQueriesTests(SqlDatabaseFixture fixture) : IClassFixtu
             return;
         }
 
-        db.Products.Add(new Product { Sku = "PQ-1", Title = "Mat", CreatedAt = Utc(1, 1), UpdatedAt = Utc(1, 1) });
+        db.Products.AddRange(
+            new Product { Sku = "PQ-1", Title = "Mat", CreatedAt = Utc(1, 1), UpdatedAt = Utc(1, 1) },
+            new Product { Sku = "PQ-LATE", Title = "Strap", CreatedAt = Utc(1, 1), UpdatedAt = Utc(1, 1) });
         db.ProductCostHistory.AddRange(
             new ProductCostHistory { Sku = "PQ-1", MarketplaceId = Us, CostOfGoods = 4m, EffectiveFrom = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero), ChangedBy = "system" },
-            new ProductCostHistory { Sku = "PQ-1", MarketplaceId = Us, CostOfGoods = 5m, EffectiveFrom = Utc(9, 15), ChangedBy = "op" });
+            new ProductCostHistory { Sku = "PQ-1", MarketplaceId = Us, CostOfGoods = 5m, EffectiveFrom = Utc(9, 15), ChangedBy = "op" },
+            new ProductCostHistory { Sku = "PQ-LATE", MarketplaceId = Us, CostOfGoods = 2.5m, EffectiveFrom = Utc(10, 20), ChangedBy = "op" });
         db.Orders.Add(new Order
         {
             AmazonOrderId = "PQ-O-2", MarketplaceId = Us, PurchaseDate = Utc(9, 18), OrderStatus = "Shipped", Currency = "USD", UpdatedAt = Utc(9, 18),
@@ -51,6 +54,7 @@ public sealed class ProfitQueriesTests(SqlDatabaseFixture fixture) : IClassFixtu
             new(settlement, posted, "Order", "ItemPrice", "Principal", amount, quantity);
         db.Settlements.AddRange(
             NewSettlement("PQ-S-USD", "USD", Utc(8, 28), Utc(9, 11), Sale("PQ-S-USD", Utc(9, 2), 40m, 2), Sale("PQ-S-USD", Utc(9, 12), 20m, 1), Sale("PQ-S-USD", Utc(9, 14), 99m, 9)),
+            NewSettlement("PQ-S-LATE", "USD", Utc(8, 28), Utc(9, 11), new Line("PQ-S-LATE", Utc(9, 5), "Order", "ItemPrice", "Principal", 12m, 3)),
             NewSettlement("PQ-S-CAD", "CAD", Utc(8, 28), Utc(9, 11), Sale("PQ-S-CAD", Utc(9, 3), 30m, 1)),
             NewSettlement("PQ-S-MXN", "MXN", Utc(8, 28), Utc(9, 11), Sale("PQ-S-MXN", Utc(9, 3), 500m, 1)),
             NewSettlement("PQ-S-NEW", "USD", Utc(9, 13), Utc(9, 27), Sale("PQ-S-NEW", Utc(9, 20), 40m, 2), new Line("PQ-S-NEW", Utc(9, 20), "Order", "ItemFees", "Commission", -6m, null)));
@@ -80,7 +84,7 @@ public sealed class ProfitQueriesTests(SqlDatabaseFixture fixture) : IClassFixtu
         Lines = [.. lines.Select(l => new SettlementLine
         {
             SettlementId = id, PostedDate = l.Posted, TransactionType = l.Type, AmazonOrderId = l.Type == "Order" && l.Amount == 40m && id == "PQ-S-NEW" ? "PQ-O-2" : null,
-            OrderItemCode = "1", Quantity = l.Quantity, Sku = "PQ-1", AmountType = l.AmountType, AmountDescription = l.Description, Amount = l.Amount,
+            OrderItemCode = "1", Quantity = l.Quantity, Sku = id == "PQ-S-LATE" ? "PQ-LATE" : "PQ-1", AmountType = l.AmountType, AmountDescription = l.Description, Amount = l.Amount,
         })],
     };
 
@@ -104,7 +108,7 @@ public sealed class ProfitQueriesTests(SqlDatabaseFixture fixture) : IClassFixtu
                 (new DateOnly(2026, 9, 25), ProfitCategory.RefundedSales, -20m),
                 (new DateOnly(2026, 9, 26), ProfitCategory.OtherExpenses, -1.5m),
             ],
-            rows.OrderBy(r => r.Day).ThenBy(r => r.Category.ToString(), StringComparer.Ordinal).Select(r => (r.Day, r.Category, r.Amount)));
+            rows.Where(r => r.Sku != "PQ-LATE").OrderBy(r => r.Day).ThenBy(r => r.Category.ToString(), StringComparer.Ordinal).Select(r => (r.Day, r.Category, r.Amount)));
     }
 
     [SqlFact]
@@ -124,7 +128,10 @@ public sealed class ProfitQueriesTests(SqlDatabaseFixture fixture) : IClassFixtu
         // No order: the posted date's cost (4); the ledger sale's order was bought after the change (5).
         Assert.Equal(
             [(new DateOnly(2026, 9, 2), (decimal?)4m, 2), (new DateOnly(2026, 9, 12), 4m, 1), (new DateOnly(2026, 9, 19), 5m, 2)],
-            sold.OrderBy(s => s.Day).Select(s => (s.Day, s.UnitCost, s.Units)));
+            sold.Where(s => s.Sku == "PQ-1").OrderBy(s => s.Day).Select(s => (s.Day, s.UnitCost, s.Units)));
+
+        // A cost first entered after the sale (a missing cost filled in) applies to it: there was no other.
+        Assert.Equal((decimal?)2.5m, sold.Single(s => s.Sku == "PQ-LATE").UnitCost);
         var refund = Assert.Single(refunds);
         Assert.Equal((-20m, (decimal?)40m, (int?)2, (decimal?)5m), (refund.RefundedPrincipal, refund.ItemPrice, refund.ItemQuantity, refund.UnitCost));
     }
@@ -137,7 +144,8 @@ public sealed class ProfitQueriesTests(SqlDatabaseFixture fixture) : IClassFixtu
         var kinds = await QueryAsync(q => q.GetOtherExpenseKindsAsync(Us, Sep1, Sep30, NewYork, 10, CancellationToken.None));
 
         Assert.Equal(Utc(9, 13), start);
-        Assert.Equal(["PQ-S-NEW", "PQ-S-USD"], ties.Select(t => t.SettlementId));
+        Assert.Equal(["PQ-S-LATE", "PQ-S-NEW", "PQ-S-USD"], ties.Select(t => t.SettlementId).Order(StringComparer.Ordinal));
+        ties = [.. ties.Where(t => t.SettlementId != "PQ-S-LATE")];
         var tied = ties[0];
         Assert.Equal((34m, (decimal?)34m, 1), (tied.Net, tied.LedgerTotal, tied.LedgerTransactions));
         Assert.Null(ties[1].LedgerTotal);

@@ -1,0 +1,42 @@
+@using AERai.Web.Application.Profit
+@model (ProfitMetrics Metrics, string Currency, bool Strong)
+@{
+    var m = Model.Metrics;
+    var c = Model.Currency;
+    var strong = Model.Strong ? "fw-semibold" : "";
+}
+@* The figure cells shared by the totals, family, SKU, and period rows, so they always line up. Costs show as the
+   negative amounts they are; profit is colored, with its margin under it. *@
+<td class="text-end money">
+    @ProfitFormat.Count(m.Units)
+    @if (m.RefundedUnits > 0)
+    {
+        <div class="cell-sub">@ProfitFormat.Count(m.RefundedUnits) refunded</div>
+    }
+</td>
+<td class="text-end money @strong">
+    @ProfitFormat.Money(m.Sales, c)
+    @if (m.Held > 0)
+    {
+        <div class="cell-sub has-detail" title="Of these amounts, what Amazon still holds back (deferred, paid out about 7 days after delivery).">@SettlementFormat.Money(m.Held, c) held</div>
+    }
+</td>
+<td class="text-end money">@ProfitFormat.Money(m.Refunds, c)</td>
+<td class="text-end money">@ProfitFormat.Money(m.AmazonFees, c)</td>
+<td class="text-end money d-none d-lg-table-cell">@ProfitFormat.Money(m.Other, c)</td>
+<td class="text-end money">@ProfitFormat.Money(m.Advertising, c)</td>
+<td class="text-end money">
+    @ProfitFormat.Money(m.Cogs, c)
+    @if (m.CostMissingUnits > 0)
+    {
+        <div class="cell-sub"><span class="pill pill-warn has-detail" title="@ProfitFormat.Count(m.CostMissingUnits) unit@(m.CostMissingUnits == 1 ? "" : "s") sold with no cost set on the order date, counted at 0. Set it on Products &amp; COGS.">Cost missing</span></div>
+    }
+    else if (m.CostReturned > 0)
+    {
+        <div class="cell-sub has-detail" title="The cost of the refunded units, given back on the assumption they returned to stock.">+@SettlementFormat.Money(m.CostReturned, c) back</div>
+    }
+</td>
+<td class="text-end money @strong">
+    <span class="@ProfitFormat.ProfitClass(m.Profit)">@SettlementFormat.Money(m.Profit, c)</span>
+    <div class="cell-sub">@ProfitFormat.Margin(m.Margin)</div>
+</td>

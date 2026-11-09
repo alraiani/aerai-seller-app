@@ -15,7 +15,7 @@
     // inventory page (Edit, bulk home stock, uploads, families) keeps the Inventory link current.
     string[] inventorySubPages = ["/Inventory/Worksheet", "/Inventory/HomeStock/Shipments", "/Inventory/HomeStock/Pending", "/Inventory/HomeStock/Ledger", "/Inventory/Pictures"];
     var inventoryOverviewCurrent = IsActive("/Inventory") && !inventorySubPages.Any(p => IsActive(p));
-    var bookkeepingCurrent = IsActive("/Settlements") || IsActive("/Bookkeeping");
+    var bookkeepingCurrent = IsActive("/Settlements") || IsActive("/Profit") || IsActive("/Bookkeeping");
     var settlementsOverviewCurrent = IsActive("/Settlements") && !IsActive("/Settlements/Deferred");
 
     // The label stays in the markup in rail mode (only visually hidden) so screen readers still read it;
@@ -105,6 +105,7 @@
                         @{ await NavLink("/Settlements/Deferred", "clock", "Deferred by Amazon", IsActive("/Settlements/Deferred"), "nav-sub"); }
                     </details>
                 </div>
+                @{ await NavLink("/Profit/Index", "trending-up", "Profit & Loss", IsActive("/Profit")); }
                 @if (isOperator)
                 {
                     await NavLink("/Bookkeeping/Index", "book", "QuickBooks export", IsActive("/Bookkeeping"));

@@ -1,0 +1,40 @@
+@using System.Globalization
+@using AERai.Web.Application.Profit
+@model (ProfitMetrics Metrics, string Currency)
+@{
+    var m = Model.Metrics;
+    var c = Model.Currency;
+    var en = CultureInfo.InvariantCulture;
+
+    // Where each sale went: every cost and the profit as a share of sales. When costs exceed sales there is no
+    // profit slice and the shares are of the costs instead, so the bar still fills.
+    var parts = new List<(string Key, string Label, decimal Amount)>
+    {
+        ("fees", "Amazon fees", -m.AmazonFees),
+        ("refunds", "Refunds", -m.Refunds),
+        ("ads", "Advertising", -m.Advertising),
+        ("cogs", "Cost of goods", -m.Cogs),
+        ("other", "Other", -m.Other),
+        ("profit", "Profit", m.Profit),
+    }.Where(p => p.Amount > 0).ToList();
+    var whole = parts.Sum(p => p.Amount);
+    double x = 0;
+    string F(double v) => v.ToString("0.###", en);
+}
+@if (whole > 0)
+{
+    <svg class="share profit-share" viewBox="0 0 100 8" preserveAspectRatio="none" role="img" aria-label="Where each sale went">
+        @foreach (var part in parts)
+        {
+            var w = (double)(part.Amount / whole) * 100;
+            <rect class="seg seg-@part.Key" x="@F(x)" y="0" width="@F(w)" height="8"><title>@part.Label: @SettlementFormat.Money(part.Amount, c)</title></rect>
+            x += w;
+        }
+    </svg>
+    <ul class="chart-legend share-legend">
+        @foreach (var part in parts)
+        {
+            <li><span class="legend-dot dot-@part.Key" aria-hidden="true"></span>@part.Label <span class="text-muted-token">@ProfitFormat.Percent(part.Amount / whole)</span></li>
+        }
+    </ul>
+}

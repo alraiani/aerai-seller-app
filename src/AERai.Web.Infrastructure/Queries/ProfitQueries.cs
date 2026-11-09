@@ -11,6 +11,8 @@ namespace AERai.Web.Infrastructure.Queries;
 /// spend, and the settlement views. Added up in SQL wherever possible: a year of ledger lines is far more than a page needs.
 /// </summary>
 /// <remarks>
+/// Unit cost: the latest cost change on or before the order's purchase date; a sale older than the SKU's first cost
+/// takes that first cost, so entering a missing cost fills in past sales while later changes never rewrite them.
 /// Ledger lines are dated by the marketplace's local day (<c>AT TIME ZONE</c>, with the Windows name SQL Server
 /// knows); settlement lines are date-only, stored at midnight UTC, so their date is used as it is, as on the
 /// settlement pages.
@@ -56,13 +58,21 @@ internal sealed class ProfitQueries(AppDbContext dbContext) : IProfitQueries
                 {
                     Day = p.Source == LedgerSource ? EF.Functions.AtTimeZone(p.PostedDate, zone).Date : p.PostedDate.Date,
                     Sku = p.Sku ?? string.Empty,
-                    // The cost in effect on the order's purchase date: the latest change on or before it (a cleared cost is none).
-                    UnitCost = dbContext.ProductCostHistory
-                        .Where(h => h.MarketplaceId == marketplaceId && h.Sku == p.Sku && h.EffectiveFrom <= costDate)
-                        .OrderByDescending(h => h.EffectiveFrom)
-                        .ThenByDescending(h => h.Id)
-                        .Select(h => h.CostOfGoods)
-                        .FirstOrDefault(),
+                    // The cost in effect on the order's purchase date: the latest change on or before it (a cleared cost is
+                    // none). A sale from before the SKU's first cost was entered takes that first cost: there was no other.
+                    UnitCost = dbContext.ProductCostHistory.Any(h => h.MarketplaceId == marketplaceId && h.Sku == p.Sku && h.EffectiveFrom <= costDate)
+                        ? dbContext.ProductCostHistory
+                            .Where(h => h.MarketplaceId == marketplaceId && h.Sku == p.Sku && h.EffectiveFrom <= costDate)
+                            .OrderByDescending(h => h.EffectiveFrom)
+                            .ThenByDescending(h => h.Id)
+                            .Select(h => h.CostOfGoods)
+                            .FirstOrDefault()
+                        : dbContext.ProductCostHistory
+                            .Where(h => h.MarketplaceId == marketplaceId && h.Sku == p.Sku)
+                            .OrderBy(h => h.EffectiveFrom)
+                            .ThenBy(h => h.Id)
+                            .Select(h => h.CostOfGoods)
+                            .FirstOrDefault(),
                     p.Units,
                 })
             .GroupBy(p => new { p.Day, p.Sku, p.UnitCost })
@@ -92,12 +102,19 @@ internal sealed class ProfitQueries(AppDbContext dbContext) : IProfitQueries
                     p.Amount,
                     ItemPrice = item == null ? (decimal?)null : item.ItemPrice,
                     ItemQuantity = item == null ? (int?)null : item.Quantity,
-                    UnitCost = dbContext.ProductCostHistory
-                        .Where(h => h.MarketplaceId == marketplaceId && h.Sku == p.Sku && h.EffectiveFrom <= costDate)
-                        .OrderByDescending(h => h.EffectiveFrom)
-                        .ThenByDescending(h => h.Id)
-                        .Select(h => h.CostOfGoods)
-                        .FirstOrDefault(),
+                    UnitCost = dbContext.ProductCostHistory.Any(h => h.MarketplaceId == marketplaceId && h.Sku == p.Sku && h.EffectiveFrom <= costDate)
+                        ? dbContext.ProductCostHistory
+                            .Where(h => h.MarketplaceId == marketplaceId && h.Sku == p.Sku && h.EffectiveFrom <= costDate)
+                            .OrderByDescending(h => h.EffectiveFrom)
+                            .ThenByDescending(h => h.Id)
+                            .Select(h => h.CostOfGoods)
+                            .FirstOrDefault()
+                        : dbContext.ProductCostHistory
+                            .Where(h => h.MarketplaceId == marketplaceId && h.Sku == p.Sku)
+                            .OrderBy(h => h.EffectiveFrom)
+                            .ThenBy(h => h.Id)
+                            .Select(h => h.CostOfGoods)
+                            .FirstOrDefault(),
                 })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

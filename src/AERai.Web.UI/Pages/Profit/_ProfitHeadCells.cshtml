@@ -1,0 +1,14 @@
+@using AERai.Web.Application.Profit
+@model AERai.Web.UI.Pages.Profit.IndexModel
+@* The sortable figure headers, in the order _ProfitMetricCells writes the cells. *@
+<th class="text-end"><a href="@Model.SortLink(ProfitSort.Units)" class="sort-link">Units @Model.SortArrow(ProfitSort.Units)</a></th>
+<th class="text-end"><a href="@Model.SortLink(ProfitSort.Sales)" class="sort-link">Sales @Model.SortArrow(ProfitSort.Sales)</a></th>
+<th class="text-end"><a href="@Model.SortLink(ProfitSort.Refunds)" class="sort-link">Refunds @Model.SortArrow(ProfitSort.Refunds)</a> <partial name="_Tip" model='"What was given back to customers, net of the fees Amazon returned with it."' /></th>
+<th class="text-end"><a href="@Model.SortLink(ProfitSort.AmazonFees)" class="sort-link">Amazon fees @Model.SortArrow(ProfitSort.AmazonFees)</a> <partial name="_Tip" model='"Referral fees, FBA fulfilment and storage fees, and shipping."' /></th>
+<th class="text-end d-none d-lg-table-cell"><a href="@Model.SortLink(ProfitSort.Other)" class="sort-link">Other @Model.SortArrow(ProfitSort.Other)</a> <partial name="_Tip" model='"Promotions, closing fees, and anything else Amazon charged (shown on wide screens)."' /></th>
+<th class="text-end"><a href="@Model.SortLink(ProfitSort.Advertising)" class="sort-link">Advertising @Model.SortArrow(ProfitSort.Advertising)</a></th>
+<th class="text-end"><a href="@Model.SortLink(ProfitSort.Cogs)" class="sort-link">Cost of goods @Model.SortArrow(ProfitSort.Cogs)</a></th>
+<th class="text-end">
+    <a href="@Model.SortLink(ProfitSort.Profit)" class="sort-link">Profit @Model.SortArrow(ProfitSort.Profit)</a>
+    <div><a href="@Model.SortLink(ProfitSort.Margin)" class="sort-link">Margin @Model.SortArrow(ProfitSort.Margin)</a></div>
+</th>

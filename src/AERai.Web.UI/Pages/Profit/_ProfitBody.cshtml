@@ -1,0 +1,488 @@
+@using System.Globalization
+@using AERai.Web.Application.Profit
+@using AERai.Web.UI.Pages.Profit
+@model AERai.Web.UI.Pages.Profit.IndexModel
+@{
+    var report = Model.Report;
+    var t = report.Totals;
+    var c = Model.Marketplace.Currency;
+    var en = CultureInfo.InvariantCulture;
+    var range = report.From == report.To ? report.From.ToString("MMM d, yyyy", en) : $"{report.From.ToString("MMM d", en)} – {report.To.ToString("MMM d, yyyy", en)}";
+    var skuCount = report.Skus.Count();
+    var coverage = report.Coverage;
+    var ranked = report.Skus.Where(s => s.Metrics.Sales != 0 || s.Metrics.Profit != 0).OrderByDescending(s => s.Metrics.Profit).ToList();
+    var best = ranked.Where(s => s.Metrics.Profit > 0).Take(5).ToList();
+    var worst = ranked.Where(s => s.Metrics.Profit < 0).OrderBy(s => s.Metrics.Profit).Take(5).ToList();
+    var rankMax = ranked.Count == 0 ? 0m : ranked.Max(s => Math.Abs(s.Metrics.Profit));
+    var subject = Model.IsFiltered ? "the listed SKUs" : "all SKUs";
+}
+
+@* ---------- Headline figures for what the range and filters select ---------- *@
+<div class="row g-3 mb-3">
+    <div class="col-6 col-xl-4 col-xxl-2">
+        <a class="card tile h-100" href="@Model.SortLink(ProfitSort.Sales)">
+            <div class="kpi">
+                <div class="kpi-label">Sales <partial name="_Tip" model='"Product charges and taxes Amazon posted on these days (collected and withheld tax cancel out), and reimbursements Amazon paid. Click to sort by sales."' /></div>
+                <div class="kpi-value">@SettlementFormat.Money(t.Sales, c)</div>
+                <div class="kpi-foot">@ProfitFormat.Count(t.Units) unit@(t.Units == 1 ? "" : "s") sold</div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-4 col-xxl-2">
+        <a class="card tile h-100" href="@Model.SortLink(ProfitSort.AmazonFees)">
+            <div class="kpi">
+                <div class="kpi-label">Fees &amp; refunds <partial name="_Tip" model='"Amazon’s referral, FBA, and shipping fees, plus refunds (net of the fees Amazon gave back). Click to sort by fees."' /></div>
+                <div class="kpi-value">@SettlementFormat.Money(t.AmazonFees + t.Refunds, c)</div>
+                <div class="kpi-foot">@SettlementFormat.Money(t.Refunds, c) refunded</div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-4 col-xxl-2">
+        <a class="card tile h-100" href="@Model.SortLink(ProfitSort.Advertising)">
+            <div class="kpi">
+                <div class="kpi-label">Advertising <partial name="_Tip" model='"Sponsored Products spend from the Amazon Ads API, per SKU and day. Before spend was synced, the ad charges Amazon billed are spread across SKUs by sales. Click to sort by advertising."' /></div>
+                <div class="kpi-value">@SettlementFormat.Money(t.Advertising, c)</div>
+                <div class="kpi-foot">@(t.Sales > 0 ? $"{ProfitFormat.Percent(-t.Advertising / t.Sales)} of sales" : "no sales")</div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-4 col-xxl-2">
+        <a class="card tile h-100 @(report.CostMissingSkus > 0 ? "tile-bad" : "")" href="@(report.CostMissingSkus > 0 ? Model.LinkWith(("show", ProfitShow.CostMissing.ToString())) : Model.SortLink(ProfitSort.Cogs))"
+           aria-current="@(Model.Show == ProfitShow.CostMissing ? "true" : null)">
+            <div class="kpi">
+                <div class="kpi-label">Cost of goods <partial name="_Tip" model='"Each unit sold at the cost in effect on its order date (Products & COGS keeps the history), less the cost of refunded units, taken to be back in stock."' /></div>
+                <div class="kpi-value">@SettlementFormat.Money(t.Cogs, c)</div>
+                <div class="kpi-foot">
+                    @if (report.CostMissingSkus > 0)
+                    {
+                        <span class="text-warn">@report.CostMissingSkus SKU@(report.CostMissingSkus == 1 ? "" : "s") missing a cost</span>
+                    }
+                    else
+                    {
+                        @($"{SettlementFormat.Money(t.CostReturned, c)} back for refunds")
+                    }
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-4 col-xxl-2">
+        <a class="card tile h-100" href="@Model.SortLink(ProfitSort.Profit)">
+            <div class="kpi">
+                <div class="kpi-label">Profit <partial name="_Tip" model='"Sales, refunds, Amazon’s fees, other expenses, advertising, and cost of goods added up. Click to sort by profit."' /></div>
+                <div class="kpi-value @ProfitFormat.ProfitClass(t.Profit)">@SettlementFormat.Money(t.Profit, c)</div>
+                <div class="kpi-foot">@ProfitFormat.Margin(t.Margin) margin</div>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 col-xl-4 col-xxl-2">
+        <a class="card tile h-100" href="@Url.Page("/Settlements/Deferred")">
+            <div class="kpi">
+                <div class="kpi-label">Held by Amazon <partial name="_Tip" model='"Of these amounts, what Amazon still holds back under its delivery-date policy. It counts in profit now and is paid out in a later settlement. Click for Deferred by Amazon."' /></div>
+                <div class="kpi-value">@SettlementFormat.Money(t.Held, c)</div>
+                <div class="kpi-foot">not paid out yet</div>
+            </div>
+        </a>
+    </div>
+</div>
+
+@* ---------- Range, family, search, and options ---------- *@
+<div class="list-toolbar mb-2">
+    <form method="get" class="filters" data-autosubmit-form role="search">
+        @if (Model.Sort != ProfitSort.Profit)
+        {
+            <input type="hidden" name="sort" value="@Model.Sort" />
+        }
+        @if (Model.Descending)
+        {
+            <input type="hidden" name="desc" value="true" />
+        }
+        @if (Model.View != ProfitView.Products)
+        {
+            <input type="hidden" name="view" value="@Model.View" />
+        }
+        <div class="search-box">
+            <partial name="_Icon" model='"search"' />
+            <input type="search" name="q" value="@Model.Search" class="form-control form-control-sm" placeholder="Search SKU, ASIN, title, family…" aria-label="Search SKUs" />
+        </div>
+        <select name="family" class="form-select form-select-sm" aria-label="Family">
+            <option value="">All families</option>
+            @foreach (var f in Model.Families)
+            {
+                <option value="@f.Id" selected="@(Model.FamilyId == f.Id)">@f.Name</option>
+            }
+            <option value="@ProfitFilter.NoFamily" selected="@(Model.FamilyId == ProfitFilter.NoFamily)">No family</option>
+        </select>
+        <select name="show" class="form-select form-select-sm" aria-label="Which SKUs">
+            <option value="" selected="@(Model.Show == ProfitShow.All)">All SKUs</option>
+            <option value="@ProfitShow.LosingMoney" selected="@(Model.Show == ProfitShow.LosingMoney)">Losing money</option>
+            <option value="@ProfitShow.CostMissing" selected="@(Model.Show == ProfitShow.CostMissing)">Cost missing</option>
+        </select>
+        <label class="filter-label" for="pnl-from">Posted</label>
+        <input type="date" id="pnl-from" name="from" value="@IndexModel.Format(report.From)" max="@IndexModel.Format(Model.Today)" class="form-control form-control-sm date-filter" aria-label="Posted from" data-autosubmit />
+        <span class="text-muted-token" aria-hidden="true">–</span>
+        <input type="date" name="to" value="@IndexModel.Format(report.To)" max="@IndexModel.Format(Model.Today)" class="form-control form-control-sm date-filter" aria-label="Posted to" data-autosubmit />
+        <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="pnl-loaded" name="loaded" value="true" checked="@Model.FullyLoaded" data-autosubmit />
+            <label class="form-check-label" for="pnl-loaded">Fully loaded</label>
+            <partial name="_Tip" model='"Spread the amounts Amazon charges the account rather than a product (subscription, storage and other account fees) across each month’s SKUs by their sales, so each SKU’s profit carries its share. Totals don’t change."' />
+        </div>
+        <button type="submit" class="btn btn-sm btn-soft js-hide">Apply</button>
+        @if (Model.IsFiltered)
+        {
+            <a href="@Model.LinkWith(("q", null), ("family", null), ("show", null))" class="btn btn-sm btn-link">Clear filters</a>
+        }
+    </form>
+    <nav class="segmented segmented-wrap" aria-label="Range">
+        @foreach (var (key, label) in IndexModel.Presets)
+        {
+            <a href="@Model.PresetLink(key)" class="@(Model.IsPreset(key) ? "active" : "")" aria-current="@(Model.IsPreset(key) ? "true" : null)">@label</a>
+        }
+    </nav>
+</div>
+
+<p class="small text-muted-token mb-3">
+    @Model.Marketplace.Name · @range · each amount on the day Amazon posted it, in @c.
+    @if (coverage.LedgerStartsOn is { } ledgerDay)
+    {
+        if (ledgerDay > report.From)
+        {
+            <span class="has-detail" title="The transaction ledger (Tools → Amazon sync) is read from @ledgerDay.ToString("MMM d, yyyy", en). Earlier days come from settlement lines, which only hold what Amazon has already paid out.">Ledger from @ledgerDay.ToString("MMM d", en); earlier days from settlements.</span>
+        }
+    }
+    else
+    {
+        <span class="text-warn has-detail" title="Turn on the Transaction ledger sync (Tools → Amazon sync) and backfill it: it lists every sale, refund, and fee the day Amazon posts it, held or paid. Until then figures come from settlement lines, which only hold what Amazon has paid out.">From settlements only: the transaction ledger isn’t synced yet.</span>
+    }
+    @if (coverage.AdSpendStartsOn is { } spendDay && spendDay > report.From)
+    {
+        <span class="has-detail" title="Ads API spend is synced from @spendDay.ToString("MMM d, yyyy", en). Before that, the ad charges Amazon billed are spread across SKUs by sales.">Ad spend from @spendDay.ToString("MMM d", en).</span>
+    }
+    else if (coverage.AdSpendStartsOn is null)
+    {
+        <span class="has-detail" title="No Ads API spend is synced, so advertising is the ad charges Amazon billed, spread across SKUs by sales.">Advertising from billed charges.</span>
+    }
+</p>
+
+<nav class="segmented mb-3" aria-label="View">
+    <a href="@Model.ViewLink(ProfitView.Products)" class="@(Model.View == ProfitView.Products ? "active" : "")" aria-current="@(Model.View == ProfitView.Products ? "true" : null)">Products</a>
+    <a href="@Model.ViewLink(ProfitView.Months)" class="@(Model.View == ProfitView.Months ? "active" : "")" aria-current="@(Model.View == ProfitView.Months ? "true" : null)">@(report.Granularity == ProfitGranularity.Month ? "Months" : "Weeks")</a>
+    <a href="@Model.ViewLink(ProfitView.Reconciliation)" class="@(Model.View == ProfitView.Reconciliation ? "active" : "")" aria-current="@(Model.View == ProfitView.Reconciliation ? "true" : null)">Reconciliation</a>
+</nav>
+
+@if (Model.View != ProfitView.Reconciliation)
+{
+    @* ---------- Charts ---------- *@
+    <div class="row g-3 mb-3">
+        <div class="col-xl-8">
+            <div class="card h-100">
+                <div class="card-toolbar">
+                    <h2 class="card-toolbar-title">Sales and profit by @(report.Granularity == ProfitGranularity.Month ? "month" : "week")</h2>
+                </div>
+                <div class="card-body">
+                    <partial name="_ProfitChart" model="new ProfitChartModel(report.Periods, report.Granularity, c, subject)" />
+                    <h3 class="h6 mt-3 mb-2">Where each sale went</h3>
+                    <partial name="_ProfitShare" model="(t, c)" />
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card h-100">
+                <div class="card-toolbar">
+                    <h2 class="card-toolbar-title">Best and worst SKUs</h2>
+                </div>
+                <div class="card-body">
+                    @if (ranked.Count == 0)
+                    {
+                        <p class="text-muted-token small mb-0">No SKU has sales or profit in this range.</p>
+                    }
+                    else
+                    {
+                        foreach (var (title, list) in new[] { ("Most profit", best), ("Losing money", worst) })
+                        {
+                            if (list.Count == 0)
+                            {
+                                continue;
+                            }
+
+                            <h3 class="h6 mb-2">@title</h3>
+                            <ol class="rank-list mb-3">
+                                @foreach (var s in list)
+                                {
+                                    var pct = rankMax == 0 ? 0 : (double)(Math.Abs(s.Metrics.Profit) / rankMax) * 100;
+                                    <li>
+                                        <div class="rank-head">
+                                            <a href="@Model.SkuLink(s.Product.Sku)" class="rank-sku">@s.Product.Sku</a>
+                                            <span class="money @ProfitFormat.ProfitClass(s.Metrics.Profit)">@SettlementFormat.Money(s.Metrics.Profit, c)</span>
+                                        </div>
+                                        <svg class="share" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+                                            <rect class="track" x="0" y="0" width="100" height="6" />
+                                            <rect class="@(s.Metrics.Profit < 0 ? "fill-loss" : "fill-profit")" x="0" y="0" width="@pct.ToString("0.#", en)" height="6" />
+                                        </svg>
+                                    </li>
+                                }
+                            </ol>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (Model.View == ProfitView.Products)
+{
+    @* ---------- One group per family, a row per SKU ---------- *@
+    <div class="card">
+        <div class="card-toolbar">
+            <span class="card-toolbar-title list-count">
+                <span class="text-nowrap">@skuCount.ToString("N0", en) SKU@(skuCount == 1 ? "" : "s")</span>
+                <span class="text-muted-token fw-normal">@(Model.FullyLoaded ? "· fully loaded" : "")</span>
+                <partial name="_Tip" model='"Every SKU with an amount posted on these days, by product family. Expand a family to see its SKUs; open a SKU for its months. Costs show as negative amounts."' />
+            </span>
+            @if (report.Families.Count > 0)
+            {
+                <div class="card-toolbar-group">
+                    <span class="expand-controls">
+                        <button type="button" class="btn btn-sm btn-soft" data-expand-all="true">Expand all</button>
+                        <button type="button" class="btn btn-sm btn-soft" data-expand-all="false">Collapse all</button>
+                    </span>
+                </div>
+            }
+        </div>
+        @if (report.Families.Count == 0 && report.Unassigned.Count == 0)
+        {
+            <div class="empty-state">
+                @if (Model.IsFiltered)
+                {
+                    <div class="empty-title">No SKUs match</div>
+                    <div class="empty-detail">Try a different search, family, or choice of SKUs.</div>
+                    <a href="@Model.LinkWith(("q", null), ("family", null), ("show", null))" class="btn btn-sm btn-soft">Clear filters</a>
+                }
+                else
+                {
+                    <div class="empty-title">Nothing posted in this range</div>
+                    <div class="empty-detail">Choose a longer range, or sync the transaction ledger and settlements for @Model.Marketplace.Name (Tools → Amazon sync).</div>
+                    <a asp-page="/Tools/Schedules/Index" class="btn btn-sm btn-soft"><partial name="_Icon" model='"plug"' /> Amazon sync</a>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table data-table group-table pnl-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="toggle-col"><span class="visually-hidden">Expand</span></th>
+                            <th class="product-col"><a href="@Model.SortLink(ProfitSort.Sku)" class="sort-link">Family / SKU @Model.SortArrow(ProfitSort.Sku)</a></th>
+                            <partial name="_ProfitHeadCells" model="Model" />
+                        </tr>
+                        <tr class="totals-row">
+                            <td></td>
+                            <th scope="row" class="product-col fw-semibold">All listed</th>
+                            <partial name="_ProfitMetricCells" model="(t, c, true)" />
+                        </tr>
+                    </thead>
+                    @for (var i = 0; i < report.Families.Count; i++)
+                    {
+                        var group = report.Families[i];
+                        var groupId = $"pnl-family-{i}";
+                        var name = group.Family ?? "No family";
+                        <tbody class="order-group is-expanded" id="@groupId">
+                            <tr class="group-row">
+                                <td class="toggle-col">
+                                    <button type="button" class="btn btn-sm btn-icon group-toggle" data-expand-row aria-expanded="true" aria-controls="@groupId" aria-label="Show the SKUs of @name">
+                                        <partial name="_Icon" model='"chevron-down"' />
+                                    </button>
+                                </td>
+                                <td class="product-col">
+                                    <div class="fw-semibold">@name</div>
+                                    <div class="cell-sub">@group.Skus.Count.ToString("N0", en) SKU@(group.Skus.Count == 1 ? "" : "s")</div>
+                                </td>
+                                <partial name="_ProfitMetricCells" model="(group.Totals, c, true)" />
+                            </tr>
+                            @foreach (var sku in group.Skus)
+                            {
+                                var p = sku.Product;
+                                <tr class="group-child">
+                                    <td></td>
+                                    <td class="product-col">
+                                        <partial name="_ProductCell" model="new ProductCellModel(p.Sku, p.Asin, p.Title, null, p.ImagePath, Model.SkuLink(p.Sku))" />
+                                    </td>
+                                    <partial name="_ProfitMetricCells" model="(sku.Metrics, c, false)" />
+                                </tr>
+                            }
+                        </tbody>
+                    }
+                    @if (report.Unassigned.Count > 0)
+                    {
+                        <tbody class="order-group is-expanded" id="pnl-unassigned">
+                            <tr class="group-row">
+                                <td class="toggle-col">
+                                    <button type="button" class="btn btn-sm btn-icon group-toggle" data-expand-row aria-expanded="true" aria-controls="pnl-unassigned" aria-label="Show the amounts not tied to a SKU">
+                                        <partial name="_Icon" model='"chevron-down"' />
+                                    </button>
+                                </td>
+                                <td class="product-col"><div class="fw-semibold">Not tied to a SKU</div></td>
+                                <partial name="_ProfitMetricCells" model="(ProfitMetrics.Sum(report.Unassigned.Select(u => u.Metrics)), c, true)" />
+                            </tr>
+                            @foreach (var row in report.Unassigned)
+                            {
+                                <tr class="group-child">
+                                    <td></td>
+                                    <td class="product-col"><span class="has-detail" title="@ProfitFormat.UnassignedTip(row.Kind)">@ProfitFormat.UnassignedLabel(row.Kind)</span></td>
+                                    <partial name="_ProfitMetricCells" model="(row.Metrics, c, false)" />
+                                </tr>
+                            }
+                        </tbody>
+                    }
+                </table>
+            </div>
+        }
+    </div>
+}
+else if (Model.View == ProfitView.Months)
+{
+    @* ---------- The same figures by period ---------- *@
+    <div class="card">
+        <div class="card-toolbar">
+            <span class="card-toolbar-title list-count">
+                <span class="text-nowrap">By @(report.Granularity == ProfitGranularity.Month ? "month" : "week")</span>
+                <span class="text-muted-token fw-normal">· @subject</span>
+                <partial name="_Tip" model='"Each amount in the month (or, for ranges up to two months, the week starting Monday) Amazon posted it, in the marketplace’s local time."' />
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="table data-table pnl-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="product-col">@(report.Granularity == ProfitGranularity.Month ? "Month" : "Week")</th>
+                        <th class="text-end">Units</th>
+                        <th class="text-end">Sales</th>
+                        <th class="text-end">Refunds</th>
+                        <th class="text-end">Amazon fees</th>
+                        <th class="text-end d-none d-lg-table-cell">Other</th>
+                        <th class="text-end">Advertising</th>
+                        <th class="text-end">Cost of goods</th>
+                        <th class="text-end">Profit</th>
+                    </tr>
+                    <tr class="totals-row">
+                        <th scope="row" class="product-col fw-semibold">All listed</th>
+                        <partial name="_ProfitMetricCells" model="(t, c, true)" />
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var period in report.Periods.Reverse())
+                    {
+                        <tr>
+                            <th scope="row" class="product-col fw-normal">@ProfitFormat.Period(period.Start, report.Granularity, full: true)</th>
+                            <partial name="_ProfitMetricCells" model="(period.Metrics, c, false)" />
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+else if (Model.Reconciliation is { } rec)
+{
+    var b = rec.Bridge;
+    <div class="row g-3">
+        <div class="col-xl-5">
+            <div class="card h-100">
+                <div class="card-toolbar">
+                    <h2 class="card-toolbar-title">From payouts to profit</h2>
+                    <partial name="_Tip" model='"How what Amazon paid in settlements whose period ends in this range becomes the profit made in it. Every line adds up; differences in timing are what the two views exist to show."' />
+                </div>
+                <dl class="bridge-list mb-0">
+                    <div><dt>Payouts <span class="text-muted-token small">(@rec.Settlements.Count settlement@(rec.Settlements.Count == 1 ? "" : "s"))</span></dt><dd class="money">@SettlementFormat.Money(b.Payouts, c)</dd></div>
+                    <div><dt class="has-detail" title="Amazon’s account-level reserve held back from or released into these payouts. It moves money between payouts and is never profit.">Less the reserve</dt><dd class="money">@SettlementFormat.Money(-b.Reserve, c)</dd></div>
+                    <div><dt class="has-detail" title="Amounts posted on these days but paid outside these settlements (still held, or in a settlement ending later), less those paid in them but posted before the range.">Timing</dt><dd class="money">@SettlementFormat.Money(b.Timing, c)</dd></div>
+                    <div><dt class="has-detail" title="Profit counts Ads API spend instead of the ad charges Amazon billed (which pay for spend later). This is spend minus those charges.">Ad spend instead of ad charges</dt><dd class="money">@SettlementFormat.Money(b.AdvertisingAdjustment, c)</dd></div>
+                    <div><dt>Cost of goods</dt><dd class="money">@SettlementFormat.Money(b.Cogs, c)</dd></div>
+                    <div class="bridge-total"><dt>Profit</dt><dd class="money @ProfitFormat.ProfitClass(b.Profit)">@SettlementFormat.Money(b.Profit, c)</dd></div>
+                </dl>
+            </div>
+        </div>
+        <div class="col-xl-7">
+            <div class="card h-100">
+                <div class="card-toolbar">
+                    <h2 class="card-toolbar-title">Settlements against the ledger</h2>
+                    <partial name="_Tip" model='"Each settlement whose period ends in this range, next to the ledger transactions Amazon tagged with it. They tie when they agree to the cent. Settlements that began before the ledger can’t be checked."' />
+                </div>
+                @if (rec.Settlements.Count == 0)
+                {
+                    <div class="empty-state">
+                        <div class="empty-title">No settlements end in this range</div>
+                        <div class="empty-detail">Settlements close about every 14 days; choose a longer range.</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table data-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Settlement</th>
+                                    <th class="text-end">Paid</th>
+                                    <th class="text-end">Ledger</th>
+                                    <th class="text-end">Difference</th>
+                                    <th>Check</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var s in rec.Settlements)
+                                {
+                                    var (css, label) = ProfitFormat.TiePill(s.State);
+                                    <tr>
+                                        <td>
+                                            <a asp-page="/Settlements/Summary" asp-route-id="@s.Row.SettlementId">@s.Row.SettlementId</a>
+                                            <div class="cell-sub">@SettlementFormat.Period(s.Row.PeriodStart, s.Row.PeriodEnd, TimeZoneInfo.FindSystemTimeZoneById(Model.Marketplace.TimeZoneId))</div>
+                                        </td>
+                                        <td class="text-end money">@SettlementFormat.Money(s.Row.Net, c)</td>
+                                        <td class="text-end money">
+                                            @(s.Row.LedgerTotal is { } lt ? SettlementFormat.Money(lt, c) : "—")
+                                            <div class="cell-sub">@ProfitFormat.Count(s.Row.LedgerTransactions) transaction@(s.Row.LedgerTransactions == 1 ? "" : "s")</div>
+                                        </td>
+                                        <td class="text-end money">@(s.Difference is { } d ? SettlementFormat.Money(d, c) : "—")</td>
+                                        <td><span class="@css">@label</span></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="card">
+                <div class="card-toolbar">
+                    <h2 class="card-toolbar-title">Ledger amounts counted as other expenses</h2>
+                    <partial name="_Tip" model='"Kinds of ledger amounts the profit rules didn’t recognize as sales, refunds, or Amazon’s fees, so they count as other expenses. A new kind of fee shows up here instead of being lost."' />
+                </div>
+                @if (rec.OtherExpenseKinds.Count == 0)
+                {
+                    <p class="text-muted-token small px-3 py-3 mb-0">None in this range@(rec.LedgerStartsOn is null ? " (the ledger isn’t synced yet)" : "").</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table data-table align-middle mb-0">
+                            <thead><tr><th>Transaction type</th><th>Breakdown</th><th class="text-end">Lines</th><th class="text-end">Amount</th></tr></thead>
+                            <tbody>
+                                @foreach (var k in rec.OtherExpenseKinds)
+                                {
+                                    <tr>
+                                        <td>@(k.TransactionType ?? "—")</td>
+                                        <td><code>@k.Detail</code></td>
+                                        <td class="text-end money">@ProfitFormat.Count(k.Lines)</td>
+                                        <td class="text-end money">@SettlementFormat.Money(k.Amount, c)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}

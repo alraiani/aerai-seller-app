@@ -1,0 +1,72 @@
+@using System.Globalization
+@using AERai.Web.Application.Profit
+@model ProfitChartModel
+@{
+    var periods = Model.Periods;
+    var c = Model.Currency;
+    var en = CultureInfo.InvariantCulture;
+    string F(double v) => v.ToString("0.#", en);
+
+    // Two bars per period, sales and profit, on one scale; a loss hangs below the zero line. The plot is split
+    // between gains and losses in proportion, so a small loss doesn't squash the chart.
+    const double width = 720, top = 28, plot = 180, bottom = 24;
+    var height = top + plot + bottom;
+    var high = periods.Count == 0 ? 0m : periods.Max(p => Math.Max(p.Metrics.Sales, p.Metrics.Profit));
+    var low = periods.Count == 0 ? 0m : periods.Min(p => Math.Min(p.Metrics.Profit, 0m));
+    var span = (double)(high - low);
+    var zero = span <= 0 ? top + plot : top + plot * (double)high / span;
+    double Y(decimal amount) => span <= 0 ? zero : zero - (double)amount / span * plot;
+    var slot = periods.Count == 0 ? 0d : width / periods.Count;
+    var bar = Math.Min(slot * 0.32, 36);
+}
+@if (periods.Count == 0 || span <= 0)
+{
+    <div class="empty-state py-4">
+        <div class="empty-title">Nothing to chart yet</div>
+        <div class="empty-detail">There are no amounts in this range.</div>
+    </div>
+}
+else
+{
+    <svg class="chart profit-chart" viewBox="0 0 @F(width) @F(height)" role="img" aria-label="Sales and profit by @(Model.Granularity == ProfitGranularity.Month ? "month" : "week") for @Model.Subject">
+        <line class="grid" x1="0" x2="@F(width)" y1="@F(top)" y2="@F(top)" />
+        <line class="grid zero" x1="0" x2="@F(width)" y1="@F(zero)" y2="@F(zero)" />
+        @for (var i = 0; i < periods.Count; i++)
+        {
+            var p = periods[i];
+            var m = p.Metrics;
+            var center = i * slot + slot / 2;
+            var label = ProfitFormat.Period(p.Start, Model.Granularity, full: true);
+            var salesTop = Y(m.Sales);
+            <rect class="bar-sales" x="@F(center - bar - 1)" y="@F(salesTop)" width="@F(bar)" height="@F(Math.Max(zero - salesTop, 0))" rx="2">
+                <title>@label sales: @SettlementFormat.Money(m.Sales, c)</title>
+            </rect>
+            var profitEdge = Y(m.Profit);
+            <rect class="@(m.Profit < 0 ? "bar-loss" : "bar-profit")" x="@F(center + 1)" y="@F(Math.Min(profitEdge, zero))" width="@F(bar)" height="@F(Math.Max(Math.Abs(zero - profitEdge), m.Profit == 0 ? 0 : 1))" rx="2">
+                <title>@label profit: @SettlementFormat.Money(m.Profit, c) (@ProfitFormat.Margin(m.Margin))</title>
+            </rect>
+            if (m.Profit != 0 && slot >= 60)
+            {
+                @:<text class="bar-value" x="@F(center + 1 + bar / 2)" y="@F(m.Profit < 0 ? zero - 5 : profitEdge - 5)" text-anchor="middle">@DashboardFormat.MoneyCompact(m.Profit)</text>
+            }
+            @* Razor reserves <text>, so SVG text elements are emitted as literal markup lines. *@
+            @:<text class="axis" x="@F(center)" y="@F(height - 6)" text-anchor="middle">@ProfitFormat.Period(p.Start, Model.Granularity, full: false)</text>
+        }
+    </svg>
+    <ul class="chart-legend" aria-hidden="true">
+        <li><span class="legend-dot dot-sales"></span>Sales</li>
+        <li><span class="legend-dot dot-profit"></span>Profit</li>
+        <li><span class="legend-dot dot-loss"></span>Loss</li>
+    </ul>
+    @* The same numbers as a table for screen readers; the bars' hover titles reach neither keyboard nor touch. *@
+    <table class="visually-hidden">
+        <caption>Sales and profit by @(Model.Granularity == ProfitGranularity.Month ? "month" : "week")</caption>
+        <thead><tr><th scope="col">Period</th><th scope="col">Sales</th><th scope="col">Profit</th><th scope="col">Margin</th></tr></thead>
+        <tbody>
+            @foreach (var p in periods)
+            {
+                <tr><th scope="row">@ProfitFormat.Period(p.Start, Model.Granularity, full: true)</th><td>@SettlementFormat.Money(p.Metrics.Sales, c)</td><td>@SettlementFormat.Money(p.Metrics.Profit, c)</td><td>@ProfitFormat.Margin(p.Metrics.Margin)</td></tr>
+            }
+        </tbody>
+    </table>
+}
