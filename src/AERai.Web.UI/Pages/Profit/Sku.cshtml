@@ -1,0 +1,114 @@
+@page "{sku}"
+@using System.Globalization
+@using AERai.Web.Application.Profit
+@model AERai.Web.UI.Pages.Profit.SkuModel
+@{
+    ViewData["Title"] = $"Profit & loss · {Model.Sku}";
+    var en = CultureInfo.InvariantCulture;
+    var c = Model.Marketplace.Currency;
+    var range = $"{Model.Range.From.ToString("MMM d", en)} – {Model.Range.To.ToString("MMM d, yyyy", en)}";
+}
+<nav class="crumbs" aria-label="Breadcrumb">
+    <a href="@Model.BackLink()">Profit &amp; loss</a>
+    <span aria-hidden="true">/</span>
+    <span>@Model.Sku</span>
+</nav>
+
+@if (Model.Report is not { } report)
+{
+    <div class="card">
+        <div class="empty-state">
+            <div class="empty-title">Nothing posted for @Model.Sku</div>
+            <div class="empty-detail">No sale, refund, fee, or ad spend for this SKU in @Model.Marketplace.Name on @range.</div>
+            <a href="@Model.BackLink()" class="btn btn-sm btn-soft">Back to profit &amp; loss</a>
+        </div>
+    </div>
+}
+else
+{
+    var p = report.Sku.Product;
+    var m = report.Sku.Metrics;
+    <div class="card mb-3">
+        <div class="card-body d-flex flex-wrap gap-3 align-items-center justify-content-between">
+            <partial name="_ProductCell" model="new ProductCellModel(p.Sku, p.Asin, p.Title, p.Family, p.ImagePath, null)" />
+            <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-sm btn-soft" asp-page="/Orders/Index" asp-route-q="@p.Sku"><partial name="_Icon" model='"cart"' /> Orders</a>
+                <a class="btn btn-sm btn-soft" asp-page="/Settlements/Index" asp-route-q="@p.Sku"><partial name="_Icon" model='"wallet"' /> Settlements</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        @foreach (var (label, amount, foot) in new[]
+        {
+            ("Sales", m.Sales, $"{ProfitFormat.Count(m.Units)} units sold"),
+            ("Fees & refunds", m.AmazonFees + m.Refunds, $"{ProfitFormat.Count(m.RefundedUnits)} units refunded"),
+            ("Advertising", m.Advertising, report.Sku.BilledAdvertising ? "partly billed charges" : "Ads API spend"),
+            ("Cost of goods", m.Cogs, m.CostMissingUnits > 0 ? $"{ProfitFormat.Count(m.CostMissingUnits)} units missing a cost" : $"{SettlementFormat.Money(m.CostReturned, c)} back for refunds"),
+        })
+        {
+            <div class="col-6 col-xl">
+                <div class="card tile h-100">
+                    <div class="kpi">
+                        <div class="kpi-label">@label</div>
+                        <div class="kpi-value">@SettlementFormat.Money(amount, c)</div>
+                        <div class="kpi-foot">@foot</div>
+                    </div>
+                </div>
+            </div>
+        }
+        <div class="col-6 col-xl">
+            <div class="card tile h-100">
+                <div class="kpi">
+                    <div class="kpi-label">Profit</div>
+                    <div class="kpi-value @ProfitFormat.ProfitClass(m.Profit)">@SettlementFormat.Money(m.Profit, c)</div>
+                    <div class="kpi-foot">@ProfitFormat.Margin(m.Margin) margin</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-toolbar">
+            <h2 class="card-toolbar-title">Sales and profit by @(report.Granularity == ProfitGranularity.Month ? "month" : "week") <span class="text-muted-token fw-normal">· @range@(Model.FullyLoaded ? " · fully loaded" : "")</span></h2>
+        </div>
+        <div class="card-body">
+            <partial name="_ProfitChart" model="new ProfitChartModel(report.Periods, report.Granularity, c, p.Sku)" />
+            <h3 class="h6 mt-3 mb-2">Where each sale went</h3>
+            <partial name="_ProfitShare" model="(m, c)" />
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table data-table pnl-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="product-col">@(report.Granularity == ProfitGranularity.Month ? "Month" : "Week")</th>
+                        <th class="text-end">Units</th>
+                        <th class="text-end">Sales</th>
+                        <th class="text-end">Refunds</th>
+                        <th class="text-end">Amazon fees</th>
+                        <th class="text-end d-none d-lg-table-cell">Other</th>
+                        <th class="text-end">Advertising</th>
+                        <th class="text-end">Cost of goods</th>
+                        <th class="text-end">Profit</th>
+                    </tr>
+                    <tr class="totals-row">
+                        <th scope="row" class="product-col fw-semibold">All</th>
+                        <partial name="_ProfitMetricCells" model="(m, c, true)" />
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var period in report.Periods.Reverse())
+                    {
+                        <tr>
+                            <th scope="row" class="product-col fw-normal">@ProfitFormat.Period(period.Start, report.Granularity, full: true)</th>
+                            <partial name="_ProfitMetricCells" model="(period.Metrics, c, false)" />
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

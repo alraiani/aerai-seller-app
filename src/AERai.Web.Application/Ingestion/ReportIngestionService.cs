@@ -99,6 +99,28 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// </summary>
     private const int MaxDeferredPages = 2_000;
 
+    /// <summary>Raw landing-zone folder for transaction ledger pages.</summary>
+    public const string LedgerRawFolder = "financialtransactions";
+
+    /// <summary>
+    /// How far back the ledger can be read: Amazon returns nothing for a window over 180 days, so one day inside
+    /// that keeps clock differences from tipping a request over it.
+    /// </summary>
+    public static readonly TimeSpan MaxLedgerAge = TimeSpan.FromDays(179);
+
+    /// <summary>
+    /// How far before the last successful run a scheduled ledger run starts again. Amazon may list a transaction up
+    /// to 48 hours after it was posted, so three days re-reads anything that arrived late; transactions are keyed by
+    /// id, so a repeat only updates them.
+    /// </summary>
+    public static readonly TimeSpan LedgerOverlap = TimeSpan.FromDays(3);
+
+    /// <summary>
+    /// Stops a run whose next-page tokens never end (an Amazon fault) instead of looping forever. At 100
+    /// transactions a page this allows 500,000.
+    /// </summary>
+    private const int MaxLedgerPages = 5_000;
+
     /// <summary>Raw landing-zone folder for inbound shipment responses (plans, shipments, and their SKUs).</summary>
     public const string InboundRawFolder = "inboundshipments";
 
@@ -152,6 +174,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     private readonly IAmazonOrderRepository _apiOrders;
     private readonly IAmazonFinancesGateway _financesGateway;
     private readonly IDeferredTransactionRepository _deferred;
+    private readonly IFinancialTransactionRepository _ledger;
     private readonly IAmazonAdsGateway _adsGateway;
     private readonly IAdSpendRepository _adSpend;
     private readonly IAmazonInboundGateway _inboundGateway;
@@ -175,6 +198,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
     /// <param name="apiOrders">Orders API order persistence.</param>
     /// <param name="financesGateway">SP-API Finances gateway (deferred transactions).</param>
     /// <param name="deferred">Deferred transaction persistence.</param>
+    /// <param name="ledger">Transaction ledger persistence.</param>
     /// <param name="adsGateway">Amazon Ads reporting gateway.</param>
     /// <param name="adSpend">Ad spend persistence.</param>
     /// <param name="inboundGateway">SP-API Fulfillment Inbound gateway (shipments into Amazon).</param>
@@ -197,6 +221,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         IAmazonOrderRepository apiOrders,
         IAmazonFinancesGateway financesGateway,
         IDeferredTransactionRepository deferred,
+        IFinancialTransactionRepository ledger,
         IAmazonAdsGateway adsGateway,
         IAdSpendRepository adSpend,
         IAmazonInboundGateway inboundGateway,
@@ -221,6 +246,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         _apiOrders = apiOrders;
         _financesGateway = financesGateway;
         _deferred = deferred;
+        _ledger = ledger;
         _adsGateway = adsGateway;
         _adSpend = adSpend;
         _inboundGateway = inboundGateway;
@@ -279,6 +305,10 @@ public sealed partial class ReportIngestionService : IReportIngestionService
             else if (schedule.ReportType == AmazonReportType.DeferredTransactions)
             {
                 await IngestDeferredTransactionsAsync(context, work).ConfigureAwait(false);
+            }
+            else if (schedule.ReportType == AmazonReportType.FinancialTransactions)
+            {
+                await IngestLedgerAsync(context, work).ConfigureAwait(false);
             }
             else if (schedule.ReportType == AmazonReportType.InboundShipments)
             {
@@ -940,6 +970,109 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         context.Notes.Add(string.Create(CultureInfo.InvariantCulture,
             $"Amazon holds {result.Deferred:N0} deferred transaction{(result.Deferred == 1 ? "" : "s")}; {result.Released:N0} released since {releasedAfter:yyyy-MM-dd} ({result.NewlyReleased:N0} newly). {held.Pages + released.Pages:N0} pages."));
         context.CoveredUntil = startedAt;
+    }
+
+    /// <summary>
+    /// Reads Amazon's transaction ledger for the run's window, landing every page in raw storage and upserting each
+    /// page's transactions as it arrives, then reads what Amazon still holds the same way.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A scheduled run starts <see cref="LedgerOverlap"/> before the last success's end (or its lookback on the first
+    /// run); a backfill takes its range. Either starts no earlier than <see cref="MaxLedgerAge"/> and ends
+    /// <see cref="DataEndSafetyMargin"/> before now (Amazon refuses a later end).
+    /// </para>
+    /// <para>
+    /// Amazon doesn't say which statuses an unfiltered listing returns, and a held sale keeps its posted date when it
+    /// is released, so a window that had moved on would never see it. Every run therefore also reads the held listing
+    /// as far back as Amazon allows; the two are merged by id. Like the Orders API, pages are written as they come:
+    /// transactions are keyed by id, so a run that stops part-way keeps what it read and the next run's overlap fills
+    /// the rest.
+    /// </para>
+    /// </remarks>
+    private async Task IngestLedgerAsync(RunContext context, CancellationToken cancellationToken)
+    {
+        var now = _clock.GetUtcNow();
+        var latestEnd = now - DataEndSafetyMargin;
+        var oldest = now - MaxLedgerAge;
+        DateTimeOffset start;
+        DateTimeOffset end;
+        if (context.Backfill is { } window)
+        {
+            start = window.Start;
+            end = window.End < latestEnd ? window.End : latestEnd;
+        }
+        else
+        {
+            end = latestEnd;
+            start = context.Schedule.LastSuccessfulDataEnd is { } previousEnd
+                ? previousEnd - LedgerOverlap
+                : end.AddDays(-context.Schedule.LookbackDays);
+        }
+
+        if (start < oldest)
+        {
+            context.Notes.Add(string.Create(CultureInfo.InvariantCulture, $"Starts at {oldest:yyyy-MM-dd}: Amazon only lists transactions from the last 180 days."));
+            start = oldest;
+        }
+
+        if (start >= end)
+        {
+            throw new InvalidOperationException("The window is older than Amazon lists transactions (180 days).");
+        }
+
+        context.Run.DataStart = start;
+        context.Run.DataEnd = end;
+
+        var posted = await ReadLedgerAsync(context, new LedgerQuery(start, end, HeldOnly: false), "ledger", cancellationToken).ConfigureAwait(false);
+        var held = await ReadLedgerAsync(context, new LedgerQuery(oldest, latestEnd, HeldOnly: true), "ledger-held", cancellationToken).ConfigureAwait(false);
+
+        // Only a complete held listing (every page read) can say what Amazon has since released.
+        var released = await _ledger.MarkReleasedAsync(context.Schedule.MarketplaceId, held.Ids, cancellationToken).ConfigureAwait(false);
+
+        context.RowsWritten = posted.Inserted + posted.Updated + held.Inserted + held.Updated;
+        context.Notes.Add(string.Create(CultureInfo.InvariantCulture,
+            $"{posted.Inserted + held.Inserted:N0} new and {posted.Updated + held.Updated:N0} updated transaction{(posted.Updated + held.Updated == 1 ? "" : "s")} posted since {start:yyyy-MM-dd}, including those still held ({held.Ids.Count:N0} held, {released:N0} newly released); {posted.Pages + held.Pages:N0} pages."));
+        context.CoveredUntil = end;
+    }
+
+    /// <summary>Reads every page of one ledger listing, landing each page and upserting its transactions.</summary>
+    private async Task<(int Inserted, int Updated, int Pages, IReadOnlyCollection<string> Ids)> ReadLedgerAsync(
+        RunContext context, LedgerQuery query, string filePrefix, CancellationToken cancellationToken)
+    {
+        var inserted = 0;
+        var updated = 0;
+        var pages = 0;
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        string? nextToken = null;
+        do
+        {
+            if (++pages > MaxLedgerPages)
+            {
+                throw new InvalidOperationException($"The transaction ledger listing did not end after {MaxLedgerPages} pages.");
+            }
+
+            var page = await _financesGateway.ListLedgerPageAsync(context.Marketplace, query, nextToken, cancellationToken).ConfigureAwait(false);
+            await LandJsonPageAsync(context, LedgerRawFolder, filePrefix, page.RawJson, pages, cancellationToken).ConfigureAwait(false);
+
+            // One write per id, even if Amazon repeats one within a page.
+            var transactions = page.Items
+                .GroupBy(t => t.TransactionId, StringComparer.Ordinal)
+                .Select(g => g.Last())
+                .ToList();
+            ids.UnionWith(transactions.Select(t => t.TransactionId));
+            if (transactions.Count > 0)
+            {
+                var result = await _ledger.UpsertAsync(context.Schedule.MarketplaceId, transactions, _clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+                inserted += result.Inserted;
+                updated += result.Updated;
+            }
+
+            nextToken = string.IsNullOrEmpty(page.NextToken) ? null : page.NextToken;
+        }
+        while (nextToken is not null);
+
+        return (inserted, updated, pages, ids);
     }
 
     /// <summary>Reads every page of one deferred listing, landing each page in raw storage.</summary>

@@ -105,6 +105,7 @@ public static class DependencyInjection
         services.AddScoped<IReportingQueries, ReportingQueries>();
         services.AddScoped<IOrderQueries, OrderQueries>();
         services.AddScoped<IAdvertisingQueries, AdvertisingQueries>();
+        services.AddScoped<IProfitQueries, ProfitQueries>();
         services.AddScoped<IDashboardQueries, DashboardQueries>();
         services.AddScoped<IInventoryQueries, InventoryQueries>();
         services.AddScoped<IInventoryItemRepository, InventoryItemRepository>();
@@ -124,6 +125,7 @@ public static class DependencyInjection
         services.AddScoped<IDeferredTransactionRepository>(provider => provider.GetRequiredService<DeferredTransactionRepository>());
         services.AddScoped<IDeferredPaymentQueries>(provider => provider.GetRequiredService<DeferredTransactionRepository>());
         services.AddScoped<IAmazonOrderRepository, AmazonOrderRepository>();
+        services.AddScoped<IFinancialTransactionRepository, FinancialTransactionRepository>();
         services.AddScoped<IInboundShipmentRepository, InboundShipmentRepository>();
         services.AddScoped<IAppliedBlobRepository, AppliedBlobRepository>();
         services.AddScoped<ISyncSettingsRepository, SyncSettingsRepository>();

@@ -40,4 +40,31 @@ internal sealed class FakeAmazonFinancesGateway : IAmazonFinancesGateway
         var next = index + 1 < pages.Count ? (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
         return Task.FromResult(new DeferredTransactionPage(items, next, $"{{\"page\":{index}}}"));
     }
+
+    /// <summary>Pages of the unfiltered ledger listing.</summary>
+    public List<IReadOnlyList<AmazonFinancialTransaction>> LedgerPages { get; } = [];
+
+    /// <summary>Pages of the held ledger listing.</summary>
+    public List<IReadOnlyList<AmazonFinancialTransaction>> HeldLedgerPages { get; } = [];
+
+    /// <summary>Every ledger query, in order (once per page).</summary>
+    public List<LedgerQuery> LedgerCalls { get; } = [];
+
+    /// <summary>When set, a ledger call for that page index (of the unfiltered listing) fails.</summary>
+    public int? LedgerFailsAtPage { get; set; }
+
+    public Task<FinancialTransactionPage> ListLedgerPageAsync(Marketplace marketplace, LedgerQuery query, string? nextToken, CancellationToken cancellationToken)
+    {
+        LedgerCalls.Add(query);
+        var pages = query.HeldOnly ? HeldLedgerPages : LedgerPages;
+        var index = nextToken is null ? 0 : int.Parse(nextToken, System.Globalization.CultureInfo.InvariantCulture);
+        if (!query.HeldOnly && index == LedgerFailsAtPage)
+        {
+            throw new HttpRequestException("Amazon is down.");
+        }
+
+        var items = index < pages.Count ? pages[index] : [];
+        var next = index + 1 < pages.Count ? (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
+        return Task.FromResult(new FinancialTransactionPage(items, next, $"{{\"page\":{index}}}"));
+    }
 }

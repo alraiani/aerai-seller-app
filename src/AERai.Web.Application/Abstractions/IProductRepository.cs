@@ -44,10 +44,11 @@ public interface IProductRepository
     /// </summary>
     /// <param name="marketplaceId">Marketplace the costs apply to.</param>
     /// <param name="changes">Validated changes, one per SKU, already rounded to cents.</param>
-    /// <param name="updatedAt">Timestamp to record.</param>
+    /// <param name="updatedAt">Timestamp to record; also when each new cost starts to apply in the cost history.</param>
+    /// <param name="changedBy">User email recorded in the cost history.</param>
     /// <returns>The SKUs skipped as stale.</returns>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    Task<IReadOnlyList<string>> ApplyCostsAsync(string marketplaceId, IReadOnlyList<ProductCostChange> changes, DateTimeOffset updatedAt, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> ApplyCostsAsync(string marketplaceId, IReadOnlyList<ProductCostChange> changes, DateTimeOffset updatedAt, string changedBy, CancellationToken cancellationToken);
 
     /// <summary>Gets one product with its cost in one marketplace.</summary>
     /// <param name="sku">Seller SKU.</param>
@@ -60,8 +61,17 @@ public interface IProductRepository
     /// <param name="sku">Seller SKU.</param>
     /// <param name="marketplaceId">Marketplace the cost applies to.</param>
     /// <param name="costOfGoods">New unit cost, or <see langword="null"/> to clear it.</param>
-    /// <param name="updatedAt">Timestamp to record.</param>
+    /// <param name="updatedAt">Timestamp to record; also when the new cost starts to apply in the cost history.</param>
+    /// <param name="changedBy">User email recorded in the cost history.</param>
     /// <returns><see langword="true"/> when the product existed and was updated.</returns>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    Task<bool> UpdateCostAsync(string sku, string marketplaceId, decimal? costOfGoods, DateTimeOffset updatedAt, CancellationToken cancellationToken);
+    Task<bool> UpdateCostAsync(string sku, string marketplaceId, decimal? costOfGoods, DateTimeOffset updatedAt, string changedBy, CancellationToken cancellationToken);
+
+    /// <summary>Gets a SKU's cost changes in one marketplace, newest first.</summary>
+    /// <param name="sku">Seller SKU.</param>
+    /// <param name="marketplaceId">Marketplace whose costs to list.</param>
+    /// <param name="take">Most changes to return.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The changes.</returns>
+    Task<IReadOnlyList<ProductCostHistoryEntry>> GetCostHistoryAsync(string sku, string marketplaceId, int take, CancellationToken cancellationToken);
 }

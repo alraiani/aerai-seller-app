@@ -12,4 +12,8 @@ internal sealed class SpApiFinancesGateway(FinancesApiClient client) : IAmazonFi
     public Task<DeferredTransactionPage> ListTransactionsPageAsync(
         Marketplace marketplace, DeferredTransactionListing listing, DateTimeOffset postedAfter, string? nextToken, CancellationToken cancellationToken) =>
         client.ListDeferredAsync(marketplace, listing, postedAfter, nextToken, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<FinancialTransactionPage> ListLedgerPageAsync(Marketplace marketplace, LedgerQuery query, string? nextToken, CancellationToken cancellationToken) =>
+        client.ListLedgerAsync(marketplace, query, nextToken, cancellationToken);
 }

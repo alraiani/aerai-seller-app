@@ -14,4 +14,8 @@ internal sealed class UnavailableFinancesGateway : IAmazonFinancesGateway
     public Task<DeferredTransactionPage> ListTransactionsPageAsync(
         Marketplace marketplace, DeferredTransactionListing listing, DateTimeOffset postedAfter, string? nextToken, CancellationToken cancellationToken) =>
         throw new InvalidOperationException("Amazon SP-API is disabled. Set SpApi:Mode to Live (with credentials) or Simulated.");
+
+    /// <inheritdoc/>
+    public Task<FinancialTransactionPage> ListLedgerPageAsync(Marketplace marketplace, LedgerQuery query, string? nextToken, CancellationToken cancellationToken) =>
+        throw new InvalidOperationException("Amazon SP-API is disabled. Set SpApi:Mode to Live (with credentials) or Simulated.");
 }

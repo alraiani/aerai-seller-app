@@ -19,4 +19,12 @@ public interface IAmazonFinancesGateway
     /// <returns>The page, with the token for the next one.</returns>
     Task<DeferredTransactionPage> ListTransactionsPageAsync(
         Marketplace marketplace, DeferredTransactionListing listing, DateTimeOffset postedAfter, string? nextToken, CancellationToken cancellationToken);
+
+    /// <summary>Gets one page of Amazon's transaction ledger: every transaction posted in a window, or only those still held.</summary>
+    /// <param name="marketplace">Marketplace being synced; its region selects the endpoint and credentials.</param>
+    /// <param name="query">The window, and whether only held transactions are wanted.</param>
+    /// <param name="nextToken">Token from the previous page, or <see langword="null"/> for the first page.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The page, with the token for the next one.</returns>
+    Task<FinancialTransactionPage> ListLedgerPageAsync(Marketplace marketplace, LedgerQuery query, string? nextToken, CancellationToken cancellationToken);
 }

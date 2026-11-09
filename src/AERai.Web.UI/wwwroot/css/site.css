@@ -38,6 +38,15 @@
     --chart-bar: #b9cdf7;
     --chart-bar-current: #2563eb;
     --chart-grid: #e9edf3;
+    /* Profit & loss: sales, profit, and loss bars, and the "where each sale went" slices (3:1 on the surface). */
+    --pnl-sales: #b9cdf7;
+    --pnl-profit: #047857;
+    --pnl-loss: #dc2626;
+    --pnl-fees: #2563eb;
+    --pnl-refunds: #d97706;
+    --pnl-ads: #7c3aed;
+    --pnl-cogs: #64748b;
+    --pnl-other: #0e7490;
     --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
     /* Raised above the page (save bar, floating panels). */
     --shadow-lg: 0 -4px 16px rgba(15, 23, 42, 0.08);
@@ -112,6 +121,14 @@
     --chart-bar: #2a4472;
     --chart-bar-current: #60a5fa;
     --chart-grid: #1f2737;
+    --pnl-sales: #2a4472;
+    --pnl-profit: #34d399;
+    --pnl-loss: #f87171;
+    --pnl-fees: #60a5fa;
+    --pnl-refunds: #fbbf24;
+    --pnl-ads: #a78bfa;
+    --pnl-cogs: #94a3b8;
+    --pnl-other: #22d3ee;
     --shadow: none;
     --shadow-lg: 0 -4px 16px rgba(0, 0, 0, 0.45);
     --violet: #a78bfa;
@@ -369,6 +386,8 @@ html:not(.js) .nav-rail-toggle { display: none; }
 .segmented a:hover { color: var(--text); }
 .segmented a.active { background: var(--brand-soft); color: var(--brand); }
 .segmented-sm a { padding: 0.25rem 0.7rem; font-size: 0.8rem; }
+/* A switch with many choices (Profit & loss ranges) wraps onto a second line instead of widening the page. */
+.segmented-wrap { flex-wrap: wrap; max-width: 100%; }
 .segmented-count { margin-left: 0.3rem; padding: 0 0.35rem; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 0.72rem; font-weight: 600; }
 .segmented a.active .segmented-count { background: var(--surface); color: var(--brand); }
 .segmented a.has-warn .segmented-count { background: var(--warning-soft); color: var(--warning-text); }
@@ -412,6 +431,36 @@ html:not(.js) .nav-rail-toggle { display: none; }
 .chart .bar-value { font-size: 11px; font-weight: 600; fill: var(--text); }
 .chart .bar-units { font-size: 10px; font-weight: 500; fill: var(--muted); }
 .chart-summary { font-size: 0.8rem; color: var(--muted); }
+
+/* Profit & loss: sales and profit bars (a loss hangs below the zero line), the share bar, legends, rankings. */
+.chart .bar-sales { fill: var(--pnl-sales); }
+.chart .bar-profit { fill: var(--pnl-profit); }
+.chart .bar-loss { fill: var(--pnl-loss); }
+.chart .grid.zero { stroke: var(--border-strong); }
+.profit-share { height: 14px; border-radius: var(--radius-sm, 4px); overflow: hidden; }
+.seg-fees, .legend-dot.dot-fees { fill: var(--pnl-fees); background: var(--pnl-fees); }
+.seg-refunds, .legend-dot.dot-refunds { fill: var(--pnl-refunds); background: var(--pnl-refunds); }
+.seg-ads, .legend-dot.dot-ads { fill: var(--pnl-ads); background: var(--pnl-ads); }
+.seg-cogs, .legend-dot.dot-cogs { fill: var(--pnl-cogs); background: var(--pnl-cogs); }
+.seg-other, .legend-dot.dot-other { fill: var(--pnl-other); background: var(--pnl-other); }
+.seg-profit, .legend-dot.dot-profit { fill: var(--pnl-profit); background: var(--pnl-profit); }
+.legend-dot.dot-sales { background: var(--pnl-sales); }
+.legend-dot.dot-loss { background: var(--pnl-loss); }
+.chart-legend { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; font-size: 0.8rem; color: var(--text); }
+.chart-legend li { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: 0 0 auto; }
+.share .fill-profit { fill: var(--pnl-profit); }
+.share .fill-loss { fill: var(--pnl-loss); }
+.rank-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.rank-head { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.85rem; margin-bottom: 0.2rem; }
+.rank-sku { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bridge-list { padding: 0.25rem 1.25rem 1rem; }
+.bridge-list > div { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-top: 1px solid var(--border); }
+.bridge-list > div:first-child { border-top: 0; }
+.bridge-list dt { font-weight: 500; }
+.bridge-list dd { margin: 0; font-variant-numeric: tabular-nums; }
+.bridge-list .bridge-total { border-top: 2px solid var(--border-strong); font-weight: 700; }
+.bridge-list .bridge-total dt { font-weight: 700; }
 
 .attention-list { list-style: none; margin: 0; padding: 0; }
 .attention-item { display: flex; gap: 0.75rem; padding: 0.8rem 1.25rem; border-top: 1px solid var(--border); text-decoration: none; color: inherit; }

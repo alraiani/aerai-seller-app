@@ -7,7 +7,8 @@ using Microsoft.Extensions.Options;
 namespace AERai.Web.Infrastructure.SpApi;
 
 /// <summary>
-/// Typed client for the SP-API Finances API (version 2024-06-19), used for deferred transactions. Every call
+/// Typed client for the SP-API Finances API (version 2024-06-19), used for deferred transactions and the
+/// transaction ledger. Every call
 /// is tagged with its operation name and region and sent through <see cref="SpApiPipelineHandler"/>.
 /// </summary>
 /// <remarks>
@@ -51,6 +52,44 @@ internal sealed class FinancesApiClient(HttpClient http, IOptions<SpApiOptions> 
             query += $"&nextToken={Uri.EscapeDataString(nextToken)}";
         }
 
+        var body = await GetAsync(marketplace, query, cancellationToken).ConfigureAwait(false);
+        return ParsePage(body, listing);
+    }
+
+    /// <summary>Calls <c>listTransactions</c> for one page of the ledger: every transaction posted in a window, or only those held.</summary>
+    /// <param name="marketplace">Marketplace being synced; its region selects the endpoint and credentials.</param>
+    /// <param name="ledger">The window and status filter.</param>
+    /// <param name="nextToken">Token from the previous page, or <see langword="null"/> for the first page.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The page, parsed and as raw JSON.</returns>
+    public async Task<FinancialTransactionPage> ListLedgerAsync(Marketplace marketplace, LedgerQuery ledger, string? nextToken, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(marketplace);
+        ArgumentNullException.ThrowIfNull(ledger);
+
+        // Amazon wants the same arguments on every page, with the token added.
+        var query = string.Create(CultureInfo.InvariantCulture,
+            $"postedAfter={Format(ledger.PostedAfter)}&postedBefore={Format(ledger.PostedBefore)}&marketplaceId={Uri.EscapeDataString(marketplace.MarketplaceId)}");
+        if (ledger.HeldOnly)
+        {
+            query += $"&transactionStatus={DeferredStatus}";
+        }
+
+        if (!string.IsNullOrEmpty(nextToken))
+        {
+            query += $"&nextToken={Uri.EscapeDataString(nextToken)}";
+        }
+
+        var body = await GetAsync(marketplace, query, cancellationToken).ConfigureAwait(false);
+        return LedgerPageParser.Parse(body);
+    }
+
+    private static string Format(DateTimeOffset instant) =>
+        Uri.EscapeDataString(instant.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
+
+    /// <summary>Sends one <c>listTransactions</c> GET through the pipeline and returns the body, or throws with Amazon's error.</summary>
+    private async Task<string> GetAsync(Marketplace marketplace, string query, CancellationToken cancellationToken)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(options.Value.EndpointFor(marketplace.Region), $"{BasePath}/transactions?{query}"));
         request.Options.Set(SpApiOperation.RegionKey, marketplace.Region);
         request.Options.Set(SpApiOperation.OptionKey, SpApiOperation.ListTransactions);
@@ -66,7 +105,7 @@ internal sealed class FinancesApiClient(HttpClient http, IOptions<SpApiOptions> 
                 response.StatusCode);
         }
 
-        return ParsePage(body, listing);
+        return body;
     }
 
     /// <summary>Amazon's <c>transactionStatus</c> for a listing.</summary>

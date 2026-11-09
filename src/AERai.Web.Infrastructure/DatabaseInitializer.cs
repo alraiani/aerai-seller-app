@@ -120,6 +120,9 @@ public static partial class DatabaseInitializer
                 // What Amazon still holds back; once a day keeps the Settlements tile current. The listing always
                 // reaches back as far as Amazon allows, so the lookback is not used.
                 DefaultSchedule(m, "Deferred payments — daily 7:15 AM", AmazonReportType.DeferredTransactions, ScheduleFrequency.Daily, null, new TimeOnly(7, 15), 1, now),
+                // Every transaction Amazon posts, for Profit & loss: after the deferred listing, so both read the
+                // same morning. Backfill (up to 180 days) brings the history.
+                DefaultSchedule(m, "Transaction ledger — daily 7:30 AM", AmazonReportType.FinancialTransactions, ScheduleFrequency.Daily, null, new TimeOnly(7, 30), 30, now),
                 // Sponsored Products spend from the Amazon Ads API. Each run re-reads the last two weeks, whose
                 // attributed sales Amazon is still revising, so the lookback covers a first run the same way.
                 DefaultSchedule(m, "Ads spend — daily 5:45 AM", AmazonReportType.AdsSpend, ScheduleFrequency.Daily, null, new TimeOnly(5, 45), 14, now),

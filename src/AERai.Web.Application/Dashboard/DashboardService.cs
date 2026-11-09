@@ -305,6 +305,7 @@ public sealed class DashboardService(
         AmazonReportType.DeferredTransactions => "Deferred payments",
         AmazonReportType.AdsSpend => "Ads spend",
         AmazonReportType.InboundShipments => "Amazon shipments",
+        AmazonReportType.FinancialTransactions => "Transaction ledger",
         _ => type.ToString(),
     };
 

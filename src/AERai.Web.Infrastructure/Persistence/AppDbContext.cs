@@ -49,6 +49,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Per-marketplace product costs.</summary>
     public DbSet<ProductCost> ProductCosts => Set<ProductCost>();
 
+    /// <summary>Every change of a per-marketplace product cost, dated.</summary>
+    public DbSet<ProductCostHistory> ProductCostHistory => Set<ProductCostHistory>();
+
     /// <summary>Product families (user-defined groups).</summary>
     public DbSet<ProductFamily> ProductFamilies => Set<ProductFamily>();
 
@@ -90,6 +93,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
 
     /// <summary>Payouts Amazon deferred, from the Finances API (<c>core.DeferredTransaction</c>).</summary>
     public DbSet<DeferredTransaction> DeferredTransactions => Set<DeferredTransaction>();
+
+    /// <summary>Amazon's transaction ledger (Finances API), as posted.</summary>
+    public DbSet<FinancialTransaction> FinancialTransactions => Set<FinancialTransaction>();
+
+    /// <summary>The breakdown amounts of each ledger transaction.</summary>
+    public DbSet<FinancialTransactionLine> FinancialTransactionLines => Set<FinancialTransactionLine>();
+
+    /// <summary>Profit &amp; loss amounts by posted date (<c>rpt.vw_ProfitLine</c>).</summary>
+    public DbSet<ProfitLine> ProfitLines => Set<ProfitLine>();
 
     /// <summary>The products on each deferred transaction (<c>core.DeferredTransactionItem</c>).</summary>
     public DbSet<DeferredTransactionItem> DeferredTransactionItems => Set<DeferredTransactionItem>();
