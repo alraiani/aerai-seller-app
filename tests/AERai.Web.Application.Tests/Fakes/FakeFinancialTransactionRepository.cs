@@ -24,4 +24,13 @@ internal sealed class FakeFinancialTransactionRepository : IFinancialTransaction
 
         return Task.FromResult((inserted, transactions.Count - inserted));
     }
+
+    /// <summary>The held ids each <see cref="MarkReleasedAsync"/> call was given.</summary>
+    public List<IReadOnlyCollection<string>> StillHeldCalls { get; } = [];
+
+    public Task<int> MarkReleasedAsync(string marketplaceId, IReadOnlyCollection<string> stillHeld, CancellationToken cancellationToken)
+    {
+        StillHeldCalls.Add(stillHeld);
+        return Task.FromResult(0);
+    }
 }

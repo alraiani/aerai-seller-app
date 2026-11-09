@@ -100,6 +100,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>The breakdown amounts of each ledger transaction.</summary>
     public DbSet<FinancialTransactionLine> FinancialTransactionLines => Set<FinancialTransactionLine>();
 
+    /// <summary>Profit &amp; loss amounts by posted date (<c>rpt.vw_ProfitLine</c>).</summary>
+    public DbSet<ProfitLine> ProfitLines => Set<ProfitLine>();
+
     /// <summary>The products on each deferred transaction (<c>core.DeferredTransactionItem</c>).</summary>
     public DbSet<DeferredTransactionItem> DeferredTransactionItems => Set<DeferredTransactionItem>();
 

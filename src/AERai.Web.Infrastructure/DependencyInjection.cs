@@ -105,6 +105,7 @@ public static class DependencyInjection
         services.AddScoped<IReportingQueries, ReportingQueries>();
         services.AddScoped<IOrderQueries, OrderQueries>();
         services.AddScoped<IAdvertisingQueries, AdvertisingQueries>();
+        services.AddScoped<IProfitQueries, ProfitQueries>();
         services.AddScoped<IDashboardQueries, DashboardQueries>();
         services.AddScoped<IInventoryQueries, InventoryQueries>();
         services.AddScoped<IInventoryItemRepository, InventoryItemRepository>();

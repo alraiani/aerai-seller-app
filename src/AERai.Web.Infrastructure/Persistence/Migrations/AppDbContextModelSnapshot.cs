@@ -1928,6 +1928,59 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.ToView("vw_OrderSummary", "rpt");
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Reporting.ProfitLine", b =>
+                {
+                    b.Property<string>("AmazonOrderId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Detail")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("Held")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsPrincipal")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<DateTimeOffset>("PostedDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("SettlementId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Sku")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("TransactionType")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Units")
+                        .HasColumnType("int");
+
+                    b.ToTable((string)null);
+
+                    b.ToView("vw_ProfitLine", "rpt");
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Reporting.SalesLine", b =>
                 {
                     b.Property<string>("AmazonOrderId")

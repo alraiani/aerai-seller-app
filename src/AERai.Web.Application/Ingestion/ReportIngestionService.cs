@@ -1027,19 +1027,23 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         var posted = await ReadLedgerAsync(context, new LedgerQuery(start, end, HeldOnly: false), "ledger", cancellationToken).ConfigureAwait(false);
         var held = await ReadLedgerAsync(context, new LedgerQuery(oldest, latestEnd, HeldOnly: true), "ledger-held", cancellationToken).ConfigureAwait(false);
 
+        // Only a complete held listing (every page read) can say what Amazon has since released.
+        var released = await _ledger.MarkReleasedAsync(context.Schedule.MarketplaceId, held.Ids, cancellationToken).ConfigureAwait(false);
+
         context.RowsWritten = posted.Inserted + posted.Updated + held.Inserted + held.Updated;
         context.Notes.Add(string.Create(CultureInfo.InvariantCulture,
-            $"{posted.Inserted + held.Inserted:N0} new and {posted.Updated + held.Updated:N0} updated transaction{(posted.Updated + held.Updated == 1 ? "" : "s")} posted since {start:yyyy-MM-dd}, including those still held; {posted.Pages + held.Pages:N0} pages."));
+            $"{posted.Inserted + held.Inserted:N0} new and {posted.Updated + held.Updated:N0} updated transaction{(posted.Updated + held.Updated == 1 ? "" : "s")} posted since {start:yyyy-MM-dd}, including those still held ({held.Ids.Count:N0} held, {released:N0} newly released); {posted.Pages + held.Pages:N0} pages."));
         context.CoveredUntil = end;
     }
 
     /// <summary>Reads every page of one ledger listing, landing each page and upserting its transactions.</summary>
-    private async Task<(int Inserted, int Updated, int Pages)> ReadLedgerAsync(
+    private async Task<(int Inserted, int Updated, int Pages, IReadOnlyCollection<string> Ids)> ReadLedgerAsync(
         RunContext context, LedgerQuery query, string filePrefix, CancellationToken cancellationToken)
     {
         var inserted = 0;
         var updated = 0;
         var pages = 0;
+        var ids = new HashSet<string>(StringComparer.Ordinal);
         string? nextToken = null;
         do
         {
@@ -1056,6 +1060,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
                 .GroupBy(t => t.TransactionId, StringComparer.Ordinal)
                 .Select(g => g.Last())
                 .ToList();
+            ids.UnionWith(transactions.Select(t => t.TransactionId));
             if (transactions.Count > 0)
             {
                 var result = await _ledger.UpsertAsync(context.Schedule.MarketplaceId, transactions, _clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
@@ -1067,7 +1072,7 @@ public sealed partial class ReportIngestionService : IReportIngestionService
         }
         while (nextToken is not null);
 
-        return (inserted, updated, pages);
+        return (inserted, updated, pages, ids);
     }
 
     /// <summary>Reads every page of one deferred listing, landing each page in raw storage.</summary>

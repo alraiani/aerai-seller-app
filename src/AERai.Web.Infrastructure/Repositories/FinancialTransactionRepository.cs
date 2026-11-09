@@ -80,6 +80,36 @@ internal sealed class FinancialTransactionRepository(AppDbContext dbContext) : I
         }).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
+    public async Task<int> MarkReleasedAsync(string marketplaceId, IReadOnlyCollection<string> stillHeld, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentNullException.ThrowIfNull(stillHeld);
+
+        // Few transactions are held at once (about a week of sales), so the candidates are read and compared here
+        // rather than sending every held id to SQL.
+        var held = await dbContext.FinancialTransactions
+            .Where(t => t.MarketplaceId == marketplaceId && t.Status == HeldStatus)
+            .Select(t => new { t.Id, t.TransactionId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var keep = stillHeld.ToHashSet(StringComparer.Ordinal);
+        var released = held.Where(t => !keep.Contains(t.TransactionId)).Select(t => t.Id).ToList();
+        if (released.Count == 0)
+        {
+            return 0;
+        }
+
+        return await dbContext.FinancialTransactions
+            .Where(t => released.Contains(t.Id))
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Status, ReleasedStatus), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private const string HeldStatus = "DEFERRED";
+
+    private const string ReleasedStatus = "DEFERRED_RELEASED";
+
     /// <summary>Cuts Amazon's text to the column's length; it never sends longer, but one bad value mustn't fail a run.</summary>
     private static string? Truncate(string? value, int length) =>
         value is null ? null : value.Length <= length ? value : value[..length];

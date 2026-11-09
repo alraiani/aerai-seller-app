@@ -8,6 +8,7 @@ using AERai.Web.Application.Ingestion;
 using AERai.Web.Application.Marketplaces;
 using AERai.Web.Application.Orders;
 using AERai.Web.Application.Products;
+using AERai.Web.Application.Profit;
 using AERai.Web.Application.Security;
 using AERai.Web.Application.Settlements;
 using Microsoft.Extensions.DependencyInjection;
@@ -74,6 +75,7 @@ public static class DependencyInjection
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<IAdvertisingService, AdvertisingService>();
+        services.AddScoped<IProfitService, ProfitService>();
         services.AddScoped<IProductCostTemplateService, ProductCostTemplateService>();
         services.AddScoped<IBookkeepingService, BookkeepingService>();
         services.AddScoped<ISettlementExchangeRateService, SettlementExchangeRateService>();

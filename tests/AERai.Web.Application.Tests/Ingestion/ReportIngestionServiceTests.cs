@@ -323,6 +323,7 @@ public sealed class ReportIngestionServiceTests
         Assert.Equal(11m, _ledger.Stored[(MarketplaceIds.UnitedStates, "L-1")].Amount);
         Assert.Equal(3, _rawFiles.Files.Keys.Count(k => k.StartsWith(ReportIngestionService.LedgerRawFolder + "/", StringComparison.Ordinal)));
         Assert.Contains("4 new and 1 updated", summary.Message, StringComparison.Ordinal);
+        Assert.Equal(["L-9"], Assert.Single(_ledger.StillHeldCalls));
     }
 
     [Fact]
@@ -364,6 +365,9 @@ public sealed class ReportIngestionServiceTests
 
         Assert.Equal(SyncRunStatus.Failed, summary.Status);
         Assert.Equal("L-1", Assert.Single(_ledger.Stored).Key.TransactionId);
+
+        // A run that stopped part-way never read the whole held listing, so it releases nothing.
+        Assert.Empty(_ledger.StillHeldCalls);
     }
 
     [Fact]

@@ -16,4 +16,15 @@ public interface IFinancialTransactionRepository
     /// <returns>How many were new and how many updated.</returns>
     Task<(int Inserted, int Updated)> UpsertAsync(
         string marketplaceId, IReadOnlyCollection<AmazonFinancialTransaction> transactions, DateTimeOffset syncedAt, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Marks the marketplace's stored held transactions that Amazon no longer lists as held as released
+    /// (<c>DEFERRED_RELEASED</c>). A held sale keeps its posted date when Amazon releases it, so no later window
+    /// would read it again.
+    /// </summary>
+    /// <param name="marketplaceId">Marketplace whose schedule read the held listing.</param>
+    /// <param name="stillHeld">Every id in the complete held listing just read.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>How many were marked released.</returns>
+    Task<int> MarkReleasedAsync(string marketplaceId, IReadOnlyCollection<string> stillHeld, CancellationToken cancellationToken);
 }
