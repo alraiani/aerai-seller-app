@@ -50,10 +50,14 @@ public sealed partial class BlobRefreshService(
 
     private const string MarketplaceMetadataKey = "marketplaceid";
 
-    /// <summary>Folders holding reports that are dated by the day they arrive; never loaded here.</summary>
+    /// <summary>
+    /// Folders never loaded here: reports dated by the day they arrive, and ledger pages, whose statuses a later
+    /// sync re-reads (an old page would put back a status Amazon has since changed).
+    /// </summary>
     private static readonly HashSet<string> SnapshotFolders = new(StringComparer.Ordinal)
     {
         "fbainventory", "fbareservedinventory", "fbarestockrecommendations", "fbainventoryplanning", "awdinventory", "deferred",
+        ReportIngestionService.LedgerRawFolder,
     };
 
     /// <summary>Raw folders holding report files, and the import each is staged as.</summary>

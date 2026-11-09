@@ -30,6 +30,7 @@ public sealed class ReportIngestionServiceTests
     private readonly FakeAmazonOrderRepository _apiOrders = new();
     private readonly FakeAmazonFinancesGateway _finances = new();
     private readonly FakeDeferredTransactionRepository _deferred = new();
+    private readonly FakeFinancialTransactionRepository _ledger = new();
     private readonly FakeAmazonAdsGateway _ads = new();
     private readonly FakeAdSpendRepository _adSpend = new();
     private readonly FakeAmazonInboundGateway _inbound = new();
@@ -53,7 +54,7 @@ public sealed class ReportIngestionServiceTests
         // Zero poll interval by default: every check is due immediately, so RunToEndAsync needs no clock moves.
         var options = Options.Create(ingestion ?? new IngestionOptions { ReportPollInterval = TimeSpan.Zero, ReportMaxWait = TimeSpan.FromMinutes(5) });
 
-        return new ReportIngestionService(_gateway, _awd, _awdInventory, _ordersApi, _apiOrders, _finances, _deferred, _ads, _adSpend, _inbound, _inboundShipments, _rawFiles, staging, _promotion, _schedules, _runs, _marketplaces, _stops, options, _clock,
+        return new ReportIngestionService(_gateway, _awd, _awdInventory, _ordersApi, _apiOrders, _finances, _deferred, _ledger, _ads, _adSpend, _inbound, _inboundShipments, _rawFiles, staging, _promotion, _schedules, _runs, _marketplaces, _stops, options, _clock,
             NullLogger<ReportIngestionService>.Instance);
     }
 
@@ -296,6 +297,73 @@ public sealed class ReportIngestionServiceTests
 
         Assert.Equal(SyncRunStatus.Failed, summary.Status);
         Assert.Contains("No Amazon Ads profile", summary.Message, StringComparison.Ordinal);
+    }
+
+    private static AmazonFinancialTransaction Ledger(string id, decimal amount = 10m) =>
+        new(id, "Shipment", "RELEASED", "Order Payment", Now.AddDays(-1), "111-" + id, null, amount, "USD",
+            [new AmazonFinancialLine("SKU-1", null, 1, "ProductCharges/Principal", amount)]);
+
+    [Fact]
+    public async Task RunAsync_Ledger_FirstRunReadsTheLookbackThenWhatIsHeld_WritingEachPage()
+    {
+        AddSchedule(AmazonReportType.FinancialTransactions);
+        _finances.LedgerPages.Add([Ledger("L-1"), Ledger("L-2")]);
+        _finances.LedgerPages.Add([Ledger("L-3"), Ledger("L-1", 11m)]);
+        _finances.HeldLedgerPages.Add([Ledger("L-9")]);
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Succeeded, summary.Status);
+        var end = Now - ReportIngestionService.DataEndSafetyMargin;
+        Assert.Equal(
+            [new LedgerQuery(end.AddDays(-7), end, false), new LedgerQuery(end.AddDays(-7), end, false), new LedgerQuery(Now - ReportIngestionService.MaxLedgerAge, end, true)],
+            _finances.LedgerCalls);
+        Assert.Equal(3, _ledger.Calls);
+        Assert.Equal(["L-1", "L-2", "L-3", "L-9"], _ledger.Stored.Keys.Select(k => k.TransactionId).Order(StringComparer.Ordinal));
+        Assert.Equal(11m, _ledger.Stored[(MarketplaceIds.UnitedStates, "L-1")].Amount);
+        Assert.Equal(3, _rawFiles.Files.Keys.Count(k => k.StartsWith(ReportIngestionService.LedgerRawFolder + "/", StringComparison.Ordinal)));
+        Assert.Contains("4 new and 1 updated", summary.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_LedgerAfterASuccess_StartsTheOverlapBeforeItsEnd()
+    {
+        var lastEnd = Now.AddDays(-1);
+        AddSchedule(AmazonReportType.FinancialTransactions, lastEnd: lastEnd);
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Scheduled, "scheduler", backfill: null, CancellationToken.None);
+
+        // Nothing came back, which is no data rather than a failure.
+        Assert.Equal(SyncRunStatus.NoData, summary.Status);
+        Assert.Equal(lastEnd - ReportIngestionService.LedgerOverlap, _finances.LedgerCalls[0].PostedAfter);
+    }
+
+    [Fact]
+    public async Task RunAsync_LedgerBackfillOlderThanAmazonKeeps_StartsAtTheLimitAndSaysSo()
+    {
+        AddSchedule(AmazonReportType.FinancialTransactions);
+        var backfill = new BackfillWindow(Now.AddDays(-200), Now.AddDays(-150));
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill, CancellationToken.None);
+
+        // Nothing came back, which is no data rather than a failure.
+        Assert.Equal(SyncRunStatus.NoData, summary.Status);
+        Assert.Equal(new LedgerQuery(Now - ReportIngestionService.MaxLedgerAge, backfill.End, false), _finances.LedgerCalls[0]);
+        Assert.Contains("last 180 days", summary.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_LedgerFailsPartWay_KeepsThePagesAlreadyWritten()
+    {
+        AddSchedule(AmazonReportType.FinancialTransactions);
+        _finances.LedgerPages.Add([Ledger("L-1")]);
+        _finances.LedgerPages.Add([Ledger("L-2")]);
+        _finances.LedgerFailsAtPage = 1;
+
+        var summary = await CreateService().RunAsync(1, SyncTrigger.Manual, "ops", backfill: null, CancellationToken.None);
+
+        Assert.Equal(SyncRunStatus.Failed, summary.Status);
+        Assert.Equal("L-1", Assert.Single(_ledger.Stored).Key.TransactionId);
     }
 
     [Fact]

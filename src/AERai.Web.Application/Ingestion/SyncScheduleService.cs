@@ -412,6 +412,8 @@ public sealed partial class SyncScheduleService(
             "Amazon only lists settlement reports from the last 90 days; download older ones from Seller Central, upload them to raw storage, and use Refresh from blobs."),
         AmazonReportType.AdsSpend => (now - ReportIngestionService.MaxAdsReportAge, 95,
             "Amazon Ads only keeps advertising data for 95 days, so older spend can't be pulled."),
+        AmazonReportType.FinancialTransactions => (now - ReportIngestionService.MaxLedgerAge, 180,
+            "Amazon only lists transactions from the last 180 days; Profit & loss uses settlement lines for older days."),
         _ => null,
     };
 

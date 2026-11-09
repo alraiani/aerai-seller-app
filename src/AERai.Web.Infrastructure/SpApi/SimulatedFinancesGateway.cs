@@ -97,6 +97,125 @@ internal sealed class SimulatedFinancesGateway(TimeProvider time) : IAmazonFinan
         return Task.FromResult(FinancesApiClient.ParsePage(JsonSerializer.Serialize(body, JsonOptions), listing));
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Every simulated order (not cancelled) becomes a <c>Shipment</c> posted the day after it was placed, with
+    /// principal, commission (15%), and an FBA fee per unit, held for <see cref="HeldFor"/>. Every 20th order is
+    /// refunded four days later (Amazon keeps a fifth of the commission), and the first of each month carries a
+    /// SKU-less subscription fee, so the ledger has the kinds of amounts the profit page sorts.
+    /// </remarks>
+    public Task<FinancialTransactionPage> ListLedgerPageAsync(Marketplace marketplace, LedgerQuery query, string? nextToken, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(marketplace);
+        ArgumentNullException.ThrowIfNull(query);
+
+        var now = time.GetUtcNow();
+        var currency = marketplace.Currency;
+        object Money(decimal amount) => new { currencyCode = currency, currencyAmount = amount };
+        object Breakdown(string type, decimal amount, params object[] children) =>
+            new { breakdownType = type, breakdownAmount = Money(amount), breakdowns = children };
+
+        var all = new List<(DateTimeOffset Posted, bool Held, object Body)>();
+
+        // Orders placed a few days before the window can still post (or be refunded) inside it.
+        foreach (var placed in SimulatedOrdersGateway.Slots(query.PostedAfter.AddDays(-5), query.PostedBefore))
+        {
+            var order = SimulatedOrdersGateway.Describe(marketplace, placed);
+            if (order.Cancelled)
+            {
+                continue;
+            }
+
+            var posted = placed.AddDays(1);
+            var commission = -decimal.Round(order.Total * 0.15m, 2);
+            var fbaFee = -3.22m * order.Quantity;
+            var product = new { contextType = "ProductContext", sku = order.Sku, asin = order.Asin, quantityShipped = order.Quantity };
+            all.Add((posted, placed + HeldFor > now, new
+            {
+                transactionId = $"SIM-L-{order.OrderId}",
+                transactionType = "Shipment",
+                transactionStatus = placed + HeldFor > now ? "DEFERRED" : "RELEASED",
+                description = "Order Payment",
+                postedDate = posted,
+                totalAmount = Money(order.Total + commission + fbaFee),
+                relatedIdentifiers = Related(order.OrderId, posted),
+                items = new[]
+                {
+                    new
+                    {
+                        totalAmount = Money(order.Total + commission + fbaFee),
+                        breakdowns = new[]
+                        {
+                            Breakdown("ProductCharges", order.Total, Breakdown("Principal", order.Total)),
+                            Breakdown("AmazonFees", commission + fbaFee, Breakdown("Commission", commission), Breakdown("FBAPerUnitFulfillmentFee", fbaFee)),
+                        },
+                        contexts = new object[] { product },
+                    },
+                },
+            }));
+
+            if (placed.Ticks / TimeSpan.TicksPerHour % 20 == 0)
+            {
+                var refunded = placed.AddDays(5);
+                var commissionBack = -decimal.Round(commission * 0.8m, 2);
+                all.Add((refunded, false, new
+                {
+                    transactionId = $"SIM-R-{order.OrderId}",
+                    transactionType = "Refund",
+                    transactionStatus = "RELEASED",
+                    description = "Refund",
+                    postedDate = refunded,
+                    totalAmount = Money(-order.Total + commissionBack),
+                    relatedIdentifiers = Related(order.OrderId, refunded),
+                    items = new[]
+                    {
+                        new
+                        {
+                            totalAmount = Money(-order.Total + commissionBack),
+                            breakdowns = new[]
+                            {
+                                Breakdown("ProductCharges", -order.Total, Breakdown("Principal", -order.Total)),
+                                Breakdown("AmazonFees", commissionBack, Breakdown("Commission", commissionBack)),
+                            },
+                            contexts = new object[] { product with { quantityShipped = 0 } },
+                        },
+                    },
+                }));
+            }
+        }
+
+        for (var month = new DateTimeOffset(query.PostedAfter.Year, query.PostedAfter.Month, 1, 8, 0, 0, TimeSpan.Zero); month < query.PostedBefore; month = month.AddMonths(1))
+        {
+            all.Add((month, false, new
+            {
+                transactionId = string.Create(CultureInfo.InvariantCulture, $"SIM-F-{marketplace.MarketplaceId}-{month:yyyyMM}"),
+                transactionType = "ServiceFee",
+                transactionStatus = "RELEASED",
+                description = "Subscription",
+                postedDate = month,
+                totalAmount = Money(-39.99m),
+                relatedIdentifiers = new[] { new { relatedIdentifierName = "SETTLEMENT_ID", relatedIdentifierValue = SettlementIdFor(month) } },
+                breakdowns = new[] { Breakdown("ServiceFees", -39.99m, Breakdown("Subscription", -39.99m)) },
+            }));
+        }
+
+        var matching = all
+            .Where(t => t.Posted >= query.PostedAfter && t.Posted < query.PostedBefore && t.Posted <= now && (!query.HeldOnly || t.Held))
+            .OrderBy(t => t.Posted)
+            .Select(t => t.Body)
+            .ToList();
+        var start = nextToken is null ? 0 : int.Parse(nextToken, NumberStyles.None, CultureInfo.InvariantCulture);
+        var next = start + PageSize < matching.Count ? (start + PageSize).ToString(CultureInfo.InvariantCulture) : null;
+        var body = new { payload = new { nextToken = next, transactions = matching.Skip(start).Take(PageSize) } };
+        return Task.FromResult(LedgerPageParser.Parse(JsonSerializer.Serialize(body, JsonOptions)));
+    }
+
+    private static object[] Related(string orderId, DateTimeOffset posted) =>
+    [
+        new { relatedIdentifierName = "ORDER_ID", relatedIdentifierValue = orderId },
+        new { relatedIdentifierName = "SETTLEMENT_ID", relatedIdentifierValue = SettlementIdFor(posted) },
+    ];
+
     /// <summary>A made-up settlement id for the 14-day period an instant falls in.</summary>
     private static string SettlementIdFor(DateTimeOffset posted)
     {

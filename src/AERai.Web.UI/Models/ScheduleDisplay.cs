@@ -39,6 +39,7 @@ public static class ScheduleDisplay
         (AmazonReportType.AwdInventory, "A snapshot of stock in Amazon Warehousing & Distribution (AWD, US only). Once a day is plenty."),
         (AmazonReportType.Settlements, "Amazon publishes these every ~14 days; a daily check picks up new ones once."),
         (AmazonReportType.DeferredTransactions, "Sales Amazon is holding back (paid out about 7 days after delivery), shown on Settlements. Once a day is plenty."),
+        (AmazonReportType.FinancialTransactions, "Every payment, refund, and fee Amazon posts, for Profit & loss. Each run re-reads the last 3 days; once a day is plenty, and Backfill reaches back 180 days."),
         (AmazonReportType.AdsSpend, "Sponsored Products spend per SKU from the Amazon Ads API, shown on Advertising. Each run re-reads the last 14 days; once a day is plenty."),
     ];
 

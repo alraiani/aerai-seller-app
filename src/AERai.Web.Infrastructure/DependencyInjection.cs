@@ -124,6 +124,7 @@ public static class DependencyInjection
         services.AddScoped<IDeferredTransactionRepository>(provider => provider.GetRequiredService<DeferredTransactionRepository>());
         services.AddScoped<IDeferredPaymentQueries>(provider => provider.GetRequiredService<DeferredTransactionRepository>());
         services.AddScoped<IAmazonOrderRepository, AmazonOrderRepository>();
+        services.AddScoped<IFinancialTransactionRepository, FinancialTransactionRepository>();
         services.AddScoped<IInboundShipmentRepository, InboundShipmentRepository>();
         services.AddScoped<IAppliedBlobRepository, AppliedBlobRepository>();
         services.AddScoped<ISyncSettingsRepository, SyncSettingsRepository>();

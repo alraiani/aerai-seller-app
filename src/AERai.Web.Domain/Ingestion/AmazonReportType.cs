@@ -76,4 +76,12 @@ public enum AmazonReportType
     /// <c>core.InboundShipment</c> as shipments to review; a listing of current plans, so it cannot be backfilled.
     /// </summary>
     InboundShipments = 11,
+
+    /// <summary>
+    /// Amazon's transaction ledger from the Finances API (<c>GET /finances/2024-06-19/transactions</c>,
+    /// <c>listTransactions</c>): not a report but every transaction Amazon posts (payments, refunds, fees,
+    /// reimbursements), held or released, with its breakdowns per product. Written straight to
+    /// <c>core.FinancialTransaction</c> by posted date; it has history (180 days), so it can be backfilled.
+    /// </summary>
+    FinancialTransactions = 12,
 }

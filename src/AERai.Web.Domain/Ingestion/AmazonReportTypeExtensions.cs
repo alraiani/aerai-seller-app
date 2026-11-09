@@ -24,12 +24,12 @@ public static class AmazonReportTypeExtensions
     /// <param name="reportType">The report type.</param>
     /// <returns>
     /// <see langword="false"/> for <see cref="AmazonReportType.AwdInventory"/>, <see cref="AmazonReportType.OrdersApi"/>,
-    /// <see cref="AmazonReportType.DeferredTransactions"/>, <see cref="AmazonReportType.AdsSpend"/>, and
-    /// <see cref="AmazonReportType.InboundShipments"/>.
+    /// <see cref="AmazonReportType.DeferredTransactions"/>, <see cref="AmazonReportType.AdsSpend"/>,
+    /// <see cref="AmazonReportType.InboundShipments"/>, and <see cref="AmazonReportType.FinancialTransactions"/>.
     /// </returns>
     public static bool IsReport(this AmazonReportType reportType) =>
         reportType is not (AmazonReportType.AwdInventory or AmazonReportType.OrdersApi or AmazonReportType.DeferredTransactions
-            or AmazonReportType.AdsSpend or AmazonReportType.InboundShipments);
+            or AmazonReportType.AdsSpend or AmazonReportType.InboundShipments or AmazonReportType.FinancialTransactions);
 
     /// <summary>
     /// The shortest time Amazon allows between two requests for the report in one marketplace. Amazon
@@ -55,7 +55,8 @@ public static class AmazonReportTypeExtensions
     public static SyncCategory Category(this AmazonReportType reportType) => reportType switch
     {
         AmazonReportType.Orders or AmazonReportType.OrdersApi => SyncCategory.Orders,
-        AmazonReportType.Settlements or AmazonReportType.DeferredTransactions => SyncCategory.SettlementsAndPayments,
+        AmazonReportType.Settlements or AmazonReportType.DeferredTransactions or AmazonReportType.FinancialTransactions
+            => SyncCategory.SettlementsAndPayments,
         AmazonReportType.AdsSpend => SyncCategory.Advertising,
         _ => SyncCategory.Inventory,
     };

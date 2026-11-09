@@ -94,6 +94,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Payouts Amazon deferred, from the Finances API (<c>core.DeferredTransaction</c>).</summary>
     public DbSet<DeferredTransaction> DeferredTransactions => Set<DeferredTransaction>();
 
+    /// <summary>Amazon's transaction ledger (Finances API), as posted.</summary>
+    public DbSet<FinancialTransaction> FinancialTransactions => Set<FinancialTransaction>();
+
+    /// <summary>The breakdown amounts of each ledger transaction.</summary>
+    public DbSet<FinancialTransactionLine> FinancialTransactionLines => Set<FinancialTransactionLine>();
+
     /// <summary>The products on each deferred transaction (<c>core.DeferredTransactionItem</c>).</summary>
     public DbSet<DeferredTransactionItem> DeferredTransactionItems => Set<DeferredTransactionItem>();
 

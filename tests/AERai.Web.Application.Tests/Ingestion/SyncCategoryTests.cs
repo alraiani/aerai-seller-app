@@ -14,6 +14,7 @@ public sealed class SyncCategoryTests
     [InlineData(AmazonReportType.InboundShipments, SyncCategory.Inventory)]
     [InlineData(AmazonReportType.Settlements, SyncCategory.SettlementsAndPayments)]
     [InlineData(AmazonReportType.DeferredTransactions, SyncCategory.SettlementsAndPayments)]
+    [InlineData(AmazonReportType.FinancialTransactions, SyncCategory.SettlementsAndPayments)]
     [InlineData(AmazonReportType.AdsSpend, SyncCategory.Advertising)]
     public void Category_GroupsEachReportByItsData(AmazonReportType type, SyncCategory expected) =>
         Assert.Equal(expected, type.Category());

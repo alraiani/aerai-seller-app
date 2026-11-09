@@ -460,6 +460,113 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.ToTable("DeferredTransactionItem", "core");
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.FinancialTransaction", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AmazonOrderId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<DateTimeOffset>("PostedDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("SettlementId")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Status")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("TransactionId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("TransactionType")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AmazonOrderId");
+
+                    b.HasIndex("SettlementId");
+
+                    b.HasIndex("MarketplaceId", "PostedDate");
+
+                    b.HasIndex("MarketplaceId", "TransactionId")
+                        .IsUnique();
+
+                    b.ToTable("FinancialTransaction", "core");
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.FinancialTransactionLine", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Asin")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("BreakdownPath")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<long>("FinancialTransactionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Sku")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("Units")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FinancialTransactionId");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("FinancialTransactionId"), new[] { "Sku", "Units", "BreakdownPath", "Amount" });
+
+                    b.ToTable("FinancialTransactionLine", "core");
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.HomeStock", b =>
                 {
                     b.Property<string>("Sku")
@@ -3103,6 +3210,24 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.FinancialTransaction", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.FinancialTransactionLine", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.FinancialTransaction", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("FinancialTransactionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.HomeStock", b =>
                 {
                     b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
@@ -3487,6 +3612,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("AERai.Web.Domain.Core.DeferredTransaction", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.FinancialTransaction", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Core.InboundShipment", b =>
