@@ -86,6 +86,7 @@ public sealed class ProductRepositoryTests(SqlDatabaseFixture fixture) : IClassF
                 new("T-PRA-Z", null, 1m),   // unknown SKU
             ],
             at,
+            "op@example.com",
             CancellationToken.None);
 
         Assert.Equal(["T-PRA-B", "T-PRA-Z"], stale);
@@ -93,5 +94,12 @@ public sealed class ProductRepositoryTests(SqlDatabaseFixture fixture) : IClassF
         Assert.Equal([("T-PRA-A", (decimal?)null), ("T-PRA-B", 9m), ("T-PRA-C", 2.5m)], costs.OrderBy(c => c.Key).Select(c => (c.Key, c.Value.CostOfGoods)));
         Assert.Equal(at, (await products.GetAsync("T-PRA-C", Us, CancellationToken.None))!.CostUpdatedAt);
         Assert.Equal(1m, (await products.GetAsync("T-PRA-C", Ca, CancellationToken.None))!.CostOfGoods);
+
+        // Every applied change starts a dated period in the cost history; stale and unknown SKUs log nothing.
+        Assert.Equal([((decimal?)null, at, "op@example.com")], (await products.GetCostHistoryAsync("T-PRA-A", Us, 5, CancellationToken.None))
+            .Take(1).Select(h => (h.CostOfGoods, h.EffectiveFrom, h.ChangedBy)));
+        Assert.Equal([((decimal?)2.5m, at)], (await products.GetCostHistoryAsync("T-PRA-C", Us, 5, CancellationToken.None))
+            .Select(h => (h.CostOfGoods, h.EffectiveFrom)));
+        Assert.Empty(await products.GetCostHistoryAsync("T-PRA-B", Us, 5, CancellationToken.None));
     }
 }

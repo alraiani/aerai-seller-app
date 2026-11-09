@@ -119,7 +119,7 @@ public sealed class IndexModel(
         }
 
         Marketplace = (await currentMarketplace.GetAsync(cancellationToken)).Current;
-        var result = await productService.SaveCostsAsync(Marketplace.MarketplaceId, changes, cancellationToken);
+        var result = await productService.SaveCostsAsync(Marketplace.MarketplaceId, changes, User.Identity!.Name!, cancellationToken); // Non-null: the page requires an authenticated user.
         if (result.IsFailure)
         {
             TempData[StatusMessage.Error] = result.Error;

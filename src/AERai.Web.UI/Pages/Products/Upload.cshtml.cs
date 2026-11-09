@@ -120,7 +120,7 @@ public sealed class UploadModel(
             return RedirectToPage();
         }
 
-        var result = await productService.SaveCostsAsync(Marketplace.MarketplaceId, changes.Value, cancellationToken);
+        var result = await productService.SaveCostsAsync(Marketplace.MarketplaceId, changes.Value, User.Identity!.Name!, cancellationToken); // Non-null: the page requires an authenticated user.
         if (result.IsFailure)
         {
             TempData[StatusMessage.Error] = result.Error;

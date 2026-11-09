@@ -27,7 +27,7 @@ public sealed class ProductServiceTests
     [Fact]
     public async Task UpdateCostAsync_ValidCost_RoundsToCentsAndStampsTime()
     {
-        var result = await CreateService().UpdateCostAsync("A-1", Us, 4.125m, CancellationToken.None);
+        var result = await CreateService().UpdateCostAsync("A-1", Us, 4.125m, "op@example.com", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal((4.13m, _clock.GetUtcNow()), _repository.Costs[("A-1", Us)]);
@@ -36,7 +36,7 @@ public sealed class ProductServiceTests
     [Fact]
     public async Task UpdateCostAsync_NullCost_ClearsIt()
     {
-        var result = await CreateService().UpdateCostAsync("A-1", Us, null, CancellationToken.None);
+        var result = await CreateService().UpdateCostAsync("A-1", Us, null, "op@example.com", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Null(_repository.Costs[("A-1", Us)].Cost);
@@ -47,7 +47,7 @@ public sealed class ProductServiceTests
     [InlineData(100_000.01)]
     public async Task UpdateCostAsync_OutOfRange_Fails(double cost)
     {
-        var result = await CreateService().UpdateCostAsync("A-1", Us, (decimal)cost, CancellationToken.None);
+        var result = await CreateService().UpdateCostAsync("A-1", Us, (decimal)cost, "op@example.com", CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -55,7 +55,7 @@ public sealed class ProductServiceTests
     [Fact]
     public async Task UpdateCostAsync_UnknownSku_Fails()
     {
-        var result = await CreateService().UpdateCostAsync("NOPE", Us, 1m, CancellationToken.None);
+        var result = await CreateService().UpdateCostAsync("NOPE", Us, 1m, "op@example.com", CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -64,9 +64,9 @@ public sealed class ProductServiceTests
     public async Task UpdateCostAsync_OneMarketplace_LeavesOtherMarketplacesUntouched()
     {
         var service = CreateService();
-        await service.UpdateCostAsync("A-1", Us, 4m, CancellationToken.None);
+        await service.UpdateCostAsync("A-1", Us, 4m, "op@example.com", CancellationToken.None);
 
-        await service.UpdateCostAsync("A-1", MarketplaceIds.Canada, 5.5m, CancellationToken.None);
+        await service.UpdateCostAsync("A-1", MarketplaceIds.Canada, 5.5m, "op@example.com", CancellationToken.None);
 
         Assert.Equal(4m, _repository.Costs[("A-1", Us)].Cost);
         Assert.Equal(5.5m, _repository.Costs[("A-1", MarketplaceIds.Canada)].Cost);
@@ -80,6 +80,7 @@ public sealed class ProductServiceTests
         var result = await CreateService().SaveCostsAsync(
             Us,
             [new("A-1", null, 1m), new("A-1", null, 4.125m), new("B-2", 2m, 2.001m), new("C-3", null, null)],
+            "op@example.com",
             CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
@@ -93,7 +94,7 @@ public sealed class ProductServiceTests
     {
         _repository.Costs[("A-1", Us)] = (3m, DateTimeOffset.MinValue);
 
-        var result = await CreateService().SaveCostsAsync(Us, [new("A-1", 2m, 5m), new("B-2", null, 1m)], CancellationToken.None);
+        var result = await CreateService().SaveCostsAsync(Us, [new("A-1", 2m, 5m), new("B-2", null, 1m)], "op@example.com", CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
         Assert.Equal(1, result.Value.Applied);
@@ -104,7 +105,7 @@ public sealed class ProductServiceTests
     [Fact]
     public async Task SaveCostsAsync_OneOutOfRange_FailsAndSavesNothing()
     {
-        var result = await CreateService().SaveCostsAsync(Us, [new("A-1", null, 1m), new("B-2", null, 100_000.01m)], CancellationToken.None);
+        var result = await CreateService().SaveCostsAsync(Us, [new("A-1", null, 1m), new("B-2", null, 100_000.01m)], "op@example.com", CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Contains("B-2", result.Error, StringComparison.Ordinal);
@@ -114,7 +115,7 @@ public sealed class ProductServiceTests
     [Fact]
     public async Task SaveCostsAsync_NothingChanged_DoesNotWrite()
     {
-        var result = await CreateService().SaveCostsAsync(Us, [new("A-1", null, null)], CancellationToken.None);
+        var result = await CreateService().SaveCostsAsync(Us, [new("A-1", null, null)], "op@example.com", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(0, result.Value.Applied);

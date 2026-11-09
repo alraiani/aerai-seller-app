@@ -85,17 +85,17 @@ public sealed class MarketplacePromotionTests(SqlDatabaseFixture fixture) : ICla
         await using var scope = fixture.Services.CreateAsyncScope();
         var products = scope.ServiceProvider.GetRequiredService<IProductRepository>();
         var now = DateTimeOffset.UtcNow;
-        Assert.True(await products.UpdateCostAsync("M-COST-1", Us, 4.00m, now, CancellationToken.None));
-        Assert.True(await products.UpdateCostAsync("M-COST-1", Ca, 5.25m, now, CancellationToken.None));
-        Assert.True(await products.UpdateCostAsync("M-COST-1", Us, 4.10m, now, CancellationToken.None));
+        Assert.True(await products.UpdateCostAsync("M-COST-1", Us, 4.00m, now, "op@example.com", CancellationToken.None));
+        Assert.True(await products.UpdateCostAsync("M-COST-1", Ca, 5.25m, now, "op@example.com", CancellationToken.None));
+        Assert.True(await products.UpdateCostAsync("M-COST-1", Us, 4.10m, now, "op@example.com", CancellationToken.None));
 
         Assert.Equal(4.10m, (await products.GetAsync("M-COST-1", Us, CancellationToken.None))!.CostOfGoods);
         Assert.Equal(5.25m, (await products.GetAsync("M-COST-1", Ca, CancellationToken.None))!.CostOfGoods);
 
-        Assert.True(await products.UpdateCostAsync("M-COST-1", Ca, null, now, CancellationToken.None));
+        Assert.True(await products.UpdateCostAsync("M-COST-1", Ca, null, now, "op@example.com", CancellationToken.None));
         Assert.Null((await products.GetAsync("M-COST-1", Ca, CancellationToken.None))!.CostOfGoods);
         Assert.Equal(4.10m, (await products.GetAsync("M-COST-1", Us, CancellationToken.None))!.CostOfGoods);
-        Assert.False(await products.UpdateCostAsync("NO-SUCH-SKU", Us, 1m, now, CancellationToken.None));
+        Assert.False(await products.UpdateCostAsync("NO-SUCH-SKU", Us, 1m, now, "op@example.com", CancellationToken.None));
 
         var usList = await products.ListAsync(Us, ProductListFilter.Default, new PageRequest(1, 50, "M-COST-"), CancellationToken.None);
         var caList = await products.ListAsync(Ca, ProductListFilter.Default, new PageRequest(1, 50, "M-COST-"), CancellationToken.None);

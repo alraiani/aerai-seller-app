@@ -25,6 +25,36 @@
         </form>
     </div>
 </div>
+@if (Model.History.Count > 0)
+{
+    <section class="card col-lg-6 mt-3" aria-labelledby="cost-history-title">
+        <div class="card-toolbar">
+            <h2 id="cost-history-title" class="card-toolbar-title">Cost history</h2>
+        </div>
+        <p class="text-body-secondary small px-3 mb-2">Profit &amp; loss charges each sale the cost in effect on its order date, so a new cost never changes past profit.</p>
+        <div class="table-responsive">
+            <table class="table data-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th scope="col">From</th>
+                        <th scope="col" class="text-end">Cost</th>
+                        <th scope="col">Saved by</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in Model.History)
+                    {
+                        <tr>
+                            <td>@(entry.ChangedBy == "system" ? "Before history began" : TimeZoneInfo.ConvertTime(entry.EffectiveFrom, Model.TimeZone).ToString("MMM d, yyyy h:mm tt"))</td>
+                            <td class="text-end">@(entry.CostOfGoods is { } cost ? DashboardFormat.Price(cost, Model.Marketplace.Currency) : "Cleared")</td>
+                            <td>@entry.ChangedBy</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
 }

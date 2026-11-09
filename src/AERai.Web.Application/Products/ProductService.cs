@@ -24,11 +24,23 @@ public sealed partial class ProductService(IProductRepository repository, ISprea
     /// <summary>The columns a cost sheet must have, as normalized headers.</summary>
     public static IReadOnlyList<string> CostSheetColumns { get; } = ["sku", "cost-of-goods"];
 
+    /// <summary>Most cost changes listed on a product's edit page.</summary>
+    public const int MaxCostHistory = 20;
+
     /// <inheritdoc/>
-    public async Task<Result> UpdateCostAsync(string sku, string marketplaceId, decimal? costOfGoods, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ProductCostHistoryEntry>> GetCostHistoryAsync(string sku, string marketplaceId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        return repository.GetCostHistoryAsync(sku, marketplaceId, MaxCostHistory, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<Result> UpdateCostAsync(string sku, string marketplaceId, decimal? costOfGoods, string changedBy, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sku);
+        ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(changedBy);
 
         if (costOfGoods is < 0 or > MaxCostOfGoods)
         {
@@ -38,7 +50,7 @@ public sealed partial class ProductService(IProductRepository repository, ISprea
         // Round to cents up front so the stored value matches what the user sees after save.
         var rounded = costOfGoods is null ? (decimal?)null : ProductCostText.Round(costOfGoods.Value);
 
-        var updated = await repository.UpdateCostAsync(sku, marketplaceId, rounded, timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        var updated = await repository.UpdateCostAsync(sku, marketplaceId, rounded, timeProvider.GetUtcNow(), changedBy, cancellationToken).ConfigureAwait(false);
         if (!updated)
         {
             return Result.Failure($"Product '{sku}' was not found.");
@@ -49,9 +61,10 @@ public sealed partial class ProductService(IProductRepository repository, ISprea
     }
 
     /// <inheritdoc/>
-    public async Task<Result<ProductCostResult>> SaveCostsAsync(string marketplaceId, IReadOnlyList<ProductCostChange> changes, CancellationToken cancellationToken)
+    public async Task<Result<ProductCostResult>> SaveCostsAsync(string marketplaceId, IReadOnlyList<ProductCostChange> changes, string changedBy, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(marketplaceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(changedBy);
         ArgumentNullException.ThrowIfNull(changes);
 
         if (changes.FirstOrDefault(c => c.New is < 0 or > MaxCostOfGoods) is { } bad)
@@ -71,7 +84,7 @@ public sealed partial class ProductService(IProductRepository repository, ISprea
             return Result.Success(new ProductCostResult(0, []));
         }
 
-        var stale = await repository.ApplyCostsAsync(marketplaceId, unique, timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        var stale = await repository.ApplyCostsAsync(marketplaceId, unique, timeProvider.GetUtcNow(), changedBy, cancellationToken).ConfigureAwait(false);
         var applied = unique.Count - stale.Count;
 
         LogCostsSaved(applied, stale.Count, marketplaceId);

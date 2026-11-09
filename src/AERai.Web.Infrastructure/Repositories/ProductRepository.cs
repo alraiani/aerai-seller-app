@@ -82,43 +82,44 @@ internal sealed class ProductRepository(AppDbContext dbContext) : IProductReposi
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
-    public async Task<bool> UpdateCostAsync(string sku, string marketplaceId, decimal? costOfGoods, DateTimeOffset updatedAt, CancellationToken cancellationToken)
+    public async Task<bool> UpdateCostAsync(string sku, string marketplaceId, decimal? costOfGoods, DateTimeOffset updatedAt, string changedBy, CancellationToken cancellationToken)
     {
-        if (!await dbContext.Products.AnyAsync(p => p.Sku == sku, cancellationToken).ConfigureAwait(false))
-        {
-            return false;
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(changedBy);
 
-        // Set-based writes: one round trip each, no tracked entity. Clearing a cost deletes its row,
-        // because "no row" is how an unset cost is represented.
-        var costs = dbContext.ProductCosts.Where(c => c.Sku == sku && c.MarketplaceId == marketplaceId);
-        if (costOfGoods is null)
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            await costs.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-            return true;
-        }
+            dbContext.ChangeTracker.Clear();
 
-        var updated = await costs
-            .ExecuteUpdateAsync(
-                setters => setters
-                    .SetProperty(c => c.CostOfGoods, costOfGoods.Value)
-                    .SetProperty(c => c.UpdatedAt, updatedAt),
-                cancellationToken)
-            .ConfigureAwait(false);
+            // Serializable so the cost and its history row are written together and a concurrent save
+            // can't log a change out of order.
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
+            if (!await dbContext.Products.AnyAsync(p => p.Sku == sku, cancellationToken).ConfigureAwait(false))
+            {
+                return false;
+            }
 
-        if (updated == 0)
-        {
-            dbContext.ProductCosts.Add(new ProductCost { Sku = sku, MarketplaceId = marketplaceId, CostOfGoods = costOfGoods.Value, UpdatedAt = updatedAt });
+            var existing = await dbContext.ProductCosts
+                .SingleOrDefaultAsync(c => c.Sku == sku && c.MarketplaceId == marketplaceId, cancellationToken)
+                .ConfigureAwait(false);
+            if (existing?.CostOfGoods == costOfGoods)
+            {
+                // Saving the same cost again changes nothing, so it starts no new period in the history.
+                return true;
+            }
+
+            Write(existing, sku, marketplaceId, costOfGoods, updatedAt, changedBy);
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        return true;
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<string>> ApplyCostsAsync(string marketplaceId, IReadOnlyList<ProductCostChange> changes, DateTimeOffset updatedAt, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> ApplyCostsAsync(string marketplaceId, IReadOnlyList<ProductCostChange> changes, DateTimeOffset updatedAt, string changedBy, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(changes);
+        ArgumentException.ThrowIfNullOrWhiteSpace(changedBy);
 
         var skus = changes.Select(c => c.Sku).ToList();
         var strategy = dbContext.Database.CreateExecutionStrategy();
@@ -145,28 +146,51 @@ internal sealed class ProductRepository(AppDbContext dbContext) : IProductReposi
                     continue;
                 }
 
-                // No row is how an unset cost is represented, so clearing deletes it. A clear always has
-                // a current cost (no-op changes are dropped by the service) and that cost matched the
-                // stored row just above, so the row exists.
-                if (change.New is not { } cost)
-                {
-                    dbContext.ProductCosts.Remove(existing!);
-                }
-                else if (existing is null)
-                {
-                    dbContext.ProductCosts.Add(new ProductCost { Sku = change.Sku, MarketplaceId = marketplaceId, CostOfGoods = cost, UpdatedAt = updatedAt });
-                }
-                else
-                {
-                    existing.CostOfGoods = cost;
-                    existing.UpdatedAt = updatedAt;
-                }
+                Write(existing, change.Sku, marketplaceId, change.New, updatedAt, changedBy);
             }
 
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return (IReadOnlyList<string>)stale;
         }).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<ProductCostHistoryEntry>> GetCostHistoryAsync(string sku, string marketplaceId, int take, CancellationToken cancellationToken) =>
+        await dbContext.ProductCostHistory.AsNoTracking()
+            .Where(h => h.Sku == sku && h.MarketplaceId == marketplaceId)
+            .OrderByDescending(h => h.EffectiveFrom)
+            .ThenByDescending(h => h.Id)
+            .Take(take)
+            .Select(h => new ProductCostHistoryEntry(h.CostOfGoods, h.EffectiveFrom, h.ChangedBy))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <summary>
+    /// Stages one cost change and its history row on the tracked context (the caller saves inside its
+    /// transaction), so <c>core.ProductCost</c> and the latest <c>core.ProductCostHistory</c> row always agree.
+    /// </summary>
+    private void Write(ProductCost? existing, string sku, string marketplaceId, decimal? cost, DateTimeOffset at, string changedBy)
+    {
+        // No row is how an unset cost is represented, so clearing deletes it.
+        if (cost is null)
+        {
+            if (existing is not null)
+            {
+                dbContext.ProductCosts.Remove(existing);
+            }
+        }
+        else if (existing is null)
+        {
+            dbContext.ProductCosts.Add(new ProductCost { Sku = sku, MarketplaceId = marketplaceId, CostOfGoods = cost.Value, UpdatedAt = at });
+        }
+        else
+        {
+            existing.CostOfGoods = cost.Value;
+            existing.UpdatedAt = at;
+        }
+
+        dbContext.ProductCostHistory.Add(new ProductCostHistory { Sku = sku, MarketplaceId = marketplaceId, CostOfGoods = cost, EffectiveFrom = at, ChangedBy = changedBy });
     }
 
     /// <summary>Products matching the family and every search word, with their cost in one marketplace.</summary>

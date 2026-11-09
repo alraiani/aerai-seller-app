@@ -1095,6 +1095,50 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AERai.Web.Domain.Core.ProductCostHistory", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ChangedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<decimal?>("CostOfGoods")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset>("EffectiveFrom")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("MarketplaceId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Sku");
+
+                    b.HasIndex("MarketplaceId", "Sku", "EffectiveFrom");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("MarketplaceId", "Sku", "EffectiveFrom"), new[] { "CostOfGoods" });
+
+                    b.ToTable("ProductCostHistory", "core", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductCostHistory_NonNegative", "[CostOfGoods] IS NULL OR [CostOfGoods] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AERai.Web.Domain.Core.ProductFamily", b =>
                 {
                     b.Property<int>("Id")
@@ -3205,6 +3249,21 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("AERai.Web.Domain.Core.ProductCost", b =>
+                {
+                    b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AERai.Web.Domain.Core.Product", null)
+                        .WithMany()
+                        .HasForeignKey("Sku")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AERai.Web.Domain.Core.ProductCostHistory", b =>
                 {
                     b.HasOne("AERai.Web.Domain.Core.Marketplace", null)
                         .WithMany()

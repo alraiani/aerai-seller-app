@@ -26,6 +26,12 @@ public sealed class EditModel(IProductRepository products, IProductService produ
     /// <summary>The product being edited (for display).</summary>
     public ProductSummary Product { get; private set; } = default!;
 
+    /// <summary>The SKU's cost changes in this marketplace, newest first.</summary>
+    public IReadOnlyList<ProductCostHistoryEntry> History { get; private set; } = [];
+
+    /// <summary>The marketplace's time zone, for showing when each cost started.</summary>
+    public TimeZoneInfo TimeZone { get; private set; } = TimeZoneInfo.Utc;
+
     /// <summary>Posted form values.</summary>
     [BindProperty]
     public InputModel Input { get; set; } = new();
@@ -61,7 +67,7 @@ public sealed class EditModel(IProductRepository products, IProductService produ
             return Page();
         }
 
-        var result = await productService.UpdateCostAsync(sku, Marketplace.MarketplaceId, Input.CostOfGoods, cancellationToken);
+        var result = await productService.UpdateCostAsync(sku, Marketplace.MarketplaceId, Input.CostOfGoods, User.Identity!.Name!, cancellationToken); // Non-null: the page requires an authenticated user.
         if (result.IsFailure)
         {
             ModelState.AddModelError(string.Empty, result.Error);
@@ -82,6 +88,8 @@ public sealed class EditModel(IProductRepository products, IProductService produ
         }
 
         Product = product;
+        TimeZone = TimeZoneInfo.FindSystemTimeZoneById(Marketplace.TimeZoneId);
+        History = await productService.GetCostHistoryAsync(sku, Marketplace.MarketplaceId, cancellationToken);
         return true;
     }
 

@@ -49,6 +49,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     /// <summary>Per-marketplace product costs.</summary>
     public DbSet<ProductCost> ProductCosts => Set<ProductCost>();
 
+    /// <summary>Every change of a per-marketplace product cost, dated.</summary>
+    public DbSet<ProductCostHistory> ProductCostHistory => Set<ProductCostHistory>();
+
     /// <summary>Product families (user-defined groups).</summary>
     public DbSet<ProductFamily> ProductFamilies => Set<ProductFamily>();
 

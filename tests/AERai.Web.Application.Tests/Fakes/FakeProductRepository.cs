@@ -18,7 +18,7 @@ internal sealed class FakeProductRepository : IProductRepository
     /// <summary>Rows <see cref="ListForCostSheetAsync"/> returns.</summary>
     public List<ProductCostTemplateRow> SheetRows { get; } = [];
 
-    public Task<bool> UpdateCostAsync(string sku, string marketplaceId, decimal? costOfGoods, DateTimeOffset updatedAt, CancellationToken cancellationToken)
+    public Task<bool> UpdateCostAsync(string sku, string marketplaceId, decimal? costOfGoods, DateTimeOffset updatedAt, string changedBy, CancellationToken cancellationToken)
     {
         if (!Products.ContainsKey(sku))
         {
@@ -29,7 +29,10 @@ internal sealed class FakeProductRepository : IProductRepository
         return Task.FromResult(true);
     }
 
-    public Task<IReadOnlyList<string>> ApplyCostsAsync(string marketplaceId, IReadOnlyList<ProductCostChange> changes, DateTimeOffset updatedAt, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ProductCostHistoryEntry>> GetCostHistoryAsync(string sku, string marketplaceId, int take, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ProductCostHistoryEntry>>([]);
+
+    public Task<IReadOnlyList<string>> ApplyCostsAsync(string marketplaceId, IReadOnlyList<ProductCostChange> changes, DateTimeOffset updatedAt, string changedBy, CancellationToken cancellationToken)
     {
         AppliedBatches.Add(changes);
         var stale = new List<string>();
