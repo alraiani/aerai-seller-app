@@ -1314,6 +1314,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SettlementId");
 
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("SettlementId"), new[] { "PostedDate", "TransactionType", "AmazonOrderId", "OrderItemCode", "Quantity", "Sku", "AmountType", "AmountDescription", "Amount" });
+
                     b.ToTable("SettlementLine", "core");
                 });
 
@@ -1464,6 +1466,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ReportType", "MarketplaceId", "ReportRequestedAt")
                         .HasFilter("[ReportRequestedAt] IS NOT NULL");
+
+                    b.HasIndex("Status", "NextCheckAt", "StartedAt");
 
                     b.ToTable("SyncRun", "ops");
                 });

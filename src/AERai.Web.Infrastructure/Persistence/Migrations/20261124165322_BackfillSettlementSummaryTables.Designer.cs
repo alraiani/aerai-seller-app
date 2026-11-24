@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AERai.Web.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261124162122_BackfillSettlementSummaryTables")]
+    [Migration("20261124165322_BackfillSettlementSummaryTables")]
     partial class BackfillSettlementSummaryTables
     {
         /// <inheritdoc />
@@ -989,9 +989,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.HasIndex("AmazonOrderId")
                         .IsUnique();
 
-                    b.HasIndex("MarketplaceId");
-
                     b.HasIndex("PurchaseDateUtc");
+
+                    b.HasIndex("MarketplaceId", "PurchaseDate");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("MarketplaceId", "PurchaseDate"), new[] { "AmazonOrderId", "OrderStatus", "Currency" });
 
                     b.ToTable("Order", "core");
                 });
@@ -1025,6 +1027,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OrderId", "Sku")
                         .IsUnique();
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("OrderId", "Sku"), new[] { "Quantity", "ItemPrice" });
 
                     b.ToTable("OrderItem", "core");
                 });
@@ -1313,6 +1317,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SettlementId");
 
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("SettlementId"), new[] { "PostedDate", "TransactionType", "AmazonOrderId", "OrderItemCode", "Quantity", "Sku", "AmountType", "AmountDescription", "Amount" });
+
                     b.ToTable("SettlementLine", "core");
                 });
 
@@ -1463,6 +1469,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ReportType", "MarketplaceId", "ReportRequestedAt")
                         .HasFilter("[ReportRequestedAt] IS NOT NULL");
+
+                    b.HasIndex("Status", "NextCheckAt", "StartedAt");
 
                     b.ToTable("SyncRun", "ops");
                 });
