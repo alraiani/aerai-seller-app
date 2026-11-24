@@ -986,9 +986,11 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
                     b.HasIndex("AmazonOrderId")
                         .IsUnique();
 
-                    b.HasIndex("MarketplaceId");
-
                     b.HasIndex("PurchaseDateUtc");
+
+                    b.HasIndex("MarketplaceId", "PurchaseDate");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("MarketplaceId", "PurchaseDate"), new[] { "AmazonOrderId", "OrderStatus", "Currency" });
 
                     b.ToTable("Order", "core");
                 });
@@ -1022,6 +1024,8 @@ namespace AERai.Web.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OrderId", "Sku")
                         .IsUnique();
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("OrderId", "Sku"), new[] { "Quantity", "ItemPrice" });
 
                     b.ToTable("OrderItem", "core");
                 });

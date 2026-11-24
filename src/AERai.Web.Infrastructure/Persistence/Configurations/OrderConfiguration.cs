@@ -24,6 +24,11 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
             .HasComputedColumnSql("CAST(SWITCHOFFSET([PurchaseDate], '+00:00') AS date)", stored: true);
         builder.HasIndex(o => o.PurchaseDateUtc);
 
+        // Every sales read (dashboard, inventory velocity and seasonality, Orders, TACoS) is one marketplace
+        // over a purchase-date range through rpt.vw_SalesLine; without this each one scanned every order.
+        builder.HasIndex(o => new { o.MarketplaceId, o.PurchaseDate })
+            .IncludeProperties(o => new { o.AmazonOrderId, o.OrderStatus, o.Currency });
+
         builder.HasMany(o => o.Items).WithOne(i => i.Order).HasForeignKey(i => i.OrderId).OnDelete(DeleteBehavior.Cascade);
     }
 }
