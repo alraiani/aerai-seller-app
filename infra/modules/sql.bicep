@@ -55,18 +55,15 @@ resource database 'Microsoft.Sql/servers/databases@2023-08-01' = {
   location: location
   tags: tags
   sku: {
-    // Serverless General Purpose: scales to zero-ish cost when idle, fine for an internal app.
-    name: 'GP_S_Gen5'
-    tier: 'GeneralPurpose'
-    family: 'Gen5'
-    capacity: 2
+    // Standard S0 (10 DTUs): a small fixed-price tier, always on. Set to match the live database, which
+    // was moved from serverless to S0 on 2026-11-05. The pages stay fast on it because the heavy
+    // settlement work runs at import time (rpt summary tables); step up to S1/S2 before serverless.
+    // Azure stores S0 as name 'Standard' with capacity 10 DTUs; written that way so a deploy shows no change.
+    name: 'Standard'
+    tier: 'Standard'
+    capacity: 10
   }
   properties: {
-    // Minutes without any query before compute pauses (15 is the minimum). Background work only
-    // queries when something is due, so the database can sleep between scheduled pulls; the first
-    // request after a pause waits while it resumes (EF retries cover the failed connect).
-    autoPauseDelay: 15
-    minCapacity: json('0.5')
     requestedBackupStorageRedundancy: 'Local'
   }
 }
