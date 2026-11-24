@@ -14,7 +14,9 @@ internal sealed class OrderItemConfiguration : IEntityTypeConfiguration<OrderIte
         builder.HasKey(i => i.Id);
         builder.Property(i => i.Sku).HasMaxLength(64);
         builder.Property(i => i.ItemPrice).HasPrecision(18, 2);
-        builder.HasIndex(i => new { i.OrderId, i.Sku }).IsUnique();
+        // Covers the order → items join in rpt.vw_SalesLine, so sales reads need no lookups per item.
+        builder.HasIndex(i => new { i.OrderId, i.Sku }).IsUnique()
+            .IncludeProperties(i => new { i.Quantity, i.ItemPrice });
         builder.HasIndex(i => i.Sku);
         builder.HasOne<Product>().WithMany().HasForeignKey(i => i.Sku).OnDelete(DeleteBehavior.Restrict);
     }

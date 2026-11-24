@@ -3,6 +3,7 @@ using AERai.Web.Application.Common;
 using AERai.Web.Application.Orders;
 using AERai.Web.Domain.Core;
 using AERai.Web.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AERai.Web.Infrastructure.Tests;
@@ -47,6 +48,11 @@ public sealed class OrderQueriesTests(SqlDatabaseFixture fixture) : IClassFixtur
                 Lines = [Line(p + "-S-CAD", p + "-4", "Order", "ItemPrice", "Principal", 25m), Line(p + "-S-CAD", p + "-4", "Refund", "ItemPrice", "Principal", -25m)],
             });
         await db.SaveChangesAsync();
+        // Lines written here bypass promotion, so the settlement summary tables are filled as promotion would.
+        foreach (var settlementId in new[] { p + "-S-USD", p + "-S-CAD" })
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"EXEC rpt.usp_RefreshSettlementTotals @SettlementId = {settlementId}");
+        }
     }
 
     private static Order NewOrder(string id, string marketplaceId, string currency, string status, DateTimeOffset purchased, params (string Sku, int Quantity, decimal Price)[] items) => new()

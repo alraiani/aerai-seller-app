@@ -28,6 +28,9 @@ internal sealed class SyncRunConfiguration : IEntityTypeConfiguration<SyncRun>
         // The scheduler looks up waiting runs on every wake; only a handful ever match.
         builder.HasIndex(r => r.NextCheckAt).HasFilter("[NextCheckAt] IS NOT NULL");
 
+        // The scheduler's abandoned-run check: running, not waiting, started over an hour ago.
+        builder.HasIndex(r => new { r.Status, r.NextCheckAt, r.StartedAt });
+
         // The request cooldown looks up the latest request per report type and marketplace.
         builder.HasIndex(r => new { r.ReportType, r.MarketplaceId, r.ReportRequestedAt }).HasFilter("[ReportRequestedAt] IS NOT NULL");
         builder.HasOne<SyncSchedule>().WithMany().HasForeignKey(r => r.SyncScheduleId).OnDelete(DeleteBehavior.Cascade);

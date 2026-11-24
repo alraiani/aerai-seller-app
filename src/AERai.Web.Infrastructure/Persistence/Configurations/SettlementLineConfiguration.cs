@@ -24,5 +24,10 @@ internal sealed class SettlementLineConfiguration : IEntityTypeConfiguration<Set
 
         // The Orders page looks up each listed order's settlement lines by order id.
         builder.HasIndex(l => l.AmazonOrderId);
+
+        // Everything reads lines one settlement at a time (the summary-table refresh at promotion, the
+        // Summary and Lines pages), so the settlement index carries every column they read.
+        builder.HasIndex(l => l.SettlementId)
+            .IncludeProperties(l => new { l.PostedDate, l.TransactionType, l.AmazonOrderId, l.OrderItemCode, l.Quantity, l.Sku, l.AmountType, l.AmountDescription, l.Amount });
     }
 }

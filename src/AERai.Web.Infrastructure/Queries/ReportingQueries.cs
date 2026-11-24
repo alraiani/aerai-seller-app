@@ -13,6 +13,12 @@ namespace AERai.Web.Infrastructure.Queries;
 /// <param name="dbContext">Scoped database context.</param>
 internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueries
 {
+    /// <summary>
+    /// The last search's settlement ids. The list page asks for its totals, currencies, and page with the
+    /// same search, and this instance is scoped to the request, so the lookup runs once per page load.
+    /// </summary>
+    private (string MarketplaceId, string Search, List<string> Ids)? lastSearch;
+
     /// <inheritdoc/>
     public async Task<PagedResult<SettlementSummary>> GetSettlementsAsync(string marketplaceId, PageRequest request, SettlementListFilter? filter, CancellationToken cancellationToken)
     {
@@ -115,10 +121,16 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
     /// <remarks>
     /// Run on its own against the core tables, then handed to the view as a short id list. Folding the
     /// same test into the view query made SQL Server recompute every line's price and bucket while
-    /// scanning (seconds per query, and the list page runs three).
+    /// scanning (seconds per query, and the list page runs three), and the result is reused for the
+    /// request's other list queries.
     /// </remarks>
     private async Task<List<string>> MatchingSettlementIdsAsync(string marketplaceId, string search, CancellationToken cancellationToken)
     {
+        if (lastSearch is { } last && last.MarketplaceId == marketplaceId && last.Search == search)
+        {
+            return last.Ids;
+        }
+
         var products = dbContext.Products.AsNoTracking()
             .Where(p => p.Sku.Contains(search) || (p.Asin != null && p.Asin.Contains(search)) || (p.Title != null && p.Title.Contains(search)))
             .Select(p => p.Sku);
@@ -128,12 +140,14 @@ internal sealed class ReportingQueries(AppDbContext dbContext) : IReportingQueri
                 && ((l.AmazonOrderId != null && l.AmazonOrderId.Contains(search))
                     || (l.Sku != null && (l.Sku.Contains(search) || products.Contains(l.Sku)))))
             .Select(l => l.SettlementId);
-        return await dbContext.Settlements.AsNoTracking()
+        var ids = await dbContext.Settlements.AsNoTracking()
             .Where(s => s.MarketplaceId == marketplaceId && s.SettlementId.Contains(search))
             .Select(s => s.SettlementId)
             .Union(byLine)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+        lastSearch = (marketplaceId, search, ids);
+        return ids;
     }
 
     /// <inheritdoc/>
